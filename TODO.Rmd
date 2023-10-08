@@ -1,0 +1,24 @@
+---
+title: "TODO"
+output: html_document
+date: "2023-10-08"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## This is the main channel of communication between the collaborators.
+
+TODO:
+
+- How to design an R app? -> collect online resources
+- Which functions do we need?
+    + Identifying causal inferences from R models
+    + Identifying causal inferences from texts
+    + Visualizing causal pathways 
+    + Teach the machine to identify inconsistencies among models
+- Which packages already exist that can help us achieve this?
+    + For DAG visualizations
+    + For identifying causal languages in texts
+- How much can ChatGPT help us speed up the process

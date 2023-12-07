@@ -3,17 +3,15 @@ library(ggdag)
 library(dagitty)
 library(furrr)
 library(progressr)
+library(tictoc)
 build_formula_matrix <- function(causal_matrix){
     # Check type
     # Start of function
     create_formula <- function(nested_df){
-        formula_df <- nested_df %>%
-            filter(direction %in% c("~","~~")) %>%
-            group_by(model,to) %>%
-            reframe(from=from,
-                    formula = ifelse(direction == "~", ## if causal,
-                                      paste(to, direction, paste(from, collapse = " + "), sep=" "), ## add to one formula
-                                      paste(from, direction, to, collapse=", "))) %>% ## if correlational, separate
+        causal_df <- nested_df %>% 
+            filter(direction == "~") %>%
+            group_by(model, to) %>%
+            reframe(formula =  paste(to, direction, paste(from, collapse = " + "), sep=" "))%>% ## if correlational, separate
             mutate(
                 ord = case_when(
                     str_detect(to, "Y.*") ~ 1,
@@ -25,7 +23,11 @@ build_formula_matrix <- function(causal_matrix){
             distinct(formula, .keep_all = TRUE) %>%
             arrange(ord) %>%
             ungroup()
-
+        formula_df <- nested_df %>%
+            filter(direction == "~~") %>%
+            group_by(model, to) %>%
+            reframe(formula = paste(to, direction, from, sep = " ")) %>%
+            bind_rows(causal_df)
 
         
         formulas <- formula_df$formula
@@ -56,7 +58,7 @@ toc()
 
 ## Graphing
 additional_args <- list(
-    exposure="X1",
+    exposure="Xtest",
     outcome="Y"
 )
 

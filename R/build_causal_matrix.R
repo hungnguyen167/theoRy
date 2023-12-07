@@ -1,67 +1,89 @@
 library(tidyverse)
 ## TO DO: make causal_matrix a class 
 
-build_causal_matrix <- function(outcomes,c, m, ){
+build_causal_matrix <- function(inputs){
     # Check type
     
     # Start of function
 
-    unique_values_list <- list()
-
     
-    inputs <- c(idps, m)
-    destinations <- c(outcomes, m)
-    ## Xs and Ms must cause Y
-    i_d_df <- crossing(inputs, destinations, edge=c("~", "")) %>% 
-        filter(inputs!=destinations) %>%
-        group_by(destinations, inputs) %>%
-        mutate(row=row_number()) %>%
-        pivot_wider(names_from=c(inputs,destinations), values_from=edge) %>%
-        select(-row) %>%
-        ungroup()
-    for (col in names(i_d_df)) {
-        unique_values_list[[col]] <- append(unique_values_list[[col]], na.omit(unique(i_d_df[[col]])))
-    }
-    ## Xs can be correlated or not
-    if (length(idps)>1){
-        i_i_df <- crossing(idps, idps2=idps, edge=c("~~","")) %>% 
-            filter(idps!=idps2) 
-        i_i_df <- i_i_df[!duplicated(t(apply(i_i_df[c("idps", "idps2", "edge")], 1, sort))), ] %>%
-            group_by(idps2, idps) %>%
-            mutate(row=row_number()) %>%
-            pivot_wider(names_from=c(idps,idps2), values_from=edge) %>%
-            select(-row) %>%
-            ungroup()
-        for (col in names(i_i_df)) {
-            unique_values_list[[col]] <- append(unique_values_list[[col]], na.omit(unique(i_i_df[[col]])))
-        }
-        i_i_c_df <- crossing(idps, idps2=idps, edge=c("~", "")) %>% 
-            filter(idps!=idps2) %>%
-            group_by(idps2, idps) %>%
-            mutate(row=row_number()) %>%
-            pivot_wider(names_from=c(idps,idps2), values_from=edge) %>%
-            select(-row) %>%
-            ungroup()
-        for (col in names(i_i_c_df)) {
-            unique_values_list[[col]] <- append(unique_values_list[[col]], na.omit(unique(i_i_c_df[[col]])))
-        }
-    }
-    ## Ms can be correlated or not
-    if (length(m)>1){
-        m_m_df <- crossing(m, m2=m, edge=c("~~","")) %>% 
-            filter(m!=m2) 
-        m_m_df <- m_m_df[!duplicated(t(apply(m_m_df[c("m", "m2", "edge")], 1, sort))), ] %>%
-            group_by(m, m2) %>%
-            mutate(row=row_number()) %>%
-            pivot_wider(names_from=c(m,m2), values_from=edge) %>%
-            select(-row) %>%
-            ungroup()
-        
-        for (col in names(m_m_df)) {
-            unique_values_list[[col]] <- append(unique_values_list[[col]], na.omit(unique(m_m_df[[col]])))
-        }
-
-    }
+    
+    ## Change variable names to Xn, Xtest, Y, and Mn
+    node_timing <- tibble(var_name=inputs$nodes, timing=inputs$timing,
+                              type=inputs$types) %>%
+        arrange(timing) %>%
+        group_by(type) %>%
+        mutate(
+            node_name = case_when(
+                type == "otc" ~ "Y",
+                type == "test" ~ "Xtest",
+                type == "ctr" ~ paste0("X", row_number()),
+                type == "mod" ~ paste0("M", row_number())
+            )
+        ) %>%
+        ungroup() %>%
+        select(-var_name) 
+    
+    
+    from_tbl <- node_timing %>%
+        expand_grid(node_from=node_timing$node_name,node_to=node_timing$node_name) %>%
+        select(-node_name) %>%
+        rename(node_name=node_from) %>%
+        select(node_name) %>%
+        left_join(node_timing, by="node_name") %>%
+        rename(
+            timing_from = timing,
+            node_from = node_name,
+            type_from = type
+        ) 
+    to_tbl <- node_timing %>%
+        expand_grid(node_from=node_timing$node_name,node_to=node_timing$node_name) %>%
+        select(-node_name) %>%
+        rename(node_name=node_to) %>%
+        select(node_name) %>%
+        left_join(node_timing, by="node_name") %>%
+        rename(
+            timing_to = timing,
+            node_to = node_name,
+            type_to = type
+        ) 
+    pairs_tbl <- bind_cols(from_tbl, to_tbl) %>%
+        distinct(node_from, node_to, .keep_all=TRUE) %>%
+        mutate(
+            direction = case_when(
+                node_from == "Xtest" & node_to == "Y" ~ "~",
+                node_from == "Xtest" & str_detect(node_to, "M\\d+") ~ "~",
+                str_detect(node_from, "X[0-9A-Za-z]+") & str_detect(node_to, "X[0-9A-Za-z]+") 
+                & timing_from <  timing_to ~ "~",
+                str_detect(node_from, "X[0-9A-Za-z]+") & str_detect(node_to, "X[0-9A-Za-z]+") 
+                & timing_from ==  timing_to ~ "~~",
+                str_detect(node_from, "X[0-9A-Za-z]+") & str_detect(node_to, "X[0-9A-Za-z]+")
+                & timing_from <  timing_to ~ "~",
+                str_detect(node_from, "M\\d+") & node_to == "Y" ~ "~",
+                str_detect(node_from, "X[0-9A-Za-z]+") & node_to == "Y" 
+                & timing_from <=  timing_to ~ "~",
+                str_detect(node_from, "M\\d+") & str_detect(node_to, "M\\d+") 
+                & timing_from <  timing_to ~ "~",
+                str_detect(node_from, "M\\d+") & str_detect(node_to, "M\\d+") 
+                & timing_from ==  timing_to ~ "~~"
+            )
+        ) %>%
+        filter(node_from != node_to & !is.na(direction)) %>%
+        mutate(
+            pairs = paste(pmin(node_to, node_from), pmax(node_to, node_from), sep="_")
+        ) %>%
+        distinct(pairs, .keep_all=TRUE) %>%
+        mutate(
+            pairs = paste(node_from, node_to, sep="_")
+        ) %>%
+        select(pairs, direction)
+    two_opt <- pairs_tbl %>%
+        filter(pairs != "Xtest_Y")
+    one_opt <- pairs_tbl %>%
+        filter(pairs == "Xtest_Y")
+    unique_values_list <- lapply(seq_len(nrow(two_opt)), function(i) c(two_opt$direction[i], ""))
+    names(unique_values_list) <- two_opt$pairs
+    unique_values_list <- c(unique_values_list, setNames(one_opt$direction, one_opt$pairs))
     
     ## Create all possible combinations
     causal_matrix <- expand.grid(unique_values_list, stringsAsFactors = FALSE) %>%
@@ -72,35 +94,19 @@ build_causal_matrix <- function(outcomes,c, m, ){
             model = rep(
                 1:(nrow(.)/length(unique_values_list)),
                 each = length(unique_values_list)
-            ),
-            pair = paste(pmin(to, from), pmax(to, from), sep="_")
+            )
         ) %>%
         filter(direction != "") %>%
         group_by(model) %>%
-        filter(any(to == "Y" & str_detect(from, "X\\d+"))) %>% ## keep only formulas that have Y caused by at least one X
+        filter(any(to == "Y" & str_detect(from, "Xtest"))) %>% ## keep only formulas that have Y caused by Xtest
         filter(
-            any(str_detect(to, "M\\d+") & str_detect(from, "X\\d+")) |
+            any(str_detect(to, "M\\d+") & str_detect(from, "X[0-9A-Za-z]+")) |
             all(!str_detect(to, "M\\d+") & !str_detect(from, "M\\d+"))
         ) %>% ## if there is M in the formula, then it must be caused by at least one X
-        distinct(pair, .keep_all = TRUE) %>%
-        ungroup() %>%
-        mutate(
-            unq_cmb = paste(pair, direction, "_")
-        ) %>%
-        group_by(model) %>%
-        distinct(unq_cmb, .keep_all=TRUE) %>%
-        ungroup()
+        ungroup() 
     
-    ## Remove formulas that are identical (different ordering, same formulas)
-    collapsed_matrix <- causal_matrix %>%
-        group_by(model) %>%
-        summarise(
-            col_formula = paste(from, to, direction, collapse=" ")
-        ) %>%
-        distinct(col_formula, .keep_all=TRUE)
+   
     
-    causal_matrix <- causal_matrix %>%
-        filter(model %in% collapsed_matrix$model) 
     return(causal_matrix)
 
 }
@@ -110,11 +116,10 @@ build_causal_matrix <- function(outcomes,c, m, ){
 
 
 ## Example: 
-outcomes <- "Y"
-idps <- c("X1", "X2", "X3")
-m <- c("M1")
+inputs <- list(nodes=c("a","b","c","d","e","f"), timing=c(-1,-2,-2,-1,0,-1),
+               types=c("ctr","ctr","ctr","test","otc","mod"))
 
-causal_matrix <- build_causal_matrix(outcomes, idps, m)
+causal_matrix <- build_causal_matrix(inputs)
 
 
 

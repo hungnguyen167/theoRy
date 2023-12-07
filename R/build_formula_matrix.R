@@ -1,48 +1,57 @@
 library(tidyverse)
 library(ggdag)
 library(dagitty)
+library(furrr)
+library(progressr)
 build_formula_matrix <- function(causal_matrix){
-    
+    # Check type
+    # Start of function
     create_formula <- function(nested_df){
-        causal_corr <- nested_df %>%
-            group_by(to) %>%
+        formula_df <- nested_df %>%
+            filter(direction %in% c("~","~~")) %>%
+            group_by(model,to) %>%
             reframe(from=from,
-                    formula = paste(to, direction, paste(from, collapse = " + "), sep=" ")) %>%
-            distinct(formula, .keep_all=TRUE) %>%
+                    formula = ifelse(direction == "~", ## if causal,
+                                      paste(to, direction, paste(from, collapse = " + "), sep=" "), ## add to one formula
+                                      paste(from, direction, to, collapse=", "))) %>% ## if correlational, separate
             mutate(
                 ord = case_when(
                     str_detect(to, "Y.*") ~ 1,
                     str_detect(to, "M.*") ~ 2,
                     str_detect(to, "X.*") ~ 3,
                     TRUE ~ 0
-                ),
-                pair = paste(pmin(to, from), pmax(to, from), sep="_")
+                )
             ) %>%
-            filter(!str_detect(formula, "none")) %>%
+            distinct(formula, .keep_all = TRUE) %>%
             arrange(ord) %>%
-            distinct(pair, .keep_all = TRUE) 
+            ungroup()
 
-        formulas <- causal_corr$formula
-        formula <- unlist(paste(formulas, collapse = ","))
+
+        
+        formulas <- formula_df$formula
+        formula <- unlist(paste(formulas, collapse = ", "))
         return(formula)
+        
         
     }
     
     formula_matrix <- causal_matrix %>%
         group_by(model) %>%
-        nest() %>%
+        group_split() %>%
+        future_map(~ summarise(.x, formula = create_formula(.x))) %>%
+        bind_rows() %>%
         mutate(
-            formula = map(data, create_formula)
-        ) %>% 
-        filter(str_detect(formula, "Y")) %>%
-        select(-data)
+            model = row_number()
+        ) 
     
     
     return(formula_matrix)
 }
 
 
-formula_matrix <- build_formula_matrix(causal_matrix)
+tic()
+formula_matrix <-build_formula_matrix(causal_matrix)
+toc()
 
 
 ## Graphing
@@ -51,9 +60,14 @@ additional_args <- list(
     outcome="Y"
 )
 
-formulas_vector <- strsplit(unlist(formula_matrix[1,2]), ",")[[1]]
+formulas_vector <- strsplit(unlist(formula_matrix[2,1]), ",")[[1]]
 dag <- do.call(dagify, c(lapply(formulas_vector, as.formula), additional_args))
-
-formulas_vector <- strsplit(unlist(formula_matrix[122,2]), ",")[[1]]
+ggdag_parents(dag, "Y")
+formulas_vector <- strsplit(unlist(formula_matrix[40,1]), ",")[[1]]
 dag2 <- do.call(dagify, c(lapply(formulas_vector, as.formula), additional_args))
+ggdag_parents(dag2, "Y")
 
+
+
+
+## Unused code: filter(str_detect(formula, "M\\d+\\s~[^,]+X\\d+") | !str_detect(formula, "M\\d+")) %>% 

@@ -40,7 +40,8 @@ build_formula_matrix <- function(causal_matrix){
     formula_matrix <- causal_matrix %>%
         group_by(model) %>%
         group_split() %>%
-        future_map(~ summarise(.x, formula = create_formula(.x))) %>%
+        future_map(~ summarise(.x, formula = create_formula(.x)), 
+                   .options = furrr_options(scheduling = 2)) %>%
         bind_rows() %>%
         mutate(
             model = row_number()
@@ -49,7 +50,7 @@ build_formula_matrix <- function(causal_matrix){
     
     return(formula_matrix)
 }
-
+plan(multisession, workers=2)
 
 tic()
 formula_matrix <-build_formula_matrix(causal_matrix)

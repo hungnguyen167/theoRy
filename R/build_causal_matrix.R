@@ -78,9 +78,9 @@ build_causal_matrix <- function(inputs){
         ) %>%
         select(pairs, direction)
     two_opt <- pairs_tbl %>%
-        filter(pairs != "Xtest_Y")
+        filter(pairs != "Xtest_Y" & direction == "~")
     one_opt <- pairs_tbl %>%
-        filter(pairs == "Xtest_Y")
+        filter(pairs == "Xtest_Y" | direction == "~~")
     unique_values_list <- lapply(seq_len(nrow(two_opt)), function(i) c(two_opt$direction[i], ""))
     names(unique_values_list) <- two_opt$pairs
     unique_values_list <- c(unique_values_list, setNames(one_opt$direction, one_opt$pairs))
@@ -116,8 +116,8 @@ build_causal_matrix <- function(inputs){
 
 
 ## Example: 
-inputs <- list(nodes=c("a","b","c","d","e","f"), timing=c(-1,-2,-2,-1,0,-1),
-               types=c("ctr","ctr","ctr","test","otc","mod"))
+inputs <- list(nodes=c("a","b","c","d","e","f", "g"), timing=c(-1,-2,-2,-1,0,-1,-1),
+               types=c("ctr","ctr","ctr","test","otc","mod", "ctr"))
 
 causal_matrix <- build_causal_matrix(inputs)
 

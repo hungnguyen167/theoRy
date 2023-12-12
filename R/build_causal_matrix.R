@@ -1,14 +1,24 @@
 library(tidyverse)
-## TO DO: make causal_matrix a class 
+library(tictoc)
 
-build_causal_matrix <- function(inputs){
-    # Check type
+build_causal_matrix <- function(inputs, impose_rels=NULL){
+    # Check if 'inputs' is a list and has required components
+    if (!is.list(inputs) || !all(c("nodes", "timing", "types") %in% names(inputs))) {
+        stop("Input must be a list containing 'nodes', 'timing', and 'types'.")
+    }
     
+    # Check if 'nodes', 'timing', and 'types' have the same length
+    if (length(inputs$nodes) != length(inputs$timing) || length(inputs$nodes) != length(inputs$types)) {
+        stop("'nodes', 'timing', and 'types' must be of the same length.")
+    }
+    # Check if 'timing' has more than 4 unique values
+    if (length(unique(inputs$timing)) > 4) {
+        stop("Function not executed: The total number of unique 'timing' values 
+             is highly recommended to be less than 4.")
+    }
     # Start of function
 
-    
-    
-    ## Change variable names to Xn, Xtest, Y, and Mn
+    ## Change variable names to Xn, Xtest, Y based on types
     node_timing <- tibble(var_name=inputs$nodes, timing=inputs$timing,
                               type=inputs$types) %>%
         arrange(timing) %>%
@@ -17,14 +27,17 @@ build_causal_matrix <- function(inputs){
             node_name = case_when(
                 type == "otc" ~ "Y",
                 type == "test" ~ "Xtest",
-                type == "ctr" ~ paste0("X", row_number()),
-                type == "mod" ~ paste0("M", row_number())
+                type == "ctr" ~ paste0("X", row_number())
             )
         ) %>%
         ungroup() %>%
         select(-var_name) 
-    
-    
+    x_test_time <- node_timing[which(node_timing$type=="test"),"timing"]
+    y_time <- node_timing[which(node_timing$type=="otc"),"timing"]
+    if (x_test_time >= y_time){
+        stop("X_test must take place before Y")
+    }
+    # Create tables for 'from' and 'to' nodes and join with node_timing for timings and types
     from_tbl <- node_timing %>%
         expand_grid(node_from=node_timing$node_name,node_to=node_timing$node_name) %>%
         select(-node_name) %>%
@@ -47,25 +60,20 @@ build_causal_matrix <- function(inputs){
             node_to = node_name,
             type_to = type
         ) 
+    # Combine from_tbl and to_tbl to create pairs and determine the direction of influence
+    
     pairs_tbl <- bind_cols(from_tbl, to_tbl) %>%
         distinct(node_from, node_to, .keep_all=TRUE) %>%
         mutate(
             direction = case_when(
                 node_from == "Xtest" & node_to == "Y" ~ "~",
-                node_from == "Xtest" & str_detect(node_to, "M\\d+") ~ "~",
                 str_detect(node_from, "X[0-9A-Za-z]+") & str_detect(node_to, "X[0-9A-Za-z]+") 
                 & timing_from <  timing_to ~ "~",
                 str_detect(node_from, "X[0-9A-Za-z]+") & str_detect(node_to, "X[0-9A-Za-z]+") 
                 & timing_from ==  timing_to ~ "~~",
-                str_detect(node_from, "X[0-9A-Za-z]+") & str_detect(node_to, "X[0-9A-Za-z]+")
-                & timing_from <  timing_to ~ "~",
-                str_detect(node_from, "M\\d+") & node_to == "Y" ~ "~",
-                str_detect(node_from, "X[0-9A-Za-z]+") & node_to == "Y" 
+                str_detect(node_from, "X\\d+") & node_to == "Y" 
                 & timing_from <=  timing_to ~ "~",
-                str_detect(node_from, "M\\d+") & str_detect(node_to, "M\\d+") 
-                & timing_from <  timing_to ~ "~",
-                str_detect(node_from, "M\\d+") & str_detect(node_to, "M\\d+") 
-                & timing_from ==  timing_to ~ "~~"
+                TRUE ~ NA_character_
             )
         ) %>%
         filter(node_from != node_to & !is.na(direction)) %>%
@@ -77,10 +85,13 @@ build_causal_matrix <- function(inputs){
             pairs = paste(node_from, node_to, sep="_")
         ) %>%
         select(pairs, direction)
+    # Define two types of options based on the direction
     two_opt <- pairs_tbl %>%
         filter(pairs != "Xtest_Y" & direction == "~")
     one_opt <- pairs_tbl %>%
         filter(pairs == "Xtest_Y" | direction == "~~")
+    
+    # Create a unique values list from the options
     unique_values_list <- lapply(seq_len(nrow(two_opt)), function(i) c(two_opt$direction[i], ""))
     names(unique_values_list) <- two_opt$pairs
     unique_values_list <- c(unique_values_list, setNames(one_opt$direction, one_opt$pairs))
@@ -98,15 +109,10 @@ build_causal_matrix <- function(inputs){
         ) %>%
         filter(direction != "") %>%
         group_by(model) %>%
-        filter(any(to == "Y" & str_detect(from, "Xtest"))) %>% ## keep only formulas that have Y caused by Xtest
-        filter(
-            any(str_detect(to, "M\\d+") & str_detect(from, "X[0-9A-Za-z]+")) |
-            all(!str_detect(to, "M\\d+") & !str_detect(from, "M\\d+"))
-        ) %>% ## if there is M in the formula, then it must be caused by at least one X
-        ungroup() 
+        filter(any(to == "Y" & str_detect(from, "Xtest"))) %>%
+        ungroup()
     
-   
-    
+  
     return(causal_matrix)
 
 }
@@ -114,12 +120,12 @@ build_causal_matrix <- function(inputs){
 
 
 
-
 ## Example: 
-inputs <- list(nodes=c("a","b","c","d","e","f", "g"), timing=c(-1,-2,-2,-1,0,-1,-1),
-               types=c("ctr","ctr","ctr","test","otc","mod", "ctr"))
+inputs <- list(nodes=c("a","b","c","d","e"), timing=c(-1,-2,0,-1,0),
+               types=c("ctr","ctr","ctr","test","otc"))
 
+
+tic()
 causal_matrix <- build_causal_matrix(inputs)
-
-
+toc()
 

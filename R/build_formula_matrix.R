@@ -47,13 +47,6 @@ toc()
 
 
 
-## Graphing
-additional_args <- list(
-    exposure="Xtest",
-    outcome="Y"
-)
-
-
 
 
 

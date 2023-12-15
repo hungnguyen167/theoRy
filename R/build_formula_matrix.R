@@ -1,9 +1,6 @@
-library(tidyverse)
-library(ggdag)
-library(dagitty)
-library(furrr)
-library(data.table)
-library(tictoc)
+require(tidyverse)
+require(data.table)
+require(tictoc)
 
 
 create_formula <- function(nested_dt) {
@@ -39,9 +36,9 @@ build_formula_matrix <- function(causal_matrix) {
 }
 
 
-tic()
-formula_matrix <-build_formula_matrix(causal_matrix)
-toc()
+#tic()
+#formula_matrix <-build_formula_matrix(causal_matrix)
+#toc()
 
 
 

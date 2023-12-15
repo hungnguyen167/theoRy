@@ -1,9 +1,9 @@
-library(ggdag)
-library(dagitty)
+require(ggdag)
+require(dagitty)
 
 
 
-identify_redundant <- function(formula_matrix, causal_matrix, effect="direct"){
+keep_minimal <- function(formula_matrix, causal_matrix, effect="direct"){
     additional_args <- list(
         exposure="Xtest",
         outcome="Y"
@@ -22,7 +22,6 @@ identify_redundant <- function(formula_matrix, causal_matrix, effect="direct"){
     adj_ls <- lapply(adj_ls, function(inner_list){
         c(inner_list, "Xtest","Y")
     })
-    print(adj_ls[[1]])
     reduced_causal_matrix <- tibble()
     for (i in 1:length(adj_ls)){
         df_temp <- causal_matrix %>% 
@@ -33,16 +32,7 @@ identify_redundant <- function(formula_matrix, causal_matrix, effect="direct"){
 
     return(reduced_causal_matrix)
 }
-reduced_causal_matrix <- identify_redundant(formula_matrix, causal_matrix)
-reduced_formula_matrix <- build_formula_matrix(reduced_causal_matrix) 
-
-additional_args <- list(
-    exposure="Xtest",
-    outcome="Y"
-)
-formulas_vector <- strsplit(unlist(reduced_formula_matrix[17,1]), ",")[[1]]
-dag <- do.call(dagify, c(lapply(formulas_vector, as.formula), additional_args))
+#reduced_causal_matrix <- keep_minimal(formula_matrix, causal_matrix)
+#reduced_formula_matrix <- build_formula_matrix(reduced_causal_matrix) 
 
 
-formulas_vector <- strsplit(unlist(reduced_formula_matrix[5,1]), ",")[[1]]
-dag2 <- do.call(dagify, c(lapply(formulas_vector, as.formula), additional_args))

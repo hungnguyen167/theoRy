@@ -1,7 +1,7 @@
 library(tidyverse)
 library(tictoc)
 
-build_causal_matrix <- function(inputs, impose_rels=NULL){
+build_causal_matrix <- function(inputs, resid_corr=TRUE){ 
     # Check if 'inputs' is a list and has required components
     if (!is.list(inputs) || !all(c("nodes", "timing", "types") %in% names(inputs))) {
         stop("Input must be a list containing 'nodes', 'timing', and 'types'.")
@@ -68,11 +68,17 @@ build_causal_matrix <- function(inputs, impose_rels=NULL){
             direction = case_when(
                 node_from == "Xtest" & node_to == "Y" ~ "~",
                 str_detect(node_from, "X[0-9A-Za-z]+") & str_detect(node_to, "X[0-9A-Za-z]+") 
-                & timing_from <  timing_to ~ "~",
+                & timing_from <  timing_to & resid_corr==TRUE ~ "~",
                 str_detect(node_from, "X[0-9A-Za-z]+") & str_detect(node_to, "X[0-9A-Za-z]+") 
-                & timing_from ==  timing_to ~ "~~",
+                & timing_from ==  timing_to & resid_corr == TRUE~ "~~",
+                str_detect(node_from, "X[0-9A-Za-z]+") & str_detect(node_to, "X[0-9A-Za-z]+") 
+                & timing_from <=  timing_to & resid_corr==FALSE ~ "~",
                 str_detect(node_from, "X\\d+") & node_to == "Y" 
-                & timing_from <=  timing_to ~ "~",
+                & timing_from <  timing_to & resid_corr==TRUE ~ "~",
+                str_detect(node_from, "X\\d+") & node_to == "Y" 
+                & timing_from == timing_to & resid_corr == TRUE ~ "~~",
+                str_detect(node_from, "X\\d+") & node_to == "Y" 
+                & timing_from <=  timing_to & resid_corr==FALSE ~ "~",
                 TRUE ~ NA_character_
             )
         ) %>%
@@ -87,9 +93,9 @@ build_causal_matrix <- function(inputs, impose_rels=NULL){
         select(pairs, direction)
     # Define two types of options based on the direction
     two_opt <- pairs_tbl %>%
-        filter(pairs != "Xtest_Y" & direction == "~")
+        filter(pairs != "Xtest_Y")
     one_opt <- pairs_tbl %>%
-        filter(pairs == "Xtest_Y" | direction == "~~")
+        filter(pairs == "Xtest_Y")
     
     # Create a unique values list from the options
     unique_values_list <- lapply(seq_len(nrow(two_opt)), function(i) c(two_opt$direction[i], ""))
@@ -121,11 +127,11 @@ build_causal_matrix <- function(inputs, impose_rels=NULL){
 
 
 ## Example: 
-inputs <- list(nodes=c("a","b","c","d","e"), timing=c(-1,-2,-2,-1,0),
-               types=c("ctr","ctr","ctr","test","otc"))
+#inputs <- list(nodes=c("a","b","c","d","e"), timing=c(-3,-3,-2,-1,0),
+ #              types=c("ctr","ctr","ctr","test","otc"))
 
 
-tic()
-causal_matrix <- build_causal_matrix(inputs)
-toc()
+#tic()
+#causal_matrix <- build_causal_matrix(inputs)
+#toc()
 

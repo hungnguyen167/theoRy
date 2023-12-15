@@ -116,7 +116,17 @@ build_causal_matrix <- function(inputs, resid_corr=TRUE){
         filter(direction != "") %>%
         group_by(model) %>%
         filter(any(to == "Y" & str_detect(from, "Xtest"))) %>%
-        ungroup()
+        ungroup() %>%
+        left_join(node_timing, by= join_by(from==node_name)) %>%
+        rename(
+            timing_from = timing,
+            type_from = type
+        ) %>%
+        left_join(node_timing, by=join_by(to==node_name))%>%
+        rename(
+            timing_to = timing,
+            type_to = type
+        )
     
   
     return(causal_matrix)

@@ -1763,64 +1763,11 @@ pre code {
 <!-- rnb-text-begin -->
 <!-- rnb-text-end -->
 <!-- rnb-chunk-begin -->
-<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuc291cmNlKFwiUi9idWlsZF9jYXVzYWxfbWF0cml4LlJcIilcbmBgYCJ9 -->
-<pre class="r"><code>source(&quot;R/build_causal_matrix.R&quot;)</code></pre>
+<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuc291cmNlKFwiUi9idWlsZF9jYXVzYWxfbWF0cml4LlJcIilcbnNvdXJjZShcIlIvYnVpbGRfZm9ybXVsYV9tYXRyaXguUlwiKVxuc291cmNlKFwiUi9rZWVwX21pbmltYWwuUlwiKVxuYGBgIn0= -->
+<pre class="r"><code>source(&quot;R/build_causal_matrix.R&quot;)
+source(&quot;R/build_formula_matrix.R&quot;)
+source(&quot;R/keep_minimal.R&quot;)</code></pre>
 <!-- rnb-source-end -->
-<!-- rnb-output-begin eyJkYXRhIjoi4pSA4pSAIEF0dGFjaGluZyBjb3JlIHRpZHl2ZXJzZSBwYWNrYWdlcyDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIAgdGlkeXZlcnNlIDIuMC4wIOKUgOKUgFxu4pyUIGRwbHlyICAgICAxLjEuMCAgICAg4pyUIHJlYWRyICAgICAyLjEuNFxu4pyUIGZvcmNhdHMgICAxLjAuMCAgICAg4pyUIHN0cmluZ3IgICAxLjUuMFxu4pyUIGdncGxvdDIgICAzLjQuMSAgICAg4pyUIHRpYmJsZSAgICAzLjIuMFxu4pyUIGx1YnJpZGF0ZSAxLjkuMiAgICAg4pyUIHRpZHlyICAgICAxLjMuMFxu4pyUIHB1cnJyICAgICAxLjAuMSAgICAgXG7ilIDilIAgQ29uZmxpY3RzIOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgCB0aWR5dmVyc2VfY29uZmxpY3RzKCkg4pSA4pSAXG7inJYgZHBseXI6OmZpbHRlcigpIG1hc2tzIHN0YXRzOjpmaWx0ZXIoKVxu4pyWIGRwbHlyOjpsYWcoKSAgICBtYXNrcyBzdGF0czo6bGFnKClcbuKEuSBVc2UgdGhlIGNvbmZsaWN0ZWQgcGFja2FnZSAoPGh0dHA6Ly9jb25mbGljdGVkLnItbGliLm9yZy8+KSB0byBmb3JjZSBhbGwgY29uZmxpY3RzIHRvIGJlY29tZSBlcnJvcnNcbiJ9 -->
-<pre><code>── Attaching core tidyverse packages ────────────────────────── tidyverse 2.0.0 ──
-✔ dplyr     1.1.0     ✔ readr     2.1.4
-✔ forcats   1.0.0     ✔ stringr   1.5.0
-✔ ggplot2   3.4.1     ✔ tibble    3.2.0
-✔ lubridate 1.9.2     ✔ tidyr     1.3.0
-✔ purrr     1.0.1     
-── Conflicts ──────────────────────────────────────────── tidyverse_conflicts() ──
-✖ dplyr::filter() masks stats::filter()
-✖ dplyr::lag()    masks stats::lag()
-ℹ Use the conflicted package (&lt;http://conflicted.r-lib.org/&gt;) to force all conflicts to become errors</code></pre>
-<!-- rnb-output-end -->
-<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuc291cmNlKFwiUi9idWlsZF9mb3JtdWxhX21hdHJpeC5SXCIpXG5gYGAifQ== -->
-<pre class="r"><code>source(&quot;R/build_formula_matrix.R&quot;)</code></pre>
-<!-- rnb-source-end -->
-<!-- rnb-output-begin eyJkYXRhIjoiTG9hZGluZyByZXF1aXJlZCBwYWNrYWdlOiBkYXRhLnRhYmxlXG5SZWdpc3RlcmVkIFMzIG1ldGhvZCBvdmVyd3JpdHRlbiBieSAnZGF0YS50YWJsZSc6XG4gIG1ldGhvZCAgICAgICAgICAgZnJvbVxuICBwcmludC5kYXRhLnRhYmxlICAgICBcbmRhdGEudGFibGUgMS4xNC44IHVzaW5nIDQgdGhyZWFkcyAoc2VlID9nZXREVHRocmVhZHMpLiAgTGF0ZXN0IG5ld3M6IHItZGF0YXRhYmxlLmNvbVxuXG5BdHRhY2hpbmcgcGFja2FnZTog4oCYZGF0YS50YWJsZeKAmVxuXG5UaGUgZm9sbG93aW5nIG9iamVjdCBpcyBtYXNrZWQgZnJvbSDigJhwYWNrYWdlOnRpY3RvY+KAmTpcblxuICAgIHNoaWZ0XG5cblRoZSBmb2xsb3dpbmcgb2JqZWN0cyBhcmUgbWFza2VkIGZyb20g4oCYcGFja2FnZTpsdWJyaWRhdGXigJk6XG5cbiAgICBob3VyLCBpc293ZWVrLCBtZGF5LCBtaW51dGUsIG1vbnRoLCBxdWFydGVyLCBzZWNvbmQsIHdkYXksIHdlZWssXG4gICAgeWRheSwgeWVhclxuXG5UaGUgZm9sbG93aW5nIG9iamVjdHMgYXJlIG1hc2tlZCBmcm9tIOKAmHBhY2thZ2U6ZHBseXLigJk6XG5cbiAgICBiZXR3ZWVuLCBmaXJzdCwgbGFzdFxuXG5UaGUgZm9sbG93aW5nIG9iamVjdCBpcyBtYXNrZWQgZnJvbSDigJhwYWNrYWdlOnB1cnJy4oCZOlxuXG4gICAgdHJhbnNwb3NlXG4ifQ== -->
-<pre><code>Loading required package: data.table
-Registered S3 method overwritten by &#39;data.table&#39;:
-  method           from
-  print.data.table     
-data.table 1.14.8 using 4 threads (see ?getDTthreads).  Latest news: r-datatable.com
-
-Attaching package: ‘data.table’
-
-The following object is masked from ‘package:tictoc’:
-
-    shift
-
-The following objects are masked from ‘package:lubridate’:
-
-    hour, isoweek, mday, minute, month, quarter, second, wday, week,
-    yday, year
-
-The following objects are masked from ‘package:dplyr’:
-
-    between, first, last
-
-The following object is masked from ‘package:purrr’:
-
-    transpose</code></pre>
-<!-- rnb-output-end -->
-<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuc291cmNlKFwiUi9rZWVwX21pbmltYWwuUlwiKVxuYGBgIn0= -->
-<pre class="r"><code>source(&quot;R/keep_minimal.R&quot;)</code></pre>
-<!-- rnb-source-end -->
-<!-- rnb-output-begin eyJkYXRhIjoiTG9hZGluZyByZXF1aXJlZCBwYWNrYWdlOiBnZ2RhZ1xuXG5BdHRhY2hpbmcgcGFja2FnZTog4oCYZ2dkYWfigJlcblxuVGhlIGZvbGxvd2luZyBvYmplY3QgaXMgbWFza2VkIGZyb20g4oCYcGFja2FnZTpzdGF0c+KAmTpcblxuICAgIGZpbHRlclxuXG5Mb2FkaW5nIHJlcXVpcmVkIHBhY2thZ2U6IGRhZ2l0dHlcbiJ9 -->
-<pre><code>Loading required package: ggdag
-
-Attaching package: ‘ggdag’
-
-The following object is masked from ‘package:stats’:
-
-    filter
-
-Loading required package: dagitty</code></pre>
-<!-- rnb-output-end -->
 <!-- rnb-chunk-end -->
 <!-- rnb-text-begin -->
 <div id="build-causal-matrix" class="section level2">

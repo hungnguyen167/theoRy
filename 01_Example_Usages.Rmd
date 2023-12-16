@@ -3,6 +3,8 @@ title: "R Notebook"
 output: html_notebook
 ---
 
+## Setup
+
 ```{r setup}
 source("R/build_causal_matrix.R")
 source("R/build_formula_matrix.R")
@@ -10,10 +12,25 @@ source("R/keep_minimal.R")
 ```
 
 ## Build causal matrix
+
+The object 'inputs' takes the form of a named list. 
+
+In the 'inputs list:
+
+1. Nodes can be given any alpha-numeric naming convention, but for plotting and comparison will be transformed into X1-Xn based on the timing.
+
+2. Timing requires entering integers from 0 backwards. Zero should be given to the outcome (otc) variable and all other independent variables need to be chronologically ordered. Not real time, but ordinal timing of events. It is possible for variables to occur simultaneously, even if this is just observationally)
+
+3. Types include "test", "otc", or "ctr". 
+    a. "ctr" is a control or adjustment variable that is not the test variable in question
+    b. "test" is the test variable in question, treatment for example.
+    c. "otc" is the outcome, dependent variable.
+
+
 ```{r causal_matrix}
-## Inputs take the form of a named list. Nodes can take any name and will be transformed into X1-Xn based on its timing. Types include "ctr", "test", or "otc".
-inputs <- list(nodes=c("a","b","c","d","e"), timing=c(-3,-3,-2,-1,0),
-              types=c("ctr","ctr","ctr","test","otc"))
+
+inputs <- list(nodes=c("a","b","c","d","e"), timing=c(0,-1,-2,-3,-3),
+              types=c("otc","test","ctr","ctr","ctr"))
 
 causal_matrix <- build_causal_matrix(inputs)
 ```

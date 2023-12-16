@@ -46,10 +46,11 @@ additional_args <- list(
     outcome="Y"
 )
 
-full_matrix <- reduced_formula_matrix
+full_matrix <- formula_matrix
 
-for (f in 1:length(formula_matrix)) {
-    assign("fvector", strsplit(unlist(formula_matrix[f,1]), ",")[[1]])
+for (f in 1:nrow(formula_matrix)) {
+    print(f)
+    fvector <- strsplit(unlist(formula_matrix[f,1]), ",")[[1]]
     # create dag object syntax
     dag <- do.call(dagify, c(lapply(fvector, as.formula), additional_args))
     full_matrix$dag[f] <- dag

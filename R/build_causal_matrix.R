@@ -113,7 +113,6 @@ build_causal_matrix <- function(inputs, resid_corr=TRUE){
                 each = length(unique_values_list)
             )
         ) %>%
-        filter(direction != "") %>%
         group_by(model) %>%
         filter(any(to == "Y" & str_detect(from, "Xtest"))) %>%
         ungroup() %>%

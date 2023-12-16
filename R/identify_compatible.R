@@ -33,7 +33,7 @@ identify_compatible <- function(formula_matrix, causal_matrix, effect="direct",
     cmp_adj <- adj_ls[-1]
     ls_cmp <- list()
     print(length(cmp_adj))
-    for (i in cmp_adj){
+    for (i in seq_along(cmp_adj)){
         identical <- lapply(i, function(x) identical(x, ref_adj))
         single_excl <-  lapply(i, function(x) any(ref_adj %in% x))
         if(any(identical==TRUE)){

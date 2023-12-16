@@ -1,0 +1,79 @@
+---
+title: "02 Working Paper"
+author: "Nate Breznau & Hung H.V. Nguyen"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+## R Markdown
+
+```{r setup}
+
+source("R/build_causal_matrix.R")
+source("R/build_formula_matrix.R")
+source("R/keep_minimal.R")
+```
+
+## Generate Model Multiverse
+
+### Input variables
+
+Generate causal matrix
+
+```{r models}
+inputs <- list(nodes=c("a","b","c","d"), timing=c(0,-1,-2,-2),
+              types=c("otc","test","ctr","ctr"))
+
+causal_matrix <- build_causal_matrix(inputs)
+```
+
+### Derive formulas
+
+Generate formula matrix
+
+```{r formula_matrix}
+
+formula_matrix <- build_formula_matrix(causal_matrix)
+```
+
+### Derive plots
+
+#### Generate DAG formulas
+
+```{r viz}
+additional_args <- list(
+    exposure="Xtest",
+    outcome="Y"
+)
+
+full_matrix <- reduced_formula_matrix
+
+for (f in 1:length(formula_matrix)) {
+    assign("fvector", strsplit(unlist(formula_matrix[f,1]), ",")[[1]])
+    # create dag object syntax
+    dag <- do.call(dagify, c(lapply(fvector, as.formula), additional_args))
+    full_matrix$dag[f] <- dag
+    # extract adjustment sets
+    mas <- adjustmentSets(dag, exposure = "Xtest", outcome = "Y", effect = "direct")
+    full_matrix$mas[f] <- mas
+}
+```
+
+#### DAG Plots
+
+```{r plots}
+p1 <- plot(graphLayout(dag(full_matrix[1,3])))
+p2 <- plot(graphLayout(dag(full_matrix[2,3])))
+p3 <- plot(graphLayout(dag(full_matrix[3,3])))
+p4 <- plot(graphLayout(dag(full_matrix[4,3])))
+p5 <- plot(graphLayout(dag(full_matrix[5,3])))
+p6 <- plot(graphLayout(dag(full_matrix[6,3])))
+p7 <- plot(graphLayout(dag(full_matrix[7,3])))
+
+```
+
+```{r viz}
+formulas_vector <- strsplit(unlist(reduced_formula_matrix[12,1]), ",")[[1]]
+dag2 <- do.call(dagify, c(lapply(formulas_vector, as.formula), additional_args))
+
+```

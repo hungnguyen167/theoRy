@@ -41,35 +41,50 @@ formula_matrix <- build_formula_matrix(causal_matrix)
 #### Generate DAG formulas
 
 ```{r viz}
+coords <- list(
+        x = c(Y = 1, Xtest = 0, X1 = -1, X2 = -1),
+        y = c(Y = 0, Xtest = 0, X1 = -1, X2 = 1)
+    )
+
 additional_args <- list(
     exposure="Xtest",
-    outcome="Y"
+    outcome="Y",
+    coords = coords
 )
 
 full_matrix <- formula_matrix
+full_matrix_dags <- list()
 
+# note that dagitty uses its own type of object, this means they need to be stored separately in a list
 for (f in 1:nrow(formula_matrix)) {
     print(f)
     fvector <- strsplit(unlist(formula_matrix[f,1]), ",")[[1]]
     # create dag object syntax
     dag <- do.call(dagify, c(lapply(fvector, as.formula), additional_args))
-    full_matrix$dag[f] <- dag
+    model <- full_matrix$model[f]
+    full_matrix_dags[[model]] <- dag
     # extract adjustment sets
     mas <- adjustmentSets(dag, exposure = "Xtest", outcome = "Y", effect = "direct")
+    mas <- ifelse(mas == "list()", "none", mas)
     full_matrix$mas[f] <- mas
 }
 ```
 
 #### DAG Plots
 
+Model 1 = 22 (Version B = 21)
+Model 2 = 1
+Model 3 = NA - outside of the range
+Model 4 = 
+Model 5 = 
+Model 6 = 
+
 ```{r plots}
-p1 <- plot(graphLayout(dag(full_matrix[1,3])))
-p2 <- plot(graphLayout(dag(full_matrix[2,3])))
-p3 <- plot(graphLayout(dag(full_matrix[3,3])))
-p4 <- plot(graphLayout(dag(full_matrix[4,3])))
-p5 <- plot(graphLayout(dag(full_matrix[5,3])))
-p6 <- plot(graphLayout(dag(full_matrix[6,3])))
-p7 <- plot(graphLayout(dag(full_matrix[7,3])))
+for (l in 1:length(full_matrix_dags)){
+    p <- paste0("p",l)
+    assign(p, plot(full_matrix_dags[[l]]))
+}
+
 
 ```
 

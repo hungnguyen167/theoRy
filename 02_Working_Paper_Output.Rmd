@@ -36,15 +36,29 @@ Generate formula matrix
 formula_matrix <- build_formula_matrix(causal_matrix)
 ```
 
+### Add extra plots
+
+```{r xmodels}
+formula_matrix <- as.data.frame(formula_matrix)
+
+# Model 3
+formula_matrix[(nrow(formula_matrix)+1),] <- c("X4 ~ Y + Xtest,Y ~ X2 + Xtest,Xtest ~ X2 + X1", as.numeric(nrow(formula_matrix)+1))
+
+# Model 5
+formula_matrix[(nrow(formula_matrix)+1),] <- c("Y ~ X2 + Xtest,X3 ~ X2,Xtest ~ X3 + X2 + X1", as.numeric(nrow(formula_matrix)+1))
+
+```
+
+
 ### Derive plots
 
 #### Generate DAG formulas
 
 ```{r viz}
 coords <- list(
-        x = c(Y = 1, Xtest = 0, X1 = -1, X2 = -1),
-        y = c(Y = 0, Xtest = 0, X1 = -1, X2 = 1)
-    )
+    x = c(X4 = 1.5, Y = 1, Xtest = 0, X1 = -1, X2 = -1, X3 = -0.5),
+    y = c(X4 = 1, Y = 0, Xtest = 0, X1 = -1, X2 = 1, X3 = 1)
+)
 
 additional_args <- list(
     exposure="Xtest",
@@ -53,6 +67,7 @@ additional_args <- list(
 )
 
 full_matrix <- formula_matrix
+full_matrix[8,1] <- "Y ~ X2 + Xtest, Xtest ~ X2, X1 ~ X1" # this still doesn't work, the plotting drops the X1
 full_matrix_dags <- list()
 
 # note that dagitty uses its own type of object, this means they need to be stored separately in a list
@@ -74,12 +89,15 @@ for (f in 1:nrow(formula_matrix)) {
 
 Model 1 = 22 (Version B = 21)
 Model 2 = 1
-Model 3 = NA - outside of the range
-Model 4 = 
-Model 5 = 
-Model 6 = 
+Model 3 = 33
+Model 4 = 8 
+Model 5 = 34
+Model 6 = 18
 
 ```{r plots}
+
+# until build formula is updated X1 does not appear in the plot if it is not connected to anything
+
 for (l in 1:length(full_matrix_dags)){
     p <- paste0("p",l)
     assign(p, plot(full_matrix_dags[[l]]))
@@ -88,8 +106,3 @@ for (l in 1:length(full_matrix_dags)){
 
 ```
 
-```{r viz}
-formulas_vector <- strsplit(unlist(reduced_formula_matrix[12,1]), ",")[[1]]
-dag2 <- do.call(dagify, c(lapply(formulas_vector, as.formula), additional_args))
-
-```

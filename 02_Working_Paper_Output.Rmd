@@ -56,8 +56,8 @@ formula_matrix[(nrow(formula_matrix)+1),] <- c("Y ~ X2 + Xtest,X3 ~ X2,Xtest ~ X
 
 ```{r viz}
 coords <- list(
-    x = c(X4 = 1.5, Y = 1, Xtest = 0, X1 = -1, X2 = -1, X3 = -0.5),
-    y = c(X4 = 1, Y = 0, Xtest = 0, X1 = -1, X2 = 1, X3 = 1)
+    x = c(Y = 1, Xtest = 0, X1 = -1, X2 = -1, X3 = -0.5),
+    y = c(Y = 0, Xtest = 0, X1 = -1, X2 = 1, X3 = 1)
 )
 
 additional_args <- list(
@@ -103,6 +103,76 @@ for (l in 1:length(full_matrix_dags)){
     assign(p, plot(full_matrix_dags[[l]]))
 }
 
+
+```
+## Finding Multi MAS DAGs
+
+Using our multiverse generator we search for DAGs that will not easily follow our classification rules
+
+### Generate Models
+
+```{r searching_dags}
+inputs <- list(nodes=c("a","b","c","d", "e"), timing=c(0,-1,-2,-3,-3),
+              types=c("otc","test","ctr","ctr", "ctr"))
+
+causal_matrix <- build_causal_matrix(inputs)
+
+formula_matrix <- build_formula_matrix(causal_matrix)
+
+
+
+## Add MAS
+```
+
+
+### Find MAS
+```{r dagmassearch}
+coords <- list(
+    x = c(Y = 1, Xtest = 0, X1 = -1, X2 = -2, X3 = -2),
+    y = c(Y = 0, Xtest = 0, X1 = 0.5, X2 = 1, X3 = -1)
+)
+
+additional_args <- list(
+    exposure="Xtest",
+    outcome="Y",
+    coords = coords
+)
+
+full_matrix <- formula_matrix
+full_matrix_dags <- list()
+
+# note that dagitty uses its own type of object, this means they need to be stored separately in a list
+for (f in 1:nrow(formula_matrix)) {
+    print(f)
+    fvector <- strsplit(unlist(formula_matrix[f,1]), ",")[[1]]
+    # create dag object syntax
+    dag <- do.call(dagify, c(lapply(fvector, as.formula), additional_args))
+    model <- full_matrix$model[f]
+    full_matrix_dags[[model]] <- dag
+    # extract adjustment sets
+    mas <- adjustmentSets(dag, exposure = "Xtest", outcome = "Y", effect = "direct")
+    mas <- ifelse(mas == "list()", "none", mas)
+    full_matrix$mas[f] <- mas
+}
+```
+
+```{r testing}
+
+
+test_matrix <- as.data.frame(t(matrix(c("Y ~ Xtest + X2 + X3, X3 ~ X2 + X1, Xtest ~ X3 + X1", 1))))
+
+colnames(test_matrix) <- c("formula", "model")
+
+for (f in 1:nrow(test_matrix)) {
+    print(f)
+    fvector <- strsplit(unlist(test_matrix[f,1]), ",")[[1]]
+    # create dag object syntax
+    dag <- do.call(dagify, c(lapply(fvector, as.formula), additional_args))
+    # extract adjustment sets
+    mas <- adjustmentSets(dag, exposure = "Xtest", outcome = "Y", effect = "direct")
+    mas <- ifelse(mas == "list()", "none", mas)
+    test_matrix$mas[f] <- mas
+}
 
 ```
 

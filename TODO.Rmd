@@ -22,3 +22,6 @@ TODO:
     + For DAG visualizations
     + For identifying causal languages in texts
 - How much can ChatGPT help us speed up the process
+
+- Generate coordinates for plots automatically from original input
+- Plot single edges with no connections

@@ -67,6 +67,7 @@ build_causal_matrix <- function(inputs, resid_corr=TRUE){
         mutate(
             direction = case_when(
                 node_from == "Xtest" & node_to == "Y" ~ "~",
+                node_from == node_to & timing_from == timing_to ~  "~",
                 str_detect(node_from, "X[0-9A-Za-z]+") & str_detect(node_to, "X[0-9A-Za-z]+") 
                 & timing_from <  timing_to & resid_corr==TRUE ~ "~",
                 str_detect(node_from, "X[0-9A-Za-z]+") & str_detect(node_to, "X[0-9A-Za-z]+") 
@@ -82,7 +83,6 @@ build_causal_matrix <- function(inputs, resid_corr=TRUE){
                 TRUE ~ NA_character_
             )
         ) %>%
-        filter(node_from != node_to & !is.na(direction)) %>%
         mutate(
             pairs = paste(pmin(node_to, node_from), pmax(node_to, node_from), sep="_")
         ) %>%
@@ -90,12 +90,12 @@ build_causal_matrix <- function(inputs, resid_corr=TRUE){
         mutate(
             pairs = paste(node_from, node_to, sep="_")
         ) %>%
-        select(pairs, direction)
+        select(node_from, node_to,pairs, direction)
     # Define two types of options based on the direction
     two_opt <- pairs_tbl %>%
-        filter(pairs != "Xtest_Y")
+        filter(pairs != "Xtest_Y" & node_from != node_to)
     one_opt <- pairs_tbl %>%
-        filter(pairs == "Xtest_Y")
+        filter(pairs == "Xtest_Y" | node_from == node_to)
     
     # Create a unique values list from the options
     unique_values_list <- lapply(seq_len(nrow(two_opt)), function(i) c(two_opt$direction[i], ""))

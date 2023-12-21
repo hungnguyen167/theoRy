@@ -72,7 +72,6 @@ full_matrix_dags <- list()
 
 # note that dagitty uses its own type of object, this means they need to be stored separately in a list
 for (f in 1:nrow(formula_matrix)) {
-    print(f)
     fvector <- strsplit(unlist(formula_matrix[f,1]), ",")[[1]]
     # create dag object syntax
     dag <- do.call(dagify, c(lapply(fvector, as.formula), additional_args))
@@ -83,6 +82,10 @@ for (f in 1:nrow(formula_matrix)) {
     mas <- ifelse(mas == "list()", "none", capture.output(mas))
     full_matrix$mas[f] <- paste(unlist(mas), collapse = ",")
 }
+
+## X1 is at the corner, clearly not removed. Perhaps because you've set the coordinates and some of the coordinates are outside of the graph?
+test_dag <- dagify(Y ~ X2 + Xtest, Xtest ~ X2, X1 ~ X1)
+plot(graphLayout(test_dag))
 ```
 
 #### DAG Plots

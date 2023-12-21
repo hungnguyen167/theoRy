@@ -14,7 +14,12 @@ create_formula <- function(nested_dt) {
     
     formula_dt <- nested_dt[direction == "~~"]
     formula_dt[, formula := paste(to, direction, from, sep = " "), by = .(model, to)]
+    
+    
+    
     formula_dt <- rbindlist(list(causal_dt, formula_dt), use.names = TRUE, fill=TRUE)
+    
+    
     
     formulas <- formula_dt$formula
     formula <- paste(formulas, collapse = ", ")

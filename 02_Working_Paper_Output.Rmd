@@ -56,8 +56,8 @@ formula_matrix[(nrow(formula_matrix)+1),] <- c("Y ~ X2 + Xtest,X3 ~ X2,Xtest ~ X
 
 ```{r viz}
 coords <- list(
-    x = c(Y = 1, Xtest = 0, X1 = -1, X2 = -1, X3 = -0.5),
-    y = c(Y = 0, Xtest = 0, X1 = -1, X2 = 1, X3 = 1)
+    x = c(Y = 1, Xtest = 0, X1 = -1, X2 = -1, X3 = -0.5, X4 = 1.5),
+    y = c(Y = 0, Xtest = 0, X1 = -1, X2 = 1, X3 = 1, X4 = -1)
 )
 
 additional_args <- list(
@@ -80,8 +80,8 @@ for (f in 1:nrow(formula_matrix)) {
     full_matrix_dags[[model]] <- dag
     # extract adjustment sets
     mas <- adjustmentSets(dag, exposure = "Xtest", outcome = "Y", effect = "direct")
-    mas <- ifelse(mas == "list()", "none", mas)
-    full_matrix$mas[f] <- mas
+    mas <- ifelse(mas == "list()", "none", capture.output(mas))
+    full_matrix$mas[f] <- paste(unlist(mas), collapse = ",")
 }
 ```
 
@@ -100,7 +100,10 @@ Model 6 = 18
 
 for (l in 1:length(full_matrix_dags)){
     p <- paste0("p",l)
-    assign(p, plot(full_matrix_dags[[l]]))
+    assign(p, 
+           plot(full_matrix_dags[[l]]))        
+    text(0.5,-1, paste0("MAS =",full_matrix$mas[l]))
+    text(0,1, paste0("Model ",l))
 }
 
 
@@ -115,9 +118,9 @@ Using our multiverse generator we search for DAGs that will not easily follow ou
 inputs <- list(nodes=c("a","b","c","d", "e"), timing=c(0,-1,-2,-3,-3),
               types=c("otc","test","ctr","ctr", "ctr"))
 
-causal_matrix <- build_causal_matrix(inputs)
+causal_matrix2 <- build_causal_matrix(inputs)
 
-formula_matrix <- build_formula_matrix(causal_matrix)
+formula_matrix2 <- build_formula_matrix(causal_matrix2)
 
 
 
@@ -138,23 +141,44 @@ additional_args <- list(
     coords = coords
 )
 
-full_matrix <- formula_matrix
-full_matrix_dags <- list()
+full_matrix2 <- formula_matrix2
+full_matrix_dags2 <- list()
 
 # note that dagitty uses its own type of object, this means they need to be stored separately in a list
-for (f in 1:nrow(formula_matrix)) {
+for (f in 1:nrow(formula_matrix2)) {
     print(f)
-    fvector <- strsplit(unlist(formula_matrix[f,1]), ",")[[1]]
+    fvector <- strsplit(unlist(formula_matrix2[f,1]), ",")[[1]]
     # create dag object syntax
     dag <- do.call(dagify, c(lapply(fvector, as.formula), additional_args))
-    model <- full_matrix$model[f]
-    full_matrix_dags[[model]] <- dag
+    model <- full_matrix2$model[f]
+    full_matrix_dags2[[model]] <- dag
     # extract adjustment sets
     mas <- adjustmentSets(dag, exposure = "Xtest", outcome = "Y", effect = "direct")
-    mas <- ifelse(mas == "list()", "none", mas)
-    full_matrix$mas[f] <- mas
+    mas <- ifelse(mas == "list()", "none", capture.output(mas))
+    full_matrix2$mas[f] <- paste(unlist(mas), collapse = ",")
 }
 ```
+
+### Exploration Plotting
+
+```{r explot}
+dag_plots <- list()
+
+for (l in 1:length(full_matrix_dags2)){
+    p <- paste0("p",l)
+    assign(p, 
+           plot(full_matrix_dags2[[l]]))        
+    text(0.5,-1, paste0("MAS =",full_matrix2$mas[l]))
+    text(0,1, paste0("Model ",l))
+    # this command stores the name of the plot in the list but not the plot
+    dag_plots <- c(dag_plots, p)
+}
+```
+
+
+
+
+## Specific modelling problem (delete later)
 
 ```{r testing}
 
@@ -170,9 +194,11 @@ for (f in 1:nrow(test_matrix)) {
     dag <- do.call(dagify, c(lapply(fvector, as.formula), additional_args))
     # extract adjustment sets
     mas <- adjustmentSets(dag, exposure = "Xtest", outcome = "Y", effect = "direct")
-    mas <- ifelse(mas == "list()", "none", mas)
-    test_matrix$mas[f] <- mas
+    mas <- ifelse(mas == "list()", "none", capture.output(mas))
+    test_matrix$mas[f] <- paste(unlist(mas), collapse = ",")
 }
 
 ```
+
+
 

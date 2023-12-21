@@ -70,9 +70,31 @@ full_matrix <- formula_matrix
 full_matrix[8,1] <- "Y ~ X2 + Xtest, Xtest ~ X2, X1 ~ X1" # this still doesn't work, the plotting drops the X1
 full_matrix_dags <- list()
 
+full_matrix$model <- as.numeric(full_matrix$model)
+
+# arrange models to match paper
+# hand done, will break with changes
+full_matrix <- full_matrix %>%
+    mutate(model = case_when(
+        model == 6 ~ 1,
+        model == 2 ~ 2,
+        model == 33 ~ 3,
+        model == 8 ~ 4,
+        model == 34 ~ 5,
+        model == 18 ~ 6,
+        model == 1 ~ 18,
+        model == 3 ~ 33,
+        model == 4 ~ 8,
+        model == 5 ~ 34,
+        .default = model
+    ))
+
+rownames(full_matrix) <- full_matrix$model
+full_matrix <- full_matrix[order(full_matrix$model),]
+
 # note that dagitty uses its own type of object, this means they need to be stored separately in a list
-for (f in 1:nrow(formula_matrix)) {
-    fvector <- strsplit(unlist(formula_matrix[f,1]), ",")[[1]]
+for (f in 1:nrow(full_matrix)) {
+    fvector <- strsplit(unlist(full_matrix[f,1]), ",")[[1]]
     # create dag object syntax
     dag <- do.call(dagify, c(lapply(fvector, as.formula), additional_args))
     model <- full_matrix$model[f]
@@ -83,15 +105,12 @@ for (f in 1:nrow(formula_matrix)) {
     full_matrix$mas[f] <- paste(unlist(mas), collapse = ",")
 }
 
-## X1 is at the corner, clearly not removed. Perhaps because you've set the coordinates and some of the coordinates are outside of the graph?
-test_dag <- dagify(Y ~ X2 + Xtest, Xtest ~ X2, X1 ~ X1)
-plot(graphLayout(test_dag))
 ```
 
 #### DAG Plots
 
-Model 1 = 22 (Version B = 21)
-Model 2 = 1
+Model 1 = 6 
+Model 2 = 2
 Model 3 = 33
 Model 4 = 8 
 Model 5 = 34
@@ -99,18 +118,35 @@ Model 6 = 18
 
 ```{r plots}
 
-# until build formula is updated X1 does not appear in the plot if it is not connected to anything
+dag_plots <- list()
 
 for (l in 1:length(full_matrix_dags)){
-    p <- paste0("p",l)
-    assign(p, 
-           plot(full_matrix_dags[[l]]))        
-    text(0.5,-1, paste0("MAS =",full_matrix$mas[l]))
-    text(0,1, paste0("Model ",l))
+    plot(full_matrix_dags[[l]], xlim = c(-1.1,1.1), ylim = c(-1.1,1.1))
+    text(0.5,-1, paste0("MAS = ",full_matrix$mas[l]))
+    text(0,1, paste0("Model ",full_matrix$model[l]), font = 2)
+    dag_plots <- append(dag_plots, list(recordPlot()))
 }
 
 
 ```
+
+### Saving Plots
+
+```{r svplots, warning = F}
+m = 1
+for (n in 1:6) {
+    png(file = here::here("Results", paste0("model_", m, ".png")), width = 480, height = 240)
+    replayPlot(dag_plots[[n]])
+    dev.off()
+    m = m+1
+}
+```
+
+
+
+
+
+
 ## Finding Multi MAS DAGs
 
 Using our multiverse generator we search for DAGs that will not easily follow our classification rules
@@ -165,43 +201,13 @@ for (f in 1:nrow(formula_matrix2)) {
 ### Exploration Plotting
 
 ```{r explot}
-dag_plots <- list()
+dag_plots2 <- list()
 
 for (l in 1:length(full_matrix_dags2)){
-    p <- paste0("p",l)
-    assign(p, 
-           plot(full_matrix_dags2[[l]]))        
-    text(0.5,-1, paste0("MAS =",full_matrix2$mas[l]))
-    text(0,1, paste0("Model ",l))
-    # this command stores the name of the plot in the list but not the plot
-    dag_plots <- c(dag_plots, p)
+    plot(full_matrix_dags2[[l]], xlim = c(-1.1,1.1), ylim = c(-1.1,1.1))
+    text(0.5,-1, paste0("MAS = ",full_matrix2$mas[l]))
+    text(0,1, paste0("Model ",full_matrix2$model[l]), font = 2)
+    dag_plots <- append(dag_plots2, list(recordPlot()))
 }
 ```
-
-
-
-
-## Specific modelling problem (delete later)
-
-```{r testing}
-
-
-test_matrix <- as.data.frame(t(matrix(c("Y ~ Xtest + X2 + X3, X3 ~ X2 + X1, Xtest ~ X3 + X1", 1))))
-
-colnames(test_matrix) <- c("formula", "model")
-
-for (f in 1:nrow(test_matrix)) {
-    print(f)
-    fvector <- strsplit(unlist(test_matrix[f,1]), ",")[[1]]
-    # create dag object syntax
-    dag <- do.call(dagify, c(lapply(fvector, as.formula), additional_args))
-    # extract adjustment sets
-    mas <- adjustmentSets(dag, exposure = "Xtest", outcome = "Y", effect = "direct")
-    mas <- ifelse(mas == "list()", "none", capture.output(mas))
-    test_matrix$mas[f] <- paste(unlist(mas), collapse = ",")
-}
-
-```
-
-
 

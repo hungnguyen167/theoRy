@@ -136,8 +136,8 @@ build_causal_matrix <- function(inputs, resid_corr=TRUE){
 
 
 ## Example: 
-#inputs <- list(nodes=c("a","b","c","d","e"), timing=c(-3,-3,-2,-1,0),
- #              types=c("ctr","ctr","ctr","test","otc"))
+inputs <- list(nodes=c("a","b","c","d"), timing=c(-3,-3,-2,-1,0),
+               types=c("ctr","ctr","test","otc"))
 
 
 #tic()

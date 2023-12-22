@@ -12,6 +12,8 @@ output: html_document
 source("R/build_causal_matrix.R")
 source("R/build_formula_matrix.R")
 source("R/keep_minimal.R")
+source("R/identify_compatible.R")
+
 ```
 
 ## Generate Model Multiverse
@@ -106,6 +108,16 @@ for (f in 1:nrow(full_matrix)) {
 }
 
 ```
+
+#### Identify Compatible (testing)
+
+
+```{r identify_compatible}
+comp_matrix <- identify_compatible(full_matrix, ref_mod=1)
+full_matrix_cmp <- left_join(full_matrix, comp_matrix, by="model")
+
+```
+
 
 #### DAG Plots
 

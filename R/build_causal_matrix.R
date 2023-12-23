@@ -6,15 +6,22 @@ build_causal_matrix <- function(inputs, resid_corr=TRUE){
     if (!is.list(inputs) || !all(c("nodes", "timing", "types") %in% names(inputs))) {
         stop("Input must be a list containing 'nodes', 'timing', and 'types'.")
     }
-    
+
     # Check if 'nodes', 'timing', and 'types' have the same length
     if (length(inputs$nodes) != length(inputs$timing) || length(inputs$nodes) != length(inputs$types)) {
         stop("'nodes', 'timing', and 'types' must be of the same length.")
     }
+    
+    # Check that only one outcome and one test variable are specified
+    if (length(inputs$nodes[inputs$types == "test"]) > 1) {
+        stop("Please specify only one variable as 'test'")
+    }
+    
     # Check if 'timing' has more than 4 unique values
     if (length(unique(inputs$timing)) > 4) {
         stop("Function not executed: The total number of unique 'timing' values 
-             is highly recommended to be less than 4.")
+             must be less than 4.")
+        # In the future we should program this to be number of total variables minus 1
     }
     # Start of function
 
@@ -30,8 +37,28 @@ build_causal_matrix <- function(inputs, resid_corr=TRUE){
                 type == "ctr" ~ paste0("X", row_number())
             )
         ) %>%
-        ungroup() %>%
-        select(-var_name) 
+        ungroup()
+    
+    # Create report for user
+    message("Variables used")
+    message(paste0("Y. Label = ", node_timing$var_name[node_timing$node_name == "Y"], 
+                 ". Timing = ", node_timing$timing[node_timing$node_name == "Y"]))
+    message(paste0("Xtest. Label = ", node_timing$var_name[node_timing$node_name == "Xtest"], 
+                 ". Timing = ", node_timing$timing[node_timing$node_name == "Xtest"]))
+    message(paste0("X1. Label = ", node_timing$var_name[node_timing$node_name == "X1"], 
+                 ". Timing = ", node_timing$timing[node_timing$node_name == "X1"]))
+    if (length(node_timing$var_name) > 3) message(paste0("X2. Label = ", node_timing$var_name[node_timing$node_name == "X2"], 
+                     ". Timing = ", node_timing$timing[node_timing$node_name == "X2"]))
+
+    if (length(node_timing$var_name) > 4) message(paste0("X3. Label = ", node_timing$var_name[node_timing$node_name == "X3"], 
+                     ". Timing = ", node_timing$timing[node_timing$node_name == "X3"]))
+    
+    if (length(node_timing$var_name) > 5) message(paste0("X4. Label = ", node_timing$var_name[node_timing$node_name == "X4"], 
+                     ". Timing = ", node_timing$timing[node_timing$node_name == "X4"]))
+
+    # create node matrix without var_labels
+    node_timing <- node_timing %>%
+        select(-var_name)
     x_test_time <- node_timing[which(node_timing$type=="test"),"timing"]
     y_time <- node_timing[which(node_timing$type=="otc"),"timing"]
     if (x_test_time >= y_time){
@@ -130,14 +157,16 @@ build_causal_matrix <- function(inputs, resid_corr=TRUE){
   
     return(causal_matrix)
 
+    
+    
 }
 
 
 
 
 ## Example: 
-inputs <- list(nodes=c("a","b","c","d"), timing=c(-3,-3,-2,-1,0),
-               types=c("ctr","ctr","test","otc"))
+#inputs <- list(nodes=c("a","b","c","d"), timing=c(-3,-3,-2,-1,0),
+#               types=c("ctr","ctr","test","otc"))
 
 
 #tic()

@@ -25,8 +25,9 @@ create_formula <- function(nested_dt) {
     formula <- paste(formulas, collapse = ", ")
     return(formula)
 }
+
 build_formula_matrix <- function(causal_matrix) {
-    setDT(causal_matrix) # Convert to data.table if not alread
+    setDT(causal_matrix) # Convert to data.table if not already
     
     # Use lapply to apply the function to each group
     formula_list <- lapply(split(causal_matrix, by = "model"), create_formula)
@@ -37,6 +38,25 @@ build_formula_matrix <- function(causal_matrix) {
     
     
     # Assign model numbers (if needed)
+    # note that dagitty uses its own type of object, 
+    # this means they need to be stored separately in a list
+    additional_args <- list(
+        exposure="Xtest",
+        outcome="Y"
+    )
+    
+    for (f in 1:nrow(formula_matrix)) {
+        fvector <- strsplit(unlist(formula_matrix[f,1]), ",")[[1]]
+        # create dag object syntax
+        dag <- do.call(dagify, c(lapply(fvector, as.formula), additional_args))
+        # extract adjustment sets
+        mas <- adjustmentSets(dag, exposure = "Xtest", outcome = "Y", effect = "direct")
+        mas <- ifelse(mas == "list()", "none", capture.output(mas))
+        formula_matrix$mas[f] <- paste(unlist(mas), collapse = ",")
+    }
+    
+    formula_matrix$model <- as.numeric(formula_matrix$model)
+    
     return(formula_matrix)
 }
 

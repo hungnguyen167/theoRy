@@ -13,6 +13,7 @@ source("R/build_causal_matrix.R")
 source("R/build_formula_matrix.R")
 source("R/keep_minimal.R")
 source("R/identify_compatible.R")
+source("R/build_dag_matrix.R")
 
 ```
 
@@ -36,6 +37,7 @@ Generate formula matrix
 ```{r formula_matrix}
 
 formula_matrix <- build_formula_matrix(causal_matrix)
+dag_matrix <- build_dag_matrix(formula_matrix)
 ```
 
 ### Add extra plots
@@ -57,7 +59,7 @@ formula_matrix[(nrow(formula_matrix)+1),] <- c("Y ~ X2 + Xtest,X3 ~ X2,Xtest ~ X
 #### Generate DAG formulas
 
 ```{r viz}
-coords <- list(
+cords <- list(
     x = c(Y = 1, Xtest = 0, X1 = -1, X2 = -1, X3 = -0.5, X4 = 1.5),
     y = c(Y = 0, Xtest = 0, X1 = -1, X2 = 1, X3 = 1, X4 = -1)
 )
@@ -65,7 +67,7 @@ coords <- list(
 additional_args <- list(
     exposure="Xtest",
     outcome="Y",
-    coords = coords
+    coords = cords
 )
 
 full_matrix <- formula_matrix
@@ -212,14 +214,17 @@ for (f in 1:nrow(formula_matrix2)) {
 
 ### Exploration Plotting
 
+* Here is a BUG
+I identified X1 as taking place at -2 and X2/X3 at -3, but the generation of 
+
 ```{r explot}
 dag_plots2 <- list()
 
 for (l in 1:length(full_matrix_dags2)){
-    plot(full_matrix_dags2[[l]], xlim = c(-1.1,1.1), ylim = c(-1.1,1.1))
+    plot(full_matrix_dags2[[l]], xlim = c(-2.1,1.1), ylim = c(-1.1,1.1))
     text(0.5,-1, paste0("MAS = ",full_matrix2$mas[l]))
     text(0,1, paste0("Model ",full_matrix2$model[l]), font = 2)
-    dag_plots <- append(dag_plots2, list(recordPlot()))
+    dag_plots2 <- append(dag_plots2, list(recordPlot()))
 }
 ```
 

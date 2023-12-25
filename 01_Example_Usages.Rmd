@@ -1,17 +1,26 @@
 ---
-title: "R Notebook"
+title: "01 theoRy User Instructions"
 output: html_notebook
 ---
 
+Nate Breznau <br>
+Hung H.V. Nguyen
+
 ## Setup
 
-```{r setup}
-source("R/build_causal_matrix.R")
-source("R/build_formula_matrix.R")
-source("R/keep_minimal.R")
+Our app is built so far as a set of functions. The file 00_Run_Theory.R loads all of these functions into the environment.
+
+```{r setup, warning = F}
+
+source(here::here("00_Run_Theory.R"))
+
 ```
 
-## Build causal matrix
+## Build Causal Matrix
+
+A theoRy causal matrix includes all possible causal configurations of the variables supplied as input. Currently this is limited to 5 total variables. The user places the variables ordinally in time. Then the algorithm creates every possible causal model, such that every path is either causal or not causal, and simultaneously occuring variables are either not related or have a residual correlation. 
+
+### *The inputs object*:
 
 The object 'inputs' takes the form of a named list. 
 
@@ -26,6 +35,15 @@ In the 'inputs list:
     b. "test" is the test variable in question, treatment for example.
     c. "otc" is the outcome, dependent variable.
 
+### *The Causal Matrix output*
+
+The output of the causal matrix has one row per node dyad, and is grouped by model. 
+
+`{r ![causal_matrix example](here::here("Media", "Causal_Matrix_Example.png"))}`
+
+The function also outputs a summary of all variables, their labels and their timing for the user.
+
+### Example Code
 
 ```{r causal_matrix}
 
@@ -36,13 +54,36 @@ causal_matrix <- build_causal_matrix(inputs)
 ```
 
 
-## Build formula_matrix
+## Build Formula Matrix
+
+The formula matrix contains lavaan style formulas to express the causal models. This matrix has one model per row.
+
+lavaan style formulas take on the style of the following example, which is the first model (Model 1) in the example formula_matrix:
+
+Y ~ X1 + X2 + X3 + Xtest + Y 
+X3 ~ X1 + X2 + X3 
+Xtest ~ X1 + X2 + X3 + Xtest 
+X1 ~ X1
+X2 ~ X2
+X2 ~~ X1
+
+Where each variable that has a causal path coming into it has its own equation signified by ~. For more information see [lavaan](https://cran.r-project.org/web/packages/lavaan/lavaan.pdf) documentation.
+
+[To develop further] The lavaan formulas in our usage contain redundancies, for example the DVs are present on the right-hand sides of the equation.
+
+The formula matrix also identifies any minimal adjustment sets (MAS). Add citation here.
+
 ```{r formula_matrix}
 
 formula_matrix <- build_formula_matrix(causal_matrix)
+
 ```
 
-## Remove Xs which do not belong to the MAS from each model and remove duplicated models deriving from this action
+## Keep minimal
+
+This function may be retired. 
+
+Remove Xs which do not belong to the MAS from each model and remove duplicated models deriving from this action
 
 ```{r keep_minimal}
 reduced_causal_matrix <- keep_minimal(formula_matrix, causal_matrix)
@@ -50,27 +91,68 @@ reduced_formula_matrix <- build_formula_matrix(reduced_causal_matrix)
 
 ```
 
-## Visualizations
+## Build Dag Matrix
 
-```{r viz}
-additional_args <- list(
-    exposure="Xtest",
-    outcome="Y"
-)
-formulas_vector <- strsplit(unlist(reduced_formula_matrix[67,1]), ",")[[1]]
-dag <- do.call(dagify, c(lapply(formulas_vector, as.formula), additional_args))
+This function converts lavaan style formulas into daggity objects. The daggity package has its own format for storing objects. This format may include information about where to plot the nodes. For example Model 1:
 
+dag {
+X1 [pos="-1.250,1.000"]
+X2 [pos="-1.250,-0.500"]
+X3 [pos="-0.500,-1.000"]
+Xtest [exposure,pos="0.250,0.000"]
+Y [outcome,pos="1.000,0.000"]
+X1 -> X1
+X1 -> X3
+X1 -> Xtest
+X1 -> Y
+X1 <-> X2
+X2 -> X2
+X2 -> X3
+X2 -> Xtest
+X2 -> Y
+X3 -> X3
+X3 -> Xtest
+X3 -> Y
+Xtest -> Xtest
+Xtest -> Y
+Y -> Y
+}
 
-formulas_vector <- strsplit(unlist(reduced_formula_matrix[12,1]), ",")[[1]]
-dag2 <- do.call(dagify, c(lapply(formulas_vector, as.formula), additional_args))
+These objects are ideal for dagitty functions and for plotting.
+
+This function also stores the minimum X value for later plotting purposes in Results/minX.RDS.
+
+```{r build_dag_matrix}
+
+dag_matrix <- build_dag_matrix(formula_matrix)
 
 ```
 
-```{r graph_1}
-plot(graphLayout(dag))
+## Plot DAG Matrix
+
+This function takes the dagitty objects in dag_matrix and plots them with a title and MAS. All plots are stored in a list using recordPlot(). This allows the user to quickly recall any plot.
+
+The *save_plots* option when switched to TRUE, will save every plot as a .png file in the Results folder.
+
+The *title* option is TRUE by default and displays the "Model #" where # refers to the row in the dag_matrix
+
+The *title_pos* option should be a number from 0 (furthest left in the graph) to the highest value, which depends on how wide the plot is (usually not higher than 2) with a default of 0.5
+
+```{r plot_dag_matrix}
+dag_plots <- plot_dag_matrix(dag_matrix, save_plots = F)
 ```
 
-```{r graph_2}
-plot(graphLayout(dag2))
+
+## Colophon
+
+```{r cphon}
+sessionInfo()
 ```
 
+## References
+
+```{r cite}
+packages %>%
+  map(citation) %>%
+  print(style = "text")
+```

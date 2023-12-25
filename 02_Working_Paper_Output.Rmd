@@ -9,11 +9,7 @@ output: html_document
 
 ```{r setup}
 
-source("R/build_causal_matrix.R")
-source("R/build_formula_matrix.R")
-source("R/keep_minimal.R")
-source("R/identify_compatible.R")
-source("R/build_dag_matrix.R")
+source("00_Run_Theory.R")
 
 ```
 

@@ -88,6 +88,15 @@ build_dag_matrix <- function(formula_matrix) {
                  y = c(0, 0, -1, 1,py)
     )
     
+    # for plotting later we need the minimal X position value
+    minX <- as.data.frame(min(c(node_timing$plot_time[1],
+                  node_timing$plot_time[2],
+                  node_timing$plot_time[3],
+                  node_timing$plot_time[4],
+                  node_timing$plot_time[5], na.rm = T)))
+    colnames(minX) <- c("minX")
+    write_rds(minX, here::here("Results", "minX.RDS"))
+    
     c <- c(paste(node_timing$node_name[1]),
            paste(node_timing$node_name[2]),
            paste(node_timing$node_name[3]),
@@ -111,9 +120,10 @@ build_dag_matrix <- function(formula_matrix) {
         model <- formula_matrix$model[f]
         dag_matrix[[model]] <- dag
     }
-    
+   
+ 
 
     return(dag_matrix)
 }
         
-
+message("function build_dag_matrix loaded")

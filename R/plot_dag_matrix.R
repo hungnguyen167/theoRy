@@ -1,42 +1,25 @@
 library(tidyverse)
 
-
-build_nodes <- function(inputs){ 
-    # Generate plot coordinates from variable input
-    node_timing <- tibble(var_name=inputs$nodes, timing=inputs$timing,
-                          type=inputs$types) %>%
-        arrange(timing) %>%
-        group_by(type) %>%
-        mutate(
-            node_name = case_when(
-                type == "otc" ~ "Y",
-                type == "test" ~ "Xtest",
-                type == "ctr" ~ paste0("X", row_number())
-            )
-        ) %>%
-        ungroup()
-
-    node_timing <- arrange(node_timing, -timing)
-return(node_timing)
-}
-
-build_dags <- function(formula_matrix, 
-                             save_plots = FALSE) {
+plot_dag_matrix <- function(dag_matrix,
+                            save_plots = FALSE,
+                            title = TRUE,
+                            title_pos = 0.5) {
     
     dag_plots <- list()
     
-# need a way to find the minimum X value in dag_matrix
+    # find lowest X position in dagitty object
+    minX <- as.numeric(readRDS(here::here("Results", "minX.RDS"))[1,1])-0.1
     
     for (l in 1:length(dag_matrix)){
-        plot(dag_matrix[[l]], xlim = c(-1.1,1.1), ylim = c(-1.1,1.1))
+        plot(dag_matrix[[l]], xlim = c(minX,1.1), ylim = c(-1.1,1.5))
         text(0.5,-1, paste0("MAS = ",formula_matrix$mas[l]))
-        text(0,1, paste0("Model ",formula_matrix$model[l]), font = 2)
+        if(title) text(minX+title_pos,1.4, paste0("Model ",formula_matrix$model[l]), font = 2)
         dag_plots <- append(dag_plots, list(recordPlot()))
     }
     
     if(save_plots) {
         m = 1
-        for (n in 1:6) {
+        for (n in length(dag_matrix)) {
             png(file = here::here("Results", paste0("model_", m, ".png")), width = 480, height = 240)
             replayPlot(dag_plots[[n]])
             dev.off()
@@ -46,4 +29,4 @@ build_dags <- function(formula_matrix,
     return(dag_plots)
 }
         
-
+message("function plot_dag_matrix loaded")

@@ -60,6 +60,7 @@ build_formula_matrix <- function(causal_matrix) {
     return(formula_matrix)
 }
 
+message("function build_formula_matrix loaded")
 
 #tic()
 #formula_matrix <-build_formula_matrix(causal_matrix)

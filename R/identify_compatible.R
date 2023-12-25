@@ -69,7 +69,7 @@ identify_compatible <- function(formula_matrix, effect="direct",
     return(comp_matrix)
 }
 
-
+message("function identify_compatible loaded")
 #comp_matrix <- identify_compatible(full_matrix, ref_mod = 1)
 
 

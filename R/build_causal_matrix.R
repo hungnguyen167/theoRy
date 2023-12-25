@@ -40,7 +40,7 @@ build_causal_matrix <- function(inputs, resid_corr=TRUE){
         ungroup()
     
     # Create report for user
-    message("Variables used")
+    message("VARIABLE SUMMARY")
     message(paste0("Y. Label = ", node_timing$var_name[node_timing$node_name == "Y"], 
                  ". Timing = ", node_timing$timing[node_timing$node_name == "Y"]))
     message(paste0("Xtest. Label = ", node_timing$var_name[node_timing$node_name == "Xtest"], 
@@ -161,7 +161,7 @@ build_causal_matrix <- function(inputs, resid_corr=TRUE){
     
 }
 
-
+message("function build_causal_matrix loaded")
 
 
 ## Example: 

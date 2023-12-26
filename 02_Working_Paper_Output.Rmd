@@ -33,7 +33,7 @@ Generate formula matrix
 ```{r formula_matrix}
 
 formula_matrix <- build_formula_matrix(causal_matrix)
-dag_matrix <- build_dag_matrix(formula_matrix)
+
 ```
 
 ### Add extra plots
@@ -42,39 +42,31 @@ dag_matrix <- build_dag_matrix(formula_matrix)
 formula_matrix <- as.data.frame(formula_matrix)
 
 # Model 3
-formula_matrix[(nrow(formula_matrix)+1),] <- c("X4 ~ Y + Xtest,Y ~ X2 + Xtest,Xtest ~ X2 + X1", as.numeric(nrow(formula_matrix)+1))
+formula_matrix[(nrow(formula_matrix)+1),] <- c("X4 ~ Y + Xtest,Y ~ X2 + Xtest,Xtest ~ X2 + X1", as.numeric(nrow(formula_matrix)+1), NA) 
 
 # Model 5
-formula_matrix[(nrow(formula_matrix)+1),] <- c("Y ~ X2 + Xtest,X3 ~ X2,Xtest ~ X3 + X2 + X1", as.numeric(nrow(formula_matrix)+1))
+formula_matrix[(nrow(formula_matrix)+1),] <- c("Y ~ X2 + Xtest,X3 ~ X2,Xtest ~ X3 + X2 + X1", as.numeric(nrow(formula_matrix)+1), NA)
+
+# added MAS as NA for now
+# We should have an option to 'reformulate' formula_matrix, in case the user adds their own formulas. The would serve the purpose of generating mas.
+
+formula_matrix$model <- as.numeric(formula_matrix$model)
 
 ```
 
 
 ### Derive plots
 
-#### Generate DAG formulas
+#### Update Model Numbers
 
-```{r viz}
-cords <- list(
-    x = c(Y = 1, Xtest = 0, X1 = -1, X2 = -1, X3 = -0.5, X4 = 1.5),
-    y = c(Y = 0, Xtest = 0, X1 = -1, X2 = 1, X3 = 1, X4 = -1)
-)
+To match paper
 
-additional_args <- list(
-    exposure="Xtest",
-    outcome="Y",
-    coords = cords
-)
+```{r update_formulas}
 
-full_matrix <- formula_matrix
-full_matrix[8,1] <- "Y ~ X2 + Xtest, Xtest ~ X2, X1 ~ X1" # this still doesn't work, the plotting drops the X1
-full_matrix_dags <- list()
-
-full_matrix$model <- as.numeric(full_matrix$model)
 
 # arrange models to match paper
 # hand done, will break with changes
-full_matrix <- full_matrix %>%
+formula_matrix <- formula_matrix %>%
     mutate(model = case_when(
         model == 6 ~ 1,
         model == 2 ~ 2,
@@ -89,73 +81,24 @@ full_matrix <- full_matrix %>%
         .default = model
     ))
 
-rownames(full_matrix) <- full_matrix$model
-full_matrix <- full_matrix[order(full_matrix$model),]
+```
 
-# note that dagitty uses its own type of object, this means they need to be stored separately in a list
-for (f in 1:nrow(full_matrix)) {
-    fvector <- strsplit(unlist(full_matrix[f,1]), ",")[[1]]
-    # create dag object syntax
-    dag <- do.call(dagify, c(lapply(fvector, as.formula), additional_args))
-    model <- full_matrix$model[f]
-    full_matrix_dags[[model]] <- dag
-    # extract adjustment sets
-    mas <- adjustmentSets(dag, exposure = "Xtest", outcome = "Y", effect = "direct")
-    mas <- ifelse(mas == "list()", "none", capture.output(mas))
-    full_matrix$mas[f] <- paste(unlist(mas), collapse = ",")
-}
+#### Generate DAG formulas
+
+```{r gen_dags}
+dag_matrix <- build_dag_matrix(formula_matrix)
 
 ```
 
-#### Identify Compatible (testing)
+#### Generate Plots
 
+Only need to save models 1-6 for the paper
 
-```{r identify_compatible}
-comp_matrix <- identify_compatible(full_matrix, ref_mod=1)
-full_matrix_cmp <- left_join(full_matrix, comp_matrix, by="model")
-
+```{r gen_plots, warning = F}
+dag_plots <- plot_dag_matrix(dag_matrix, save_plots = TRUE, choose_save_plots = c(1:6))
 ```
-
 
 #### DAG Plots
-
-Model 1 = 6 
-Model 2 = 2
-Model 3 = 33
-Model 4 = 8 
-Model 5 = 34
-Model 6 = 18
-
-```{r plots}
-
-dag_plots <- list()
-
-for (l in 1:length(full_matrix_dags)){
-    plot(full_matrix_dags[[l]], xlim = c(-1.1,1.1), ylim = c(-1.1,1.1))
-    text(0.5,-1, paste0("MAS = ",full_matrix$mas[l]))
-    text(0,1, paste0("Model ",full_matrix$model[l]), font = 2)
-    dag_plots <- append(dag_plots, list(recordPlot()))
-}
-
-
-```
-
-### Saving Plots
-
-```{r svplots, warning = F}
-m = 1
-for (n in 1:6) {
-    png(file = here::here("Results", paste0("model_", m, ".png")), width = 480, height = 240)
-    replayPlot(dag_plots[[n]])
-    dev.off()
-    m = m+1
-}
-```
-
-
-
-
-
 
 ## Finding Multi MAS DAGs
 
@@ -171,56 +114,29 @@ causal_matrix2 <- build_causal_matrix(inputs)
 
 formula_matrix2 <- build_formula_matrix(causal_matrix2)
 
-
-
-## Add MAS
+dag_matrix2 <- build_dag_matrix(formula_matrix2)
 ```
 
 
-### Find MAS
-```{r dagmassearch}
-coords <- list(
-    x = c(Y = 1, Xtest = 0, X1 = -1, X2 = -2, X3 = -2),
-    y = c(Y = 0, Xtest = 0, X1 = 0.5, X2 = 1, X3 = -1)
-)
+```{r searching_dags_1}
+# use option to indicate different named formula matrix
+dag_plots_X1 <- plot_dag_matrix(dag_matrix2, save_plots = T, formula_matrix_name = formula_matrix2, choose_plots_mas = "{ X1 }")
 
-additional_args <- list(
-    exposure="Xtest",
-    outcome="Y",
-    coords = coords
-)
-
-full_matrix2 <- formula_matrix2
-full_matrix_dags2 <- list()
-
-# note that dagitty uses its own type of object, this means they need to be stored separately in a list
-for (f in 1:nrow(formula_matrix2)) {
-    print(f)
-    fvector <- strsplit(unlist(formula_matrix2[f,1]), ",")[[1]]
-    # create dag object syntax
-    dag <- do.call(dagify, c(lapply(fvector, as.formula), additional_args))
-    model <- full_matrix2$model[f]
-    full_matrix_dags2[[model]] <- dag
-    # extract adjustment sets
-    mas <- adjustmentSets(dag, exposure = "Xtest", outcome = "Y", effect = "direct")
-    mas <- ifelse(mas == "list()", "none", capture.output(mas))
-    full_matrix2$mas[f] <- paste(unlist(mas), collapse = ",")
-}
 ```
 
-### Exploration Plotting
 
-* Here is a BUG
-I identified X1 as taking place at -2 and X2/X3 at -3, but the generation of 
+### Compare Models with Different MAS
 
-```{r explot}
-dag_plots2 <- list()
+169, 185 & 221 for example have completely different simultaneous MASs.
 
-for (l in 1:length(full_matrix_dags2)){
-    plot(full_matrix_dags2[[l]], xlim = c(-2.1,1.1), ylim = c(-1.1,1.1))
-    text(0.5,-1, paste0("MAS = ",full_matrix2$mas[l]))
-    text(0,1, paste0("Model ",full_matrix2$model[l]), font = 2)
-    dag_plots2 <- append(dag_plots2, list(recordPlot()))
-}
+We see from these plots that they have different ways of closing the backdoor. If having the same MAS is the criteria for being compatible, would these three models fit compatibility?
+
+```{r mascomp}
+view(formula_matrix2)
+
+dag_plots2 <- plot_dag_matrix(dag_matrix2, save_plots = TRUE, choose_plots = c(169,185,221), formula_matrix_name = formula_matrix2)
+
 ```
+
+
 

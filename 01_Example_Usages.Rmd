@@ -138,8 +138,36 @@ The *title* option is TRUE by default and displays the "Model #" where # refers 
 
 The *title_pos* option should be a number from 0 (furthest left in the graph) to the highest value, which depends on how wide the plot is (usually not higher than 2) with a default of 0.5
 
+## With defaults
+
+These optional commands are available:
+
+1. *save_plots*. default = FALSE. When TRUE, a .png of each plot will be saved in the "Results" folder with the matching model number.
+
+2. *choose_plots*. default = NA. When a vector is specified, only those models given in the vector will be plotted. Model numbers correspond to the numbers in the formula_matrix.
+
+3. *choose_save_plots*. default = NA. When a vector is specified and save_plots = TRUE, only those models given in the vector will be saved as .png. Model numbers correspond to the numbers in the formula_matrix.
+
+4. *choose_plots_mas*. default = NA. Accepts only one MAS set. This must include quotes and spaces and have the set variables. Must be identical to how MAS appears in the field formula_matrix$mas. For example "{ X1 }".
+
+5. *formula_matrix_name*. default = formula_matrix. Change to specify a differently named formula_matrix object. 
+
+6. *title*. default = TRUE. This option specifies if the plots should have a title or not. Titles are in the form of 'Model X', where X is the model number in formula_matrix.
+
+7. *title_pos*. default = 0.5. This is an option that specifies where the title appears above the plot. Zero is the furthest left, and number increasing from zero move the title to the right. 
+
+### Plotting with all defaults specified.
+
 ```{r plot_dag_matrix}
 dag_plots <- plot_dag_matrix(dag_matrix, save_plots = F)
+```
+
+### Plotting with MAS
+
+Here only plots with the MAS { X1 } will be shown.
+
+```{r choose_X1}
+dag_plots <- plot_dag_matrix(dag_matrix,  choose_plots_mas = "{ X1 }")
 ```
 
 

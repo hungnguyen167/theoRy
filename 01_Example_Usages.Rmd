@@ -122,6 +122,16 @@ These objects are ideal for dagitty functions and for plotting.
 
 This function also stores the minimum X value for later plotting purposes in Results/minX.RDS.
 
+*add_nodes* an option to add nodes in case the user added formulas, this is helpful for expert usage only, like in our working paper
+
+*new_node_vector1* add one vector for each added node
+
+defaults (should be changed obviously, just examples and helpful for our working paper)
+
+new_node_vector1 = c(NA, -0.5, "ctr", "X3")
+new_node_vector2 = c(NA, 0.5, "ctr", "X4")
+new_node_vector3 = c(NA, -1.5, "ctr", "X5")
+
 ```{r build_dag_matrix}
 
 dag_matrix <- build_dag_matrix(formula_matrix)
@@ -155,6 +165,8 @@ These optional commands are available:
 6. *title*. default = TRUE. This option specifies if the plots should have a title or not. Titles are in the form of 'Model X', where X is the model number in formula_matrix.
 
 7. *title_pos*. default = 0.5. This is an option that specifies where the title appears above the plot. Zero is the furthest left, and number increasing from zero move the title to the right. 
+
+8. *plot_titles*. default formula_matrix_name$model, but can be replaced with a vector of model numbers or names.
 
 ### Plotting with all defaults specified.
 

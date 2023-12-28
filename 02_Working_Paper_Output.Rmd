@@ -28,29 +28,53 @@ causal_matrix <- build_causal_matrix(inputs)
 
 ### Derive formulas
 
-Generate formula matrix
+
+#### Add models to causal matrix
+
+```{r xmodels}
+
+causal_matrix <- as.data.frame(causal_matrix)
+
+causal_matrix$model <- as.numeric(causal_matrix$model)
+
+m4 <- max(causal_matrix$model, na.rm = T)+1
+# Model 4
+causal_matrix[nrow(causal_matrix)+1,] <- c("Y", "Y", "~", m4, 0, "otc", 0, "otc")
+causal_matrix[nrow(causal_matrix)+1,] <- c("X4", "X4", "~", m4, 0.5, "ctr", 0.5, "ctr")
+causal_matrix[nrow(causal_matrix)+1,] <- c("Xtest", "Xtest", "~", m4, -1, "test", -1, "test")
+causal_matrix[nrow(causal_matrix)+1,] <- c("X2", "X2", "~", m4, -2, "ctr", -2, "ctr")
+causal_matrix[nrow(causal_matrix)+1,] <- c("X1", "X1", "~", m4, -2, "ctr", -2, "ctr")
+causal_matrix[nrow(causal_matrix)+1,] <- c("Y", "X4", "~", m4, 0, "otc", 0.5, "ctr")
+causal_matrix[nrow(causal_matrix)+1,] <- c("Xtest", "X4", "~", m4, -1, "test", 0.5, "ctr")
+causal_matrix[nrow(causal_matrix)+1,] <- c("Xtest", "Y", "~", m4, -1, "test", 0, "otc")
+causal_matrix[nrow(causal_matrix)+1,] <- c("X2", "Y", "~", m4, -2, "ctr", 0, "otc")
+causal_matrix[nrow(causal_matrix)+1,] <- c("X2", "Xtest", "~", m4, -2, "ctr", -1, "test")
+causal_matrix[nrow(causal_matrix)+1,] <- c("X1", "Xtest", "~", m4, -2, "ctr", -1, "test")
+causal_matrix[nrow(causal_matrix)+1,] <- c("X1", "X2", "", m4, -2, "ctr", -2, "ctr")
+
+causal_matrix$model <- as.numeric(causal_matrix$model)
+
+m5 <- max(causal_matrix$model, na.rm = T)+1
+# Model 6
+causal_matrix[nrow(causal_matrix)+1,] <- c("Y", "Y", "~", m5, 0, "otc", 0, "otc")
+causal_matrix[nrow(causal_matrix)+1,] <- c("X3", "X3", "~", m5, -1.5, "ctr", -1.5, "ctr")
+causal_matrix[nrow(causal_matrix)+1,] <- c("Xtest", "Xtest", "~", m5, -1, "test", -1, "test")
+causal_matrix[nrow(causal_matrix)+1,] <- c("X2", "X2", "~", m5, -2, "ctr", -2, "ctr")
+causal_matrix[nrow(causal_matrix)+1,] <- c("X1", "X1", "~", m5, -2, "ctr", -2, "ctr")
+causal_matrix[nrow(causal_matrix)+1,] <- c("X2", "X3", "~", m5, -2, "ctr", -1.5, "otc")
+causal_matrix[nrow(causal_matrix)+1,] <- c("Xtest", "Y", "~", m5, -1, "test", 0, "otc")
+causal_matrix[nrow(causal_matrix)+1,] <- c("X2", "Y", "~", m5, -2, "test", 0, "otc")
+causal_matrix[nrow(causal_matrix)+1,] <- c("X2", "Xtest", "~", m5, -2, "ctr", -1, "test")
+causal_matrix[nrow(causal_matrix)+1,] <- c("X1", "Xtest", "~", m5, -2, "ctr", -1, "test")
+causal_matrix[nrow(causal_matrix)+1,] <- c("X3", "Xtest", "~", m5, -1.5, "test", 0, "ctr")
+
+```
+
+#### Generate formula matrix
 
 ```{r formula_matrix}
 
 formula_matrix <- build_formula_matrix(causal_matrix)
-
-```
-
-### Add extra plots
-
-```{r xmodels}
-formula_matrix <- as.data.frame(formula_matrix)
-
-# Model 3
-formula_matrix[(nrow(formula_matrix)+1),] <- c("X4 ~ Y + Xtest,Y ~ X2 + Xtest,Xtest ~ X2 + X1", as.numeric(nrow(formula_matrix)+1), NA) 
-
-# Model 5
-formula_matrix[(nrow(formula_matrix)+1),] <- c("Y ~ X2 + Xtest,X3 ~ X2,Xtest ~ X3 + X2 + X1", as.numeric(nrow(formula_matrix)+1), NA)
-
-# added MAS as NA for now
-# We should have an option to 'reformulate' formula_matrix, in case the user adds their own formulas. The would serve the purpose of generating mas.
-
-formula_matrix$model <- as.numeric(formula_matrix$model)
 
 ```
 
@@ -59,34 +83,13 @@ formula_matrix$model <- as.numeric(formula_matrix$model)
 
 #### Update Model Numbers
 
-To match paper
 
-```{r update_formulas}
-
-
-# arrange models to match paper
-# hand done, will break with changes
-formula_matrix <- formula_matrix %>%
-    mutate(model = case_when(
-        model == 6 ~ 1,
-        model == 2 ~ 2,
-        model == 33 ~ 3,
-        model == 8 ~ 4,
-        model == 34 ~ 5,
-        model == 18 ~ 6,
-        model == 1 ~ 18,
-        model == 3 ~ 33,
-        model == 4 ~ 8,
-        model == 5 ~ 34,
-        .default = model
-    ))
-
-```
 
 #### Generate DAG formulas
 
 ```{r gen_dags}
-dag_matrix <- build_dag_matrix(formula_matrix)
+
+dag_matrix <- build_dag_matrix(formula_matrix, add_nodes = 2)
 
 ```
 
@@ -95,7 +98,9 @@ dag_matrix <- build_dag_matrix(formula_matrix)
 Only need to save models 1-6 for the paper
 
 ```{r gen_plots, warning = F}
-dag_plots <- plot_dag_matrix(dag_matrix, save_plots = TRUE, choose_save_plots = c(1:6))
+dag_plots <- plot_dag_matrix(dag_matrix, save_plots = TRUE, choose_plots = c(2,6,8,18,33,34), title_labels = c(3,1,5,2,4,6))
+
+
 ```
 
 #### DAG Plots

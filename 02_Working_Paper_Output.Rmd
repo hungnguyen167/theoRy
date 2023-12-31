@@ -143,5 +143,72 @@ dag_plots2 <- plot_dag_matrix(dag_matrix2, save_plots = TRUE, choose_plots = c(1
 
 ```
 
+### Set Logic Comparison
 
+Starting with causal matrix
+1. Identify each component (node / edge) and make categorical as yes/no 1/0
+2. Select reference model 
+3. Assign test_compatible and full_model_compatible
+
+#### Identify components
+
+```{r set_logic}
+causal_matrix_transf <- causal_matrix2 %>%
+    mutate(not_component = ifelse(direction == "", 1, 0),
+           direction = ifelse(direction == "", "~", direction),
+           component_link = ifelse(direction == "~~", "corr",
+                            ifelse(direction == "~", "cause", NA)),
+           component = paste(from, to, sep = ","),
+           component = ifelse(from == to, from, component),
+           component_type = ifelse(from == to, "node", "edge"))
+```
+
+
+### Transform into sets
+
+```{r set_build}
+
+for (v in causal_matrix_transf$component) {
+causal_matrix_transf[,paste0(v)] <- ifelse(causal_matrix_transf$component == v & causal_matrix_transf$not_component == 0, 1, 0)
+}
+
+causal_matrix_transf <- subset(causal_matrix_transf, select = -c(from, to, direction, timing_from, type_from, timing_to, type_to, component, not_component, component_link, component_type, component_factor))
+
+causal_matrix_transf <- causal_matrix_transf %>%
+    group_by(model) %>%
+    summarise_all(max, na.rm = T)
+
+
+```
+
+#### Add MAS
+
+Use MAS as an example here, but in the future we will use test_compatible and test_model_compatible
+
+```{r formula_mas}
+mas <- subset(formula_matrix2, select = c(model, mas))
+
+causal_matrix_transf <- causal_matrix_transf %>%
+    left_join(mas, by = "model")
+
+# make MAS = "{X2}" the outcome
+causal_matrix_transf <- causal_matrix_transf %>%
+    mutate(outcome = ifelse(mas == "{ X2 }", 1, 0)) %>%
+    select(-c(model,mas))
+```
+
+
+#### QCA
+
+Use set logic to identify the MAS outcome { X2 }
+
+Need to use a case study that has models with excluded nodes, and a confounder to see the full potential. 
+
+The next step is to use test_compare and test_model_compare as the outcome
+
+```{r qca}
+test <- truthTable(as.data.frame(causal_matrix_transf), "outcome")
+
+pof(setms = select(as.data.frame(causal_matrix_transf), -outcome), outcome = "outcome", data = as.data.frame(causal_matrix_transf))
+```
 

@@ -31,11 +31,11 @@ build_formula_matrix <- function(causal_matrix) {
     
     # Use lapply to apply the function to each group
     formula_list <- lapply(split(causal_matrix, by = "model"), create_formula)
+
     
-    # Combine results into a data.table
-    formula_matrix <- unique(data.table(formula = unlist(formula_list),model=1:length(formula_list)), 
+    # keep previous model numbers, in case of duplicates or subsets
+    formula_matrix <- unique(formula_matrix, 
                              by="formula")
-    
     
     # Assign model numbers (if needed)
     # note that dagitty uses its own type of object, 

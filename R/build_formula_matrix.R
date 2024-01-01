@@ -32,8 +32,9 @@ build_formula_matrix <- function(causal_matrix) {
     # Use lapply to apply the function to each group
     formula_list <- lapply(split(causal_matrix, by = "model"), create_formula)
 
+    formula_matrix <- data.table(formula = unlist(formula_list), model =1:as.numeric(length(formula_list)))
     
-    # keep previous model numbers, in case of duplicates or subsets
+    # this makes sure that original model numbers are kept
     formula_matrix <- unique(formula_matrix, 
                              by="formula")
     

@@ -1,6 +1,6 @@
 require(tidyverse)
 require(data.table)
-require(tictoc)
+
 
 
 create_formula <- function(nested_dt) {
@@ -25,6 +25,20 @@ create_formula <- function(nested_dt) {
     formula <- paste(formulas, collapse = ", ")
     return(formula)
 }
+add_mas <- function(row, additional_args) {
+    fvector <- strsplit(as.character(row[1]), ",")[[1]]
+    dag_args <- lapply(fvector, as.formula)
+    dag <- do.call(dagify, c(dag_args, additional_args))
+    mas <- adjustmentSets(dag, exposure = "Xtest", outcome = "Y", effect = "direct")
+    if (length(unlist(mas)) == 0) {
+        return("none")
+    } 
+    else {
+        mas_output <- capture.output(mas)
+        return(paste(mas_output, collapse = ","))
+    }
+
+}
 
 build_formula_matrix <- function(causal_matrix) {
     setDT(causal_matrix) # Convert to data.table if not already
@@ -37,31 +51,21 @@ build_formula_matrix <- function(causal_matrix) {
     # this makes sure that original model numbers are kept
     formula_matrix <- unique(formula_matrix, 
                              by="formula")
-    
-    # Assign model numbers (if needed)
-    # note that dagitty uses its own type of object, 
-    # this means they need to be stored separately in a list
+    message("Finished creating formulas. Now adding MAS.")
     additional_args <- list(
         exposure="Xtest",
         outcome="Y"
     )
+    mas <- lapply(formula_matrix$formula, add_mas, additional_args)
     
-    for (f in 1:nrow(formula_matrix)) {
-        fvector <- strsplit(unlist(formula_matrix[f,1]), ",")[[1]]
-        # create dag object syntax
-        dag <- do.call(dagify, c(lapply(fvector, as.formula), additional_args))
-        # extract adjustment sets
-        mas <- adjustmentSets(dag, exposure = "Xtest", outcome = "Y", effect = "direct")
-        mas <- ifelse(mas == "list()", "none", capture.output(mas))
-        formula_matrix$mas[f] <- paste(unlist(mas), collapse = ",")
-    }
-    
+    formula_matrix$mas <- mas
     formula_matrix$model <- as.numeric(formula_matrix$model)
     
     return(formula_matrix)
 }
 
 message("function build_formula_matrix loaded")
+
 
 #tic()
 #formula_matrix <-build_formula_matrix(causal_matrix)

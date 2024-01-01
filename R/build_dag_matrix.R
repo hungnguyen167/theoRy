@@ -17,7 +17,7 @@ build_nodes <- function(inputs){
         ungroup()
 
     node_timing <- arrange(node_timing, -timing)
-return(node_timing)
+    return(node_timing)
 }
 
 build_dag_matrix <- function(formula_matrix,

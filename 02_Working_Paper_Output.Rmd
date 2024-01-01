@@ -115,7 +115,7 @@ Using our multiverse generator we search for DAGs that will not easily follow ou
 
 #### Different Configurations
 
-We will develop an easier method, but for now we do the 'long way' of assembling all possible model combinations of the 
+We will develop an easier method, but for now we do the 'long way' of assembling all (most) possible model combinations of the edges and nodes
 
 ```{r searching_dags}
 inputs <- list(nodes=c("a","b","c","d","e","f"),
@@ -162,6 +162,8 @@ causal_matrix6 <- causal_matrix1 %>%
     mutate(direction = ifelse(is.na(direction), "~", direction))
 
 formula_matrix6 <- build_formula_matrix(causal_matrix5)
+
+
 
 ```
 

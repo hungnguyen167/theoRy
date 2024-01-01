@@ -11,6 +11,8 @@ output: html_document
 
 source("00_Run_Theory.R")
 
+library("QCA")
+
 ```
 
 ## Generate Model Multiverse
@@ -111,37 +113,66 @@ Using our multiverse generator we search for DAGs that will not easily follow ou
 
 ### Generate Models
 
+#### Different Configurations
+
+We will develop an easier method, but for now calculate different numbers of nodes in models with separate inputs and then combine them in a single causal matrix.
+
 ```{r searching_dags}
-inputs <- list(nodes=c("a","b","c","d", "e"), timing=c(0,-1,-2,-3,-3),
-              types=c("otc","test","ctr","ctr", "ctr"))
+inputs1 <- list(nodes=c("a","b","c","d","e"),
+                timing=c(0,-1,-2,-3,-3),
+                types=c("otc","test","ctr","ctr", "ctr"))
 
-causal_matrix2 <- build_causal_matrix(inputs)
+inputs2 <- list(nodes=c("a","b","c","d"),
+                timing=c(0,-1,-3,-3),
+                types=c("otc","test","ctr","ctr"))
 
+inputs3 <- list(nodes=c("a","b","c", "d"),
+                timing=c(0,-1,-3, 1),
+                types=c("otc","test","ctr", "ctr"))
+
+causal_matrix1 <- build_causal_matrix(inputs1)
+causal_matrix2 <- build_causal_matrix(inputs2)
+causal_matrix3 <- build_causal_matrix(inputs3)
+
+# by default inputs3 makes "d" = X2, change to X4
+causal_matrix3 <- causal_matrix3 %>%
+    mutate(from = gsub("X2", "X4", from),
+           to = gsub("X2", "X4", to),
+           direction = ifelse(is.na(direction),"~",direction))
+
+
+lf1 <- length(causal_matrix1$model)
+lf2 <- length(causal_matrix2$model)
+
+causal_matrix2 <- causal_matrix2 %>%
+    mutate(model = model + lf1)
+
+causal_matrix3 <- causal_matrix3 %>%
+    mutate(model = model + lf1 + lf2)
+    
+
+formula_matrix1 <- build_formula_matrix(causal_matrix1)
 formula_matrix2 <- build_formula_matrix(causal_matrix2)
+formula_matrix3 <- build_formula_matrix(causal_matrix3)
 
-dag_matrix2 <- build_dag_matrix(formula_matrix2)
-```
+formula_matrix2 <- formula_matrix2 %>%
+    mutate(model = model + lf1)
+
+formula_matrix3 <- formula_matrix3 %>%
+    mutate(model = model + lf1 + lf2)
+
+formula_matrix_f <- formula_matrix1 %>%
+    rbind(formula_matrix2) %>%
+    rbind(formula_matrix3)
+
+causal_matrix_f <- causal_matrix1 %>%
+    rbind(causal_matrix2) %>%
+    rbind(causal_matrix3)
 
 
-```{r searching_dags_1}
-# use option to indicate different named formula matrix
-dag_plots_X1 <- plot_dag_matrix(dag_matrix2, save_plots = T, formula_matrix_name = formula_matrix2, choose_plots_mas = "{ X1 }")
-
-```
-
-
-### Compare Models with Different MAS
-
-169, 185 & 221 for example have completely different simultaneous MASs.
-
-We see from these plots that they have different ways of closing the backdoor. If having the same MAS is the criteria for being compatible, would these three models fit compatibility?
-
-```{r mascomp}
-view(formula_matrix2)
-
-dag_plots2 <- plot_dag_matrix(dag_matrix2, save_plots = TRUE, choose_plots = c(169,185,221), formula_matrix_name = formula_matrix2)
 
 ```
+
 
 ### Set Logic Comparison
 
@@ -150,15 +181,17 @@ Starting with causal matrix
 2. Select reference model 
 3. Assign test_compatible and full_model_compatible
 
+
+
 #### Identify components
 
 ```{r set_logic}
-causal_matrix_transf <- causal_matrix2 %>%
+causal_matrix_transf <- causal_matrix_f %>%
     mutate(not_component = ifelse(direction == "", 1, 0),
            direction = ifelse(direction == "", "~", direction),
            component_link = ifelse(direction == "~~", "corr",
                             ifelse(direction == "~", "cause", NA)),
-           component = paste(from, to, sep = ","),
+           component = paste(from, to, sep = "_"),
            component = ifelse(from == to, from, component),
            component_type = ifelse(from == to, "node", "edge"))
 ```
@@ -172,7 +205,7 @@ for (v in causal_matrix_transf$component) {
 causal_matrix_transf[,paste0(v)] <- ifelse(causal_matrix_transf$component == v & causal_matrix_transf$not_component == 0, 1, 0)
 }
 
-causal_matrix_transf <- subset(causal_matrix_transf, select = -c(from, to, direction, timing_from, type_from, timing_to, type_to, component, not_component, component_link, component_type, component_factor))
+causal_matrix_transf <- subset(causal_matrix_transf, select = -c(from, to, direction, timing_from, type_from, timing_to, type_to, component, not_component, component_link, component_type))
 
 causal_matrix_transf <- causal_matrix_transf %>%
     group_by(model) %>%
@@ -186,14 +219,14 @@ causal_matrix_transf <- causal_matrix_transf %>%
 Use MAS as an example here, but in the future we will use test_compatible and test_model_compatible
 
 ```{r formula_mas}
-mas <- subset(formula_matrix2, select = c(model, mas))
+mas <- subset(formula_matrix_f, select = c(model, mas))
 
 causal_matrix_transf <- causal_matrix_transf %>%
     left_join(mas, by = "model")
 
-# make MAS = "{X2}" the outcome
+# make MAS = "{X1}" the outcome, this fits with the X4 models
 causal_matrix_transf <- causal_matrix_transf %>%
-    mutate(outcome = ifelse(mas == "{ X2 }", 1, 0)) %>%
+    mutate(outcome = ifelse(mas == "{ X1 }", 1, 0)) %>%
     select(-c(model,mas))
 ```
 

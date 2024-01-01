@@ -115,61 +115,53 @@ Using our multiverse generator we search for DAGs that will not easily follow ou
 
 #### Different Configurations
 
-We will develop an easier method, but for now calculate different numbers of nodes in models with separate inputs and then combine them in a single causal matrix.
+We will develop an easier method, but for now we do the 'long way' of assembling all possible model combinations of the 
 
 ```{r searching_dags}
-inputs1 <- list(nodes=c("a","b","c","d","e"),
-                timing=c(0,-1,-2,-3,-3),
-                types=c("otc","test","ctr","ctr", "ctr"))
-
-inputs2 <- list(nodes=c("a","b","c","d"),
-                timing=c(0,-1,-3,-3),
-                types=c("otc","test","ctr","ctr"))
-
-inputs3 <- list(nodes=c("a","b","c", "d"),
-                timing=c(0,-1,-3, 1),
-                types=c("otc","test","ctr", "ctr"))
-
-causal_matrix1 <- build_causal_matrix(inputs1)
-causal_matrix2 <- build_causal_matrix(inputs2)
-causal_matrix3 <- build_causal_matrix(inputs3)
-
-# by default inputs3 makes "d" = X2, change to X4
-causal_matrix3 <- causal_matrix3 %>%
-    mutate(from = gsub("X2", "X4", from),
-           to = gsub("X2", "X4", to),
-           direction = ifelse(is.na(direction),"~",direction))
+inputs <- list(nodes=c("a","b","c","d","e","f"),
+                timing=c(0,-1,-2,-3,-3, 1),
+                types=c("otc","test","ctr","ctr", "ctr","ctr"))
 
 
-lf1 <- length(causal_matrix1$model)
-lf2 <- length(causal_matrix2$model)
-
-causal_matrix2 <- causal_matrix2 %>%
-    mutate(model = model + lf1)
-
-causal_matrix3 <- causal_matrix3 %>%
-    mutate(model = model + lf1 + lf2)
-    
-
-formula_matrix1 <- build_formula_matrix(causal_matrix1)
+causal_matrix1 <- build_causal_matrix(inputs)
+# without X4
+causal_matrix2 <- causal_matrix1 %>%
+    subset(to != "X4") %>%
+    subset(from != "X4")
+# this automatically removes duplicates
 formula_matrix2 <- build_formula_matrix(causal_matrix2)
+
+# without X3
+causal_matrix3 <- causal_matrix1 %>%
+    subset(to != "X3") %>%
+    subset(from != "X3") %>%
+    mutate(direction = ifelse(is.na(direction), "~", direction)) # this deals with the NA bug for variables happening after Y
+
 formula_matrix3 <- build_formula_matrix(causal_matrix3)
 
-formula_matrix2 <- formula_matrix2 %>%
-    mutate(model = model + lf1)
+# without X2
+causal_matrix4 <- causal_matrix1 %>%
+    subset(to != "X2") %>%
+    subset(from != "X2") %>%
+    mutate(direction = ifelse(is.na(direction), "~", direction))
 
-formula_matrix3 <- formula_matrix3 %>%
-    mutate(model = model + lf1 + lf2)
+formula_matrix4 <- build_formula_matrix(causal_matrix4)
 
-formula_matrix_f <- formula_matrix1 %>%
-    rbind(formula_matrix2) %>%
-    rbind(formula_matrix3)
+# without X1
+causal_matrix5 <- causal_matrix1 %>%
+    subset(to != "X1") %>%
+    subset(from != "X1") %>%
+    mutate(direction = ifelse(is.na(direction), "~", direction))
 
-causal_matrix_f <- causal_matrix1 %>%
-    rbind(causal_matrix2) %>%
-    rbind(causal_matrix3)
+formula_matrix5 <- build_formula_matrix(causal_matrix5)
 
+# without X3 and X4
+causal_matrix6 <- causal_matrix1 %>%
+    subset(to != "X1" & to != "X2") %>%
+    subset(from != "X1" & from != "X2") %>%
+    mutate(direction = ifelse(is.na(direction), "~", direction))
 
+formula_matrix6 <- build_formula_matrix(causal_matrix5)
 
 ```
 

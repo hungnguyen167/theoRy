@@ -18,7 +18,7 @@ build_causal_matrix <- function(inputs, resid_corr=TRUE){
     }
     
     # Check if 'timing' has more than 4 unique values
-    if (length(unique(inputs$timing)) > 4) {
+    if (length(unique(inputs$timing)) > 5) {
         stop("Function not executed: The total number of unique 'timing' values 
              must be less than 4.")
         # In the future we should program this to be number of total variables minus 1

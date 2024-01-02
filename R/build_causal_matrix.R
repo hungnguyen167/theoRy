@@ -1,37 +1,44 @@
 library(tidyverse)
 library(tictoc)
 
-build_causal_matrix <- function(inputs, resid_corr=TRUE, return_node=FALSE){ 
+build_causal_matrix <- function(nodes, types, timing, base_mod=NULL,resid_corr=TRUE, return_node=FALSE){ 
     # Check if 'inputs' is a list and has required components
-    if (!is.list(inputs) || !all(c("nodes", "timing", "types") %in% names(inputs))) {
-        stop("Input must be a list containing 'nodes', 'timing', and 'types'.")
+    if (!is.character(nodes) | !is.character(types) | !is.double(timing)) {
+        stop("Wrong input format. Please check that nodes and types are character and timing is double!")
     }
 
     # Check if 'nodes', 'timing', and 'types' have the same length
-    if (length(inputs$nodes) != length(inputs$timing) || length(inputs$nodes) != length(inputs$types)) {
+    if (length(nodes) != length(timing) | length(nodes) != length(types)) {
         stop("'nodes', 'timing', and 'types' must be of the same length.")
     }
     
     # Check that only one outcome and one test variable are specified
-    if (length(inputs$nodes[inputs$types == "test"]) > 1) {
+    if (length(types[types == "test"]) > 1) {
         stop("Please specify only one variable as 'test'")
     }
-    
+    # Check if types are not test, ctr, or otc
+    if (!all(types %in% c("otc","ctr","test"))){
+        stop("Types must be one of 'otc', 'ctr', or 'test'!")
+    }
     # Check if 'timing' has more than 4 unique values
-    if (length(unique(inputs$timing)) > 5) {
+    if (length(unique(timing)) > 5) {
         stop("Function not executed: The total number of unique 'timing' values 
              must be less than 4.")
         # In the future we should program this to be number of total variables minus 1
     }
     # Start of function
     ## Turn input from lavaan format into list
-    #ls_formulas <- strsplit(inputs, "\n")[[1]]
+    if (!is.null(base_mod)){
+        ls_formulas <- strsplit(base_mod, ";")[[1]]
+        print(ls_formulas)
+    }
+    break
     
     ## Change variable names to Xn, Xtest, Y based on types
     
     
-    node_timing <- tibble(var_name=inputs$nodes, timing=inputs$timing,
-                              type=inputs$types) %>%
+    node_timing <- tibble(var_name=nodes, timing=timing,
+                              type=types) %>%
         arrange(timing) %>%
         group_by(type) %>%
         mutate(
@@ -172,11 +179,12 @@ message("function build_causal_matrix loaded")
 
 
 ## Example: 
-#inputs <- list(nodes=c("a","b","c","d"), timing=c(-3,-3,-2,-1,0),
-#               types=c("ctr","ctr","test","otc"))
-
+nodes <- c("a","b","c","d")
+timing <- c(-3,-2,-1,0)
+types <- c("ctr","ctr","test","otc")
+base_mod <- "d ~ a + c; c ~ b"
 
 #tic()
-#causal_matrix <- build_causal_matrix(inputs)
+causal_matrix <- build_causal_matrix(nodes, types, timing, base_mod)
 #toc()
 

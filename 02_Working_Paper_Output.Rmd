@@ -10,7 +10,7 @@ output: html_document
 ```{r setup}
 
 source("00_Run_Theory.R")
-
+source("R/run_theory.R")
 library("QCA")
 
 ```
@@ -26,6 +26,8 @@ inputs <- list(nodes=c("a","b","c","d"), timing=c(0,-1,-2,-2),
               types=c("otc","test","ctr","ctr"))
 
 causal_matrix <- build_causal_matrix(inputs)
+ls_complete <- run_theory(inputs)
+
 ```
 
 ### Derive formulas

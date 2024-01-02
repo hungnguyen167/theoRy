@@ -1,6 +1,7 @@
 require(tidyverse)
 require(data.table)
-
+require(dagitty)
+require(ggdag)
 
 
 create_formula <- function(nested_dt) {

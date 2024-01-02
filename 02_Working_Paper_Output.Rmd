@@ -9,9 +9,7 @@ output: html_document
 
 ```{r setup}
 
-source("00_Run_Theory.R")
-source("R/run_theory.R")
-library("QCA")
+source("R/theoRy.R")
 
 ```
 
@@ -107,11 +105,9 @@ dag_plots <- plot_dag_matrix(dag_matrix, save_plots = TRUE, choose_plots = c(2,6
 
 ```
 
-#### DAG Plots
 
-## Finding Multi MAS DAGs
 
-Using our multiverse generator we search for DAGs that will not easily follow our classification rules
+## Comparing DAGs
 
 ### Generate Models
 
@@ -125,7 +121,11 @@ inputs <- list(nodes=c("a","b","c","d","e","f"),
                 types=c("otc","test","ctr","ctr", "ctr","ctr"))
 
 
-causal_matrix1 <- build_causal_matrix(inputs)
+causal_matrix1 <- build_causal_matrix(inputs) %>%
+    mutate(direction = ifelse(is.na(direction), "~", direction)) # this deals with the NA bug for variables happening after Y
+
+formula_matrix1 <- build_formula_matrix(causal_matrix1)
+
 # without X4
 causal_matrix2 <- causal_matrix1 %>%
     subset(to != "X4") %>%
@@ -136,36 +136,59 @@ formula_matrix2 <- build_formula_matrix(causal_matrix2)
 # without X3
 causal_matrix3 <- causal_matrix1 %>%
     subset(to != "X3") %>%
-    subset(from != "X3") %>%
-    mutate(direction = ifelse(is.na(direction), "~", direction)) # this deals with the NA bug for variables happening after Y
+    subset(from != "X3")
 
 formula_matrix3 <- build_formula_matrix(causal_matrix3)
 
 # without X2
 causal_matrix4 <- causal_matrix1 %>%
     subset(to != "X2") %>%
-    subset(from != "X2") %>%
-    mutate(direction = ifelse(is.na(direction), "~", direction))
+    subset(from != "X2") 
 
 formula_matrix4 <- build_formula_matrix(causal_matrix4)
 
 # without X1
 causal_matrix5 <- causal_matrix1 %>%
     subset(to != "X1") %>%
-    subset(from != "X1") %>%
-    mutate(direction = ifelse(is.na(direction), "~", direction))
+    subset(from != "X1") 
 
 formula_matrix5 <- build_formula_matrix(causal_matrix5)
 
 # without X3 and X4
 causal_matrix6 <- causal_matrix1 %>%
     subset(to != "X1" & to != "X2") %>%
-    subset(from != "X1" & from != "X2") %>%
-    mutate(direction = ifelse(is.na(direction), "~", direction))
+    subset(from != "X1" & from != "X2") 
 
-formula_matrix6 <- build_formula_matrix(causal_matrix5)
+formula_matrix6 <- build_formula_matrix(causal_matrix6)
+
+#subset and re-number to have order
+causal_matrix2 <- causal_matrix2 %>% 
+    subset(model %in% formula_matrix2$model) %>%
+    transform(model = (as.numeric(factor(model))+max(causal_matrix1$model)))
+
+causal_matrix3 <- causal_matrix3 %>% 
+    subset(model %in% formula_matrix3$model) %>%
+    transform(model = (as.numeric(factor(model))+max(causal_matrix2$model)))
+
+causal_matrix4 <- causal_matrix4 %>% 
+    subset(model %in% formula_matrix4$model) %>%
+    transform(model = (as.numeric(factor(model))+max(causal_matrix3$model)))
+
+causal_matrix5 <- causal_matrix5 %>% 
+    subset(model %in% formula_matrix5$model) %>%
+    transform(model = (as.numeric(factor(model))+max(causal_matrix4$model)))
+
+causal_matrix6 <- causal_matrix6 %>% 
+    subset(model %in% formula_matrix6$model) %>%
+    transform(model = (as.numeric(factor(model))+max(causal_matrix5$model)))
 
 
+causal_matrix <- rbind(causal_matrix1, causal_matrix2, causal_matrix3, causal_matrix4, causal_matrix5, causal_matrix6)
+
+formula_matrix <- rbind(formula_matrix1, formula_matrix2, formula_matrix3, formula_matrix4, formula_matrix5, formula_matrix6)
+
+formula_matrix <- formula_matrix %>%
+    mutate(model = row_number())
 
 ```
 
@@ -182,7 +205,7 @@ Starting with causal matrix
 #### Identify components
 
 ```{r set_logic}
-causal_matrix_transf <- causal_matrix_f %>%
+causal_matrix_transf <- causal_matrix %>%
     mutate(not_component = ifelse(direction == "", 1, 0),
            direction = ifelse(direction == "", "~", direction),
            component_link = ifelse(direction == "~~", "corr",
@@ -215,13 +238,13 @@ causal_matrix_transf <- causal_matrix_transf %>%
 Use MAS as an example here, but in the future we will use test_compatible and test_model_compatible
 
 ```{r formula_mas}
-mas <- subset(formula_matrix_f, select = c(model, mas))
+mas <- subset(formula_matrix, select = c(model, mas))
 
 causal_matrix_transf <- causal_matrix_transf %>%
     left_join(mas, by = "model")
 
 # make MAS = "{X1}" the outcome, this fits with the X4 models
-causal_matrix_transf <- causal_matrix_transf %>%
+causal_matrix_transf_X1 <- causal_matrix_transf %>%
     mutate(outcome = ifelse(mas == "{ X1 }", 1, 0)) %>%
     select(-c(model,mas))
 ```
@@ -238,6 +261,10 @@ The next step is to use test_compare and test_model_compare as the outcome
 ```{r qca}
 test <- truthTable(as.data.frame(causal_matrix_transf), "outcome")
 
-pof(setms = select(as.data.frame(causal_matrix_transf), -outcome), outcome = "outcome", data = as.data.frame(causal_matrix_transf))
+pof(setms = select(as.data.frame(causal_matrix_transf_X1), -outcome), outcome = "outcome", data = as.data.frame(causal_matrix_transf_X1))
+
+#inclN = inclusion = what percent of all models have outcome (Y = 1) and this component (X = 1)
+#covN = necessity coverage = what percent of all models with this component (X = 1) have the outcome (Y = 1)
+#RoN = relevence of necessity = is a necessary condition trivial
 ```
 

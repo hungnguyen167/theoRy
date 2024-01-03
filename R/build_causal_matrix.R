@@ -21,12 +21,6 @@ match_base <- function(nested_dt, base_matrix) {
     nested_dt <- nested_dt[order(from,to)]
     return(nested_dt)
 }
-remove_duplicates <- function(acc, dt) {
-    if (!any(sapply(acc, identical, dt))) {
-        acc <- c(acc, list(dt))
-    }
-    return(acc)
-}
 
 
 order_dt_by_id <- function(dt, ID) {
@@ -98,16 +92,17 @@ build_causal_matrix <- function(nodes, types, timing, base_mod=NULL,
                 
             }
         }
+        base_matrix <- base_matrix %>%
+            mutate_at(vars(all_of(c("from_var","to_var"))), ~ str_replace_all(., " ", "")) %>%
+            left_join(node_timing, by=c("from_var"="var_name")) %>%
+            rename(timing_from = timing, type_from=type, from=node_name) %>%
+            left_join(node_timing, by=c("to_var"="var_name")) %>%
+            rename(timing_to = timing, type_to=type, to=node_name) %>%
+            select(from, to, direction, timing_from, type_from, timing_to, type_to)
+        setDT(base_matrix) 
+        base_matrix <- base_matrix[order(from,to)]
     }
-    base_matrix <- base_matrix %>%
-        mutate_at(vars(all_of(c("from_var","to_var"))), ~ str_replace_all(., " ", "")) %>%
-        left_join(node_timing, by=c("from_var"="var_name")) %>%
-        rename(timing_from = timing, type_from=type, from=node_name) %>%
-        left_join(node_timing, by=c("to_var"="var_name")) %>%
-        rename(timing_to = timing, type_to=type, to=node_name) %>%
-        select(from, to, direction, timing_from, type_from, timing_to, type_to)
-    setDT(base_matrix) 
-    base_matrix <- base_matrix[order(from,to)]
+    
     x_test_time <- node_timing[which(node_timing$type=="test"),"timing"]
     y_time <- node_timing[which(node_timing$type=="otc"),"timing"]
     if (x_test_time >= y_time){
@@ -229,14 +224,14 @@ build_causal_matrix <- function(nodes, types, timing, base_mod=NULL,
                 type_to = type
             )
         setDT(causal_matrix)
-        ordered_dts <- lapply(split(causal_matrix, by = "model"), order_dt_by_id,c("from","to"))
+        #ordered_dts <- lapply(split(causal_matrix, by = "model"), order_dt_by_id,c("from","to"))
         
-        causal_matrix_test <- rbindlist(unique_dts)
+        #causal_matrix_test <- rbindlist(unique_dts)
         
         rmv_ls <- lapply(split(causal_matrix, by = "model"), remove_redundant)
         causal_matrix <- rbindlist(rmv_ls)
-        match_ls <- lapply(split(causal_matrix, by = "model"), match_base, base_matrix)
-        causal_matrix <-rbindlist(match_ls)
+        #match_ls <- lapply(split(causal_matrix, by = "model"), match_base, base_matrix)
+        #causal_matrix <-rbindlist(match_ls)
         
         return(causal_matrix)
         
@@ -248,25 +243,13 @@ message("function build_causal_matrix loaded")
 
 
 ## Example: 
-nodes <- c("a","b","c","d")
-timing <- c(-2,-1,-1,0)
-types <- c("ctr","ctr","test","otc")
-base_mod <- "d ~ a +c; c~a"
+#nodes <- c("a","b","c","d")
+#timing <- c(-2,-1,-1,0)
+#types <- c("ctr","ctr","test","otc")
+#base_mod <- "d ~ a +c; c~a"
 
 #tic()
-causal_matrix <- build_causal_matrix(nodes, types, timing, base_mod, include_subsets=TRUE,
-                                     return_node=FALSE)
+#causal_matrix <- build_causal_matrix(nodes, types, timing, base_mod, include_subsets=TRUE,
+                                   #  return_node=FALSE)
 #toc()
-
-test2 <- causal_matrix[causal_matrix$base_mod==1]
-
-unique_groups <- test2[, .SD[1], by = model]
-
-test <- causal_matrix[causal_matrix$model==51]
-test[,c("base_mod","model"):=NULL]
-test <- test[order(c("from","to"))]
-setDT(base_matrix)
-base_matrix <- base_matrix[order(from,to)]
-identical(test, base_matrix)
-duplicates_within_groups <- causal_matrix[, .(Is_Duplicated = .N > 1), by = model]
 

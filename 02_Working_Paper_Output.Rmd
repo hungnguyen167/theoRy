@@ -20,11 +20,12 @@ source("R/theoRy.R")
 Generate causal matrix
 
 ```{r models}
-inputs <- list(nodes=c("a","b","c","d"), timing=c(0,-1,-2,-2),
-              types=c("otc","test","ctr","ctr"))
-
-causal_matrix <- build_causal_matrix(inputs)
-ls_complete <- run_theory(inputs)
+nodes <- c("a","b","c","d")
+timing <- c(-2,-1,-1,0)
+types <- c("ctr","ctr","test","otc")
+causal_matrix <- build_causal_matrix(nodes, types, timing, include_subsets=TRUE,
+                                     return_node=FALSE)
+ls_complete <- run_theory(nodes, types, timing, include_subsets=TRUE)
 
 ```
 

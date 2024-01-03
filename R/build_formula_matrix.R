@@ -26,20 +26,38 @@ create_formula <- function(nested_dt) {
     formula <- paste(formulas, collapse = ", ")
     return(formula)
 }
-add_mas <- function(row, additional_args) {
+add_mas <- function(row, additional_args, adjusted=FALSE, unq_Xs=NULL) {
     fvector <- strsplit(as.character(row[1]), ",")[[1]]
     dag_args <- lapply(fvector, as.formula)
     dag <- do.call(dagify, c(dag_args, additional_args))
-    mas <- adjustmentSets(dag, exposure = "Xtest", outcome = "Y", effect = "direct")
-    if (length(unlist(mas)) == 0) {
-        return("none")
-    } 
-    else {
-        mas_output <- capture.output(mas)
-        return(paste(mas_output, collapse = ","))
+    
+    if (adjusted==TRUE){
+        unq_Xs <- unique(c(edges(dag)$v, edges(dag)$w))
+        unq_Xs <- unq_Xs[!unq_Xs %in% c("Y","Xtest")]
+        adjustedNodes(dag) <- unq_Xs
+        mas <- adjustmentSets(dag, exposure = "Xtest", outcome = "Y", effect = "direct")
+        if (length(mas)==0) {
+            return("no")
+        } 
+        else{
+            return("yes")
+        }
     }
 
+    else {
+        
+        mas <- adjustmentSets(dag, exposure = "Xtest", outcome = "Y", effect = "direct")
+        if (length(unlist(mas)) == 0) {
+            return("none")
+        } 
+        else{
+            mas_output <- capture.output(mas)
+            return(paste(mas_output, collapse = ","))
+        }
+    }
+    
 }
+
 
 build_formula_matrix <- function(causal_matrix) {
     setDT(causal_matrix) # Convert to data.table if not already
@@ -62,7 +80,9 @@ build_formula_matrix <- function(causal_matrix) {
     mas <- lapply(formula_matrix$formula, add_mas, additional_args)
     
     formula_matrix$mas <- mas
-    formula_matrix$model <- as.numeric(formula_matrix$model)
+    
+    mas_adj <- lapply(formula_matrix$formula, add_mas, additional_args, adjusted=TRUE, unq_Xs=all_unique_Xs)
+    formula_matrix$correct_test <- mas_adj
     
     return(formula_matrix)
 }

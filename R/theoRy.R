@@ -10,7 +10,7 @@ source("R/build_formula_matrix.R")
 
 source("R/build_dag_matrix.R")
 
-source("R/identify_compatible.R")
+source("R/test_compatible.R")
 
 source("R/plot_dag_matrix.R")
 

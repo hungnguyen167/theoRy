@@ -21,12 +21,26 @@ Generate causal matrix
 
 ```{r models}
 nodes <- c("a","b","c","d")
-timing <- c(-2,-1,-1,0)
+timing <- c(-2,1,-1,0)
 types <- c("ctr","ctr","test","otc")
 base_mod <- "d ~ a +c; c~a"
-causal_matrix <- build_causal_matrix(nodes, types, timing, include_subsets=TRUE,base_mod=base_mod,
-                                     return_node=FALSE)
-ls_complete <- run_theory(nodes, types, timing, include_subsets=TRUE, base_mod = base_mod)
+
+
+causal_matrix <- build_causal_matrix(nodes, types, timing, include_subsets=TRUE, base_mod = base_mod)
+formula_matrix <- build_formula_matrix(causal_matrix)
+
+ref_mod <- as.numeric(unique(formula_matrix[base_mod==1,"model"]))
+
+cmp_matrix <- test_compatible(formula_matrix, ref_mod = ref_mod) %>%
+    left_join(formula_matrix, by = "model") %>%
+    arrange(model) %>%
+    mutate(
+        full_model_compatible = case_when(
+            test_compatible == "reference_model" ~ "reference_model",
+            correct_test == "yes" & test_compatible == "compatible" ~ "compatible",
+            TRUE ~ "incompatible"
+        )
+    )
 
 
 ```

@@ -1,7 +1,40 @@
-library(tidyverse)
-library(tictoc)
+require(tidyverse)
+require(data.table)
 
-build_causal_matrix <- function(nodes, types, timing, base_mod=NULL,resid_corr=TRUE, return_node=FALSE){ 
+
+remove_redundant <- function(nested_dt){
+    unique_from <- nested_dt[, .(UniqueValues = names(table(from)[table(from) == 1]))]
+    unique_to <- nested_dt[, .(UniqueValues = names(table(to)[table(to) == 1]))]
+    common_unq <- intersect(unique_from$UniqueValues, unique_to$UniqueValues)
+    common_unq <- unique(common_unq)
+    nested_dt <- nested_dt[!(from == to & !(from %in% common_unq))]
+    return(nested_dt)
+    
+}
+
+match_base <- function(nested_dt, base_matrix) {
+    temp <- copy(nested_dt)
+    temp[,model:=NULL]
+    ident <- ifelse(identical(temp, base_matrix),1,0)
+    
+    nested_dt[, base_mod := rep(ident, .N)]
+    nested_dt <- nested_dt[order(from,to)]
+    return(nested_dt)
+}
+remove_duplicates <- function(acc, dt) {
+    if (!any(sapply(acc, identical, dt))) {
+        acc <- c(acc, list(dt))
+    }
+    return(acc)
+}
+
+
+order_dt_by_id <- function(dt, ID) {
+    return(dt[order(ID)])
+}
+
+build_causal_matrix <- function(nodes, types, timing, base_mod=NULL, 
+                                include_subsets=FALSE,return_node=FALSE){ 
     # Check if 'inputs' is a list and has required components
     if (!is.character(nodes) | !is.character(types) | !is.double(timing)) {
         stop("Wrong input format. Please check that nodes and types are character and timing is double!")
@@ -28,12 +61,8 @@ build_causal_matrix <- function(nodes, types, timing, base_mod=NULL,resid_corr=T
     }
     # Start of function
     ## Turn input from lavaan format into list
-    if (!is.null(base_mod)){
-        ls_formulas <- strsplit(base_mod, ";")[[1]]
-        print(ls_formulas)
-    }
-    break
-    
+   
+
     ## Change variable names to Xn, Xtest, Y based on types
     
     
@@ -49,37 +78,62 @@ build_causal_matrix <- function(nodes, types, timing, base_mod=NULL,resid_corr=T
             )
         ) %>%
         ungroup()
-    
-    # Create report for user
+    if (!is.null(base_mod)){
+        ls_formulas <- strsplit(base_mod, "\\;")[[1]]
+        base_matrix <- tibble()
+        for (formula in ls_formulas){
+            if (grepl("[ A-Za-z]~[ A-Za-z]", formula)){
+                node_to = strsplit(formula, "\\~")[[1]][1]
+                node_froms = strsplit(strsplit(formula, "~")[[1]][2],"\\+")[[1]]
+                for (node_from in node_froms){
+                    df_temp <- tibble(from_var = node_from, to_var=node_to, direction = "~")
+                    base_matrix <- bind_rows(base_matrix, df_temp)
+                }
+            }
+            else if (grepl("[ A-Za-z]~~[ A-Za-z]", formula)){
+                node_from = strsplit(formula, "\\~\\~")[[1]][1]
+                node_to = strsplit(formula, "\\~\\~")[[1]][2]
+                df_temp <- tibble(from_var = node_from, to_var=node_to, direction = "~~")
+                base_matrix <- bind_rows(base_matrix, df_temp)
+                
+            }
+        }
+    }
+    base_matrix <- base_matrix %>%
+        mutate_at(vars(all_of(c("from_var","to_var"))), ~ str_replace_all(., " ", "")) %>%
+        left_join(node_timing, by=c("from_var"="var_name")) %>%
+        rename(timing_from = timing, type_from=type, from=node_name) %>%
+        left_join(node_timing, by=c("to_var"="var_name")) %>%
+        rename(timing_to = timing, type_to=type, to=node_name) %>%
+        select(from, to, direction, timing_from, type_from, timing_to, type_to)
+    setDT(base_matrix) 
+    base_matrix <- base_matrix[order(from,to)]
+    x_test_time <- node_timing[which(node_timing$type=="test"),"timing"]
+    y_time <- node_timing[which(node_timing$type=="otc"),"timing"]
+    if (x_test_time >= y_time){
+        stop("X_test must take place before Y")
+    }
     if (return_node==TRUE){
         return(node_timing)
     }
     else{
+        ## Create report for user
+        
         message("VARIABLE SUMMARY")
         message(paste0("Y. Label = ", node_timing$var_name[node_timing$node_name == "Y"], 
                        ". Timing = ", node_timing$timing[node_timing$node_name == "Y"]))
         message(paste0("Xtest. Label = ", node_timing$var_name[node_timing$node_name == "Xtest"], 
                        ". Timing = ", node_timing$timing[node_timing$node_name == "Xtest"]))
-        message(paste0("X1. Label = ", node_timing$var_name[node_timing$node_name == "X1"], 
-                       ". Timing = ", node_timing$timing[node_timing$node_name == "X1"]))
-        if (length(node_timing$var_name) > 3) message(paste0("X2. Label = ", node_timing$var_name[node_timing$node_name == "X2"], 
-                                                             ". Timing = ", node_timing$timing[node_timing$node_name == "X2"]))
-        
-        if (length(node_timing$var_name) > 4) message(paste0("X3. Label = ", node_timing$var_name[node_timing$node_name == "X3"], 
-                                                             ". Timing = ", node_timing$timing[node_timing$node_name == "X3"]))
-        
-        if (length(node_timing$var_name) > 5) message(paste0("X4. Label = ", node_timing$var_name[node_timing$node_name == "X4"], 
-                                                             ". Timing = ", node_timing$timing[node_timing$node_name == "X4"]))
-        
-        # create node matrix without var_labels
+        no_Xtest_Y <- node_timing %>% filter(!node_name %in% c("Y","Xtest"))
+        for (i in 1:nrow(no_Xtest_Y)){
+            message(paste0(no_Xtest_Y[i,"node_name"], ". Label = ", no_Xtest_Y[i,"var_name"], 
+                           ". Timing = ", no_Xtest_Y[i,"timing"]))
+        }
+        ## create node matrix without var_labels
         node_timing <- node_timing %>%
             select(-var_name)
-        x_test_time <- node_timing[which(node_timing$type=="test"),"timing"]
-        y_time <- node_timing[which(node_timing$type=="otc"),"timing"]
-        if (x_test_time >= y_time){
-            stop("X_test must take place before Y")
-        }
-        # Create tables for 'from' and 'to' nodes and join with node_timing for timings and types
+        
+        ## Create tables for 'from' and 'to' nodes and join with node_timing for timings and types
         from_tbl <- node_timing %>%
             expand_grid(node_from=node_timing$node_name,node_to=node_timing$node_name) %>%
             select(-node_name) %>%
@@ -108,39 +162,44 @@ build_causal_matrix <- function(nodes, types, timing, base_mod=NULL,resid_corr=T
             distinct(node_from, node_to, .keep_all=TRUE) %>%
             mutate(
                 direction = case_when(
-                    node_from == "Xtest" & node_to == "Y" ~ "~",
+                    str_detect(node_from, "X[0-9A-Za-z]+") & node_to == "Y" & timing_from <= timing_to ~ "~",
+                    node_from == "Y" & str_detect(node_to, "X\\d+") & timing_from <= timing_to ~ "~",
                     node_from == node_to & timing_from == timing_to ~  "~",
                     str_detect(node_from, "X[0-9A-Za-z]+") & str_detect(node_to, "X[0-9A-Za-z]+") 
-                    & timing_from <  timing_to & resid_corr==TRUE ~ "~",
-                    str_detect(node_from, "X[0-9A-Za-z]+") & str_detect(node_to, "X[0-9A-Za-z]+") 
-                    & timing_from ==  timing_to & resid_corr == TRUE~ "~~",
-                    str_detect(node_from, "X[0-9A-Za-z]+") & str_detect(node_to, "X[0-9A-Za-z]+") 
-                    & timing_from <=  timing_to & resid_corr==FALSE ~ "~",
-                    str_detect(node_from, "X\\d+") & node_to == "Y" 
-                    & timing_from <  timing_to & resid_corr==TRUE ~ "~",
-                    str_detect(node_from, "X\\d+") & node_to == "Y" 
-                    & timing_from == timing_to & resid_corr == TRUE ~ "~~",
-                    str_detect(node_from, "X\\d+") & node_to == "Y" 
-                    & timing_from <=  timing_to & resid_corr==FALSE ~ "~",
+                    & timing_from <  timing_to ~ "~",
+                    str_detect(node_from, "X\\d+") & str_detect(node_to, "X\\d+") 
+                    & timing_from ==  timing_to ~ "~~",
                     TRUE ~ NA_character_
                 )
             ) %>%
             mutate(
                 pairs = paste(pmin(node_to, node_from), pmax(node_to, node_from), sep="_")
             ) %>%
-            distinct(pairs, .keep_all=TRUE) %>%
+            filter(!is.na(direction))
+        pairs_dha <- pairs_tbl %>% filter(direction == "~~") %>% distinct(pairs, .keep_all = TRUE)
+        pairs_other <- pairs_tbl %>% filter(direction != "~~") 
+        pairs_tbl <- bind_rows(pairs_dha, pairs_other) %>%
             mutate(
                 pairs = paste(node_from, node_to, sep="_")
             ) %>%
-            select(node_from, node_to,pairs, direction)
-        # Define two types of options based on the direction
-        two_opt <- pairs_tbl %>%
-            filter(pairs != "Xtest_Y" & node_from != node_to)
-        one_opt <- pairs_tbl %>%
-            filter(pairs == "Xtest_Y" | node_from == node_to)
+            select(node_from, node_to,pairs, direction) 
         
+        # Define two types of options based on the direction
+        if (include_subsets == TRUE){
+            two_opt <- pairs_tbl %>%
+                filter(pairs != "Xtest_Y")
+            one_opt <- pairs_tbl %>%
+                filter(pairs == "Xtest_Y")
+        }
+        else{
+            two_opt <- pairs_tbl %>%
+                filter(!grepl("Xtest_Y|^(X\\d+)_\\1$", pairs))
+            one_opt <- pairs_tbl %>%
+                filter(grepl("Xtest_Y|^(X\\d+)_\\1$", pairs))
+        }
+         
         # Create a unique values list from the options
-        unique_values_list <- lapply(seq_len(nrow(two_opt)), function(i) c(two_opt$direction[i], ""))
+        unique_values_list <- lapply(seq_len(nrow(two_opt)), function(i) c(two_opt$direction[i], "none"))
         names(unique_values_list) <- two_opt$pairs
         unique_values_list <- c(unique_values_list, setNames(one_opt$direction, one_opt$pairs))
         
@@ -155,6 +214,7 @@ build_causal_matrix <- function(nodes, types, timing, base_mod=NULL,resid_corr=T
                     each = length(unique_values_list)
                 )
             ) %>%
+            filter(direction != "none") %>%
             group_by(model) %>%
             filter(any(to == "Y" & str_detect(from, "Xtest"))) %>%
             ungroup() %>%
@@ -168,6 +228,15 @@ build_causal_matrix <- function(nodes, types, timing, base_mod=NULL,resid_corr=T
                 timing_to = timing,
                 type_to = type
             )
+        setDT(causal_matrix)
+        ordered_dts <- lapply(split(causal_matrix, by = "model"), order_dt_by_id,c("from","to"))
+        
+        causal_matrix_test <- rbindlist(unique_dts)
+        
+        rmv_ls <- lapply(split(causal_matrix, by = "model"), remove_redundant)
+        causal_matrix <- rbindlist(rmv_ls)
+        match_ls <- lapply(split(causal_matrix, by = "model"), match_base, base_matrix)
+        causal_matrix <-rbindlist(match_ls)
         
         return(causal_matrix)
         
@@ -180,11 +249,24 @@ message("function build_causal_matrix loaded")
 
 ## Example: 
 nodes <- c("a","b","c","d")
-timing <- c(-3,-2,-1,0)
+timing <- c(-2,-1,-1,0)
 types <- c("ctr","ctr","test","otc")
-base_mod <- "d ~ a + c; c ~ b"
+base_mod <- "d ~ a +c; c~a"
 
 #tic()
-causal_matrix <- build_causal_matrix(nodes, types, timing, base_mod)
+causal_matrix <- build_causal_matrix(nodes, types, timing, base_mod, include_subsets=TRUE,
+                                     return_node=FALSE)
 #toc()
+
+test2 <- causal_matrix[causal_matrix$base_mod==1]
+
+unique_groups <- test2[, .SD[1], by = model]
+
+test <- causal_matrix[causal_matrix$model==51]
+test[,c("base_mod","model"):=NULL]
+test <- test[order(c("from","to"))]
+setDT(base_matrix)
+base_matrix <- base_matrix[order(from,to)]
+identical(test, base_matrix)
+duplicates_within_groups <- causal_matrix[, .(Is_Duplicated = .N > 1), by = model]
 

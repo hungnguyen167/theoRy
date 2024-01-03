@@ -69,7 +69,7 @@ message("function build_formula_matrix loaded")
 
 
 #tic()
-#formula_matrix <-build_formula_matrix(causal_matrix)
+formula_matrix <-build_formula_matrix(causal_matrix)
 #toc()
 
 

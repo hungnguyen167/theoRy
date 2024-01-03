@@ -23,8 +23,10 @@ match_base <- function(nested_dt, base_matrix) {
 }
 
 
-order_dt_by_id <- function(dt, ID) {
-    return(dt[order(ID)])
+dt_to_string <- function(dt) {
+    dt[order(c("from", "to"))]
+    dt[,model:=NULL]
+    return(dt)
 }
 
 build_causal_matrix <- function(nodes, types, timing, base_mod=NULL, 
@@ -181,10 +183,30 @@ build_causal_matrix <- function(nodes, types, timing, base_mod=NULL,
         
         # Define two types of options based on the direction
         if (include_subsets == TRUE){
-            two_opt <- pairs_tbl %>%
-                filter(pairs != "Xtest_Y")
-            one_opt <- pairs_tbl %>%
-                filter(pairs == "Xtest_Y")
+            # Display a warning message
+            message("Option include_subsets is set to true.")
+            message("The size of the matrix could get exponentially larger with more variables") 
+            message("Do you want to proceed or set include_subsets to FALSE?")
+            
+            response <- tolower(readline(prompt = "Enter 'yes' or 'no': "))
+            
+            if (response == "yes") {
+                cat("Continue with include_subsets=TRUE\n")
+                two_opt <- pairs_tbl %>%
+                    filter(pairs != "Xtest_Y")
+                one_opt <- pairs_tbl %>%
+                    filter(pairs == "Xtest_Y")
+                
+            } else if (response == "no") {
+                cat("Set include_subsets to FALSE.\n")
+                two_opt <- pairs_tbl %>%
+                    filter(!grepl("Xtest_Y|^(X\\d+)_\\1$", pairs))
+                one_opt <- pairs_tbl %>%
+                    filter(grepl("Xtest_Y|^(X\\d+)_\\1$", pairs))
+            } else {
+                stop("Invalid response. Please enter 'yes' or 'no'.\n")
+            }
+            
         }
         else{
             two_opt <- pairs_tbl %>%
@@ -224,14 +246,19 @@ build_causal_matrix <- function(nodes, types, timing, base_mod=NULL,
                 type_to = type
             )
         setDT(causal_matrix)
-        #ordered_dts <- lapply(split(causal_matrix, by = "model"), order_dt_by_id,c("from","to"))
         
-        #causal_matrix_test <- rbindlist(unique_dts)
         
         rmv_ls <- lapply(split(causal_matrix, by = "model"), remove_redundant)
         causal_matrix <- rbindlist(rmv_ls)
-        #match_ls <- lapply(split(causal_matrix, by = "model"), match_base, base_matrix)
-        #causal_matrix <-rbindlist(match_ls)
+
+        if (!is.null(base_mod)){
+            match_ls <- lapply(split(causal_matrix, by = "model"), match_base, base_matrix)
+            causal_matrix <-rbindlist(match_ls)
+        }
+        
+        dt_strings <- paste0(lapply(split(causal_matrix, by="model"), dt_to_string))
+        unq_dts <- which(!duplicated(dt_strings))
+        causal_matrix <- causal_matrix[model %in% unq_dts]
         
         return(causal_matrix)
         

@@ -23,9 +23,11 @@ Generate causal matrix
 nodes <- c("a","b","c","d")
 timing <- c(-2,-1,-1,0)
 types <- c("ctr","ctr","test","otc")
-causal_matrix <- build_causal_matrix(nodes, types, timing, include_subsets=TRUE,
+base_mod <- "d ~ a +c; c~a"
+causal_matrix <- build_causal_matrix(nodes, types, timing, include_subsets=TRUE,base_mod=base_mod,
                                      return_node=FALSE)
-ls_complete <- run_theory(nodes, types, timing, include_subsets=TRUE)
+ls_complete <- run_theory(nodes, types, timing, include_subsets=TRUE, base_mod = base_mod)
+
 
 ```
 

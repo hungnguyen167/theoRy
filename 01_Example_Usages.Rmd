@@ -1,7 +1,14 @@
 ---
-title: "01 theoRy User Instructions"
+title: "package \\'theoRy\\'"
 output: html_notebook
 ---
+
+type package, etc...........
+
+see for example: https://cran.r-project.org/web/packages/dagitty/dagitty.pdf
+
+
+
 
 Nate Breznau <br>
 Hung H.V. Nguyen

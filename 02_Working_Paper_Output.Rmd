@@ -23,7 +23,7 @@ Generate causal matrix
 nodes <- c("a","b","c","d")
 timing <- c(-2,1,-1,0)
 types <- c("ctr","ctr","test","otc")
-base_mod <- "d ~ a +c; c~a"
+base_mod <- "d ~ a + c; c~a"
 
 
 causal_matrix <- build_causal_matrix(nodes, types, timing, include_subsets=TRUE, base_mod = base_mod)
@@ -119,6 +119,27 @@ Only need to save models 1-6 for the paper
 ```{r gen_plots, warning = F}
 dag_plots <- plot_dag_matrix(dag_matrix, save_plots = TRUE, choose_plots = c(2,6,8,18,33,34), title_labels = c(3,1,5,2,4,6))
 
+
+```
+
+##### Playing around with plotting as ggdag
+
+```{r ggdag}
+
+fvector <- strsplit(as.character(formula_matrix[1]), ",")[[1]]
+dag_args <- lapply(fvector, as.formula)
+additional_args <- list(
+     exposure="Xtest",
+     outcome="Y"
+     )
+
+d1 <- do.call(dagify, c(dag_args, additional_args))
+
+
+ggdag(d1)
+
+d1plot <- ggdag(d1) +
+    geom_dag_edges(edge_color = "green")
 
 ```
 

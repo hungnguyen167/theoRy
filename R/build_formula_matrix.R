@@ -5,7 +5,8 @@ require(ggdag)
 
 
 create_formula <- function(nested_dt) {
-    causal_dt <- nested_dt[direction == "~"]
+    causal_dt <- nested_dt[direction == "->"]
+    causal_dt[, direction:= "~"]
     causal_dt[, formula := paste(to, direction, paste(from, collapse = " + "), sep=" "), by = .(model, to)]
     causal_dt[, ord := fifelse(str_detect(to, "Y.*"), 1,
                                fifelse(str_detect(to, "M.*"), 2,
@@ -13,7 +14,8 @@ create_formula <- function(nested_dt) {
     causal_dt <- unique(causal_dt, by = "formula")
     setorder(causal_dt, ord)
     
-    formula_dt <- nested_dt[direction == "~~"]
+    formula_dt <- nested_dt[direction == "<->"]
+    formula_dt[, direction:= "~~"]
     formula_dt[, formula := paste(to, direction, from, sep = " "), by = .(model, to)]
     
     

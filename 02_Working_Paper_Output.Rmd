@@ -21,26 +21,26 @@ Generate causal matrix
 
 ```{r models}
 nodes <- c("a","b","c","d")
-timing <- c(-2,1,-1,0)
+timing <- c(-2,-1,-1,0)
 types <- c("ctr","ctr","test","otc")
-base_mod <- "d ~ a + c; c~a"
+base_mods <- c("d ~ a + c; c~a; b~b", "d ~ c")
 
 
-causal_matrix <- build_causal_matrix(nodes, types, timing, include_subsets=TRUE, base_mod = base_mod)
+causal_matrix <- build_causal_node(nodes, types, timing, include_subsets=TRUE, base_mods = base_mods)
+
+node_timing <- build_causal_node(nodes, types, timing, return_node=TRUE)
+
+## Find or add models.
+new_base_mods <- c("d ~ a + b; a ~ c", "d ~ a + c; c~a; b~b") ## Model 1 is implausible because timing of c is -1 and timing of a is -2
+
+new_causal <- find_add_models(causal_matrix, node_timing, base_mods) ## Should find both in the matrix
+new_causal <- find_add_models(causal_matrix, node_timing, new_base_mods) ## Should not find the first but find the second in the matrix
+
+
 formula_matrix <- build_formula_matrix(causal_matrix)
 
-ref_mod <- as.numeric(unique(formula_matrix[base_mod==1,"model"]))
 
-cmp_matrix <- test_compatible(formula_matrix, ref_mod = ref_mod) %>%
-    left_join(formula_matrix, by = "model") %>%
-    arrange(model) %>%
-    mutate(
-        full_model_compatible = case_when(
-            test_compatible == "reference_model" ~ "reference_model",
-            correct_test == "yes" & test_compatible == "compatible" ~ "compatible",
-            TRUE ~ "incompatible"
-        )
-    )
+cmp_matrix <- add_compatible(formula_matrix, ref_mod = 11) ## Change ref_mod to whichever is your reference model (using base_mod and model variable in the formula matrix)
 
 
 ```

@@ -12,14 +12,12 @@ remove_redundant <- function(nested_dt){
     
 }
 
-match_base <- function(nested_dt, base_matrix) {
+match_base <- function(nested_dt, nested_base) {
     temp <- copy(nested_dt)
     temp[,model:=NULL]
-    ident <- ifelse(identical(temp, base_matrix),1,0)
-    
-    nested_dt[, base_mod := rep(ident, .N)]
-    nested_dt <- nested_dt[order(from,to)]
-    return(nested_dt)
+    temp <- temp[order(from,to)]
+    ident <- ifelse(identical(temp, nested_base),1,0)
+    return(ident)
 }
 
 
@@ -29,7 +27,7 @@ dt_to_string <- function(dt) {
     return(dt)
 }
 
-build_causal_matrix <- function(nodes, types, timing, base_mod=NULL, 
+build_causal_node <- function(nodes, types, timing, base_mods=NULL, 
                                 include_subsets=FALSE,return_node=FALSE){ 
     # Check if 'inputs' is a list and has required components
     if (!is.character(nodes) | !is.character(types) | !is.double(timing)) {
@@ -74,35 +72,45 @@ build_causal_matrix <- function(nodes, types, timing, base_mod=NULL,
             )
         ) %>%
         ungroup()
-    if (!is.null(base_mod)){
-        ls_formulas <- strsplit(base_mod, "\\;")[[1]]
+    if (!is.null(base_mods)){
         base_matrix <- tibble()
-        for (formula in ls_formulas){
-            if (grepl("[ A-Za-z]~[ A-Za-z]", formula)){
-                node_to = strsplit(formula, "\\~")[[1]][1]
-                node_froms = strsplit(strsplit(formula, "~")[[1]][2],"\\+")[[1]]
-                for (node_from in node_froms){
-                    df_temp <- tibble(from_var = node_from, to_var=node_to, direction = "~")
+        mod_ctr <- 1
+        for (mod in base_mods){
+            ls_formulas <- strsplit(mod, "\\;")[[1]]
+            for (formula in ls_formulas){
+                if (grepl("[ A-Za-z]~[ A-Za-z]", formula)){
+                    node_to = strsplit(formula, "\\~")[[1]][1]
+                    node_froms = strsplit(strsplit(formula, "~")[[1]][2],"\\+")[[1]]
+                    for (node_from in node_froms){
+                        df_temp <- tibble(from_var = node_from, to_var=node_to, 
+                                          direction = "->", model = mod_ctr)
+                        base_matrix <- bind_rows(base_matrix, df_temp)
+                    }
+                }
+                else if (grepl("[ A-Za-z]~~[ A-Za-z]", formula)){
+                    node_from = strsplit(formula, "\\~\\~")[[1]][1]
+                    node_to = strsplit(formula, "\\~\\~")[[1]][2]
+                    df_temp <- tibble(from_var = node_from, to_var=node_to, 
+                                      direction = "<->", model=mod_ctr)
                     base_matrix <- bind_rows(base_matrix, df_temp)
+                    
                 }
             }
-            else if (grepl("[ A-Za-z]~~[ A-Za-z]", formula)){
-                node_from = strsplit(formula, "\\~\\~")[[1]][1]
-                node_to = strsplit(formula, "\\~\\~")[[1]][2]
-                df_temp <- tibble(from_var = node_from, to_var=node_to, direction = "~~")
-                base_matrix <- bind_rows(base_matrix, df_temp)
-                
-            }
+            mod_ctr <- mod_ctr+1
         }
+        
+        
         base_matrix <- base_matrix %>%
             mutate_at(vars(all_of(c("from_var","to_var"))), ~ str_replace_all(., " ", "")) %>%
             left_join(node_timing, by=c("from_var"="var_name")) %>%
             rename(timing_from = timing, type_from=type, from=node_name) %>%
             left_join(node_timing, by=c("to_var"="var_name")) %>%
-            rename(timing_to = timing, type_to=type, to=node_name) %>%
-            select(from, to, direction, timing_from, type_from, timing_to, type_to)
+            rename(timing_to = timing, type_to=type, to=node_name) %>% 
+            mutate(
+                component = ifelse(from!=to, paste(from,to,sep="_"), from) 
+            ) %>%
+            select(from, to, direction, model, component, timing_from, type_from, timing_to, type_to)
         setDT(base_matrix) 
-        base_matrix <- base_matrix[order(from,to)]
     }
     
     x_test_time <- node_timing[which(node_timing$type=="test"),"timing"]
@@ -159,13 +167,13 @@ build_causal_matrix <- function(nodes, types, timing, base_mod=NULL,
             distinct(node_from, node_to, .keep_all=TRUE) %>%
             mutate(
                 direction = case_when(
-                    str_detect(node_from, "X[0-9A-Za-z]+") & node_to == "Y" & timing_from <= timing_to ~ "~",
-                    node_from == "Y" & str_detect(node_to, "X\\d+") & timing_from <= timing_to ~ "~",
-                    node_from == node_to & timing_from == timing_to ~  "~",
+                    str_detect(node_from, "X[0-9A-Za-z]+") & node_to == "Y" & timing_from <= timing_to ~ "->",
+                    node_from == "Y" & str_detect(node_to, "X\\d+") & timing_from <= timing_to ~ "->",
+                    node_from == node_to & timing_from == timing_to ~  "->",
                     str_detect(node_from, "X[0-9A-Za-z]+") & str_detect(node_to, "X[0-9A-Za-z]+") 
-                    & timing_from <  timing_to ~ "~",
+                    & timing_from <  timing_to ~ "->",
                     str_detect(node_from, "X\\d+") & str_detect(node_to, "X\\d+") 
-                    & timing_from ==  timing_to ~ "~~",
+                    & timing_from ==  timing_to ~ "<->",
                     TRUE ~ NA_character_
                 )
             ) %>%
@@ -229,7 +237,8 @@ build_causal_matrix <- function(nodes, types, timing, base_mod=NULL,
                 model = rep(
                     1:(nrow(.)/length(unique_values_list)),
                     each = length(unique_values_list)
-                )
+                ),
+                component = ifelse(from!=to, paste(from,to,sep="_"), from)
             ) %>%
             filter(direction != "none") %>%
             group_by(model) %>%
@@ -250,20 +259,60 @@ build_causal_matrix <- function(nodes, types, timing, base_mod=NULL,
         
         rmv_ls <- lapply(split(causal_matrix, by = "model"), remove_redundant)
         causal_matrix <- rbindlist(rmv_ls)
-
-        if (!is.null(base_mod)){
-            match_ls <- lapply(split(causal_matrix, by = "model"), match_base, base_matrix)
-            causal_matrix <-rbindlist(match_ls)
-        }
-        
         dt_strings <- paste0(lapply(split(causal_matrix, by="model"), dt_to_string))
         unq_dts <- which(!duplicated(dt_strings))
         causal_matrix <- causal_matrix[model %in% unq_dts]
+        if (!is.null(base_mods)){
+            ls_base <- split(base_matrix,by="model")
+            match_res <- list()
+            for (i in seq_along(ls_base)){
+                b_t <- copy(ls_base[[i]])
+                b_t[, model:=NULL]
+                b_t <- b_t[order(from,to)]
+                match_ls_temp <- lapply(split(causal_matrix, by = "model"), match_base,
+                                   b_t)
+                base_mod_true <- as.numeric(names(match_ls_temp[match_ls_temp==1]))
+                match_res_temp <- list(idx = unlist(base_mod_true), base_mod_n = i)
+                match_res[[i]] <- match_res_temp
+            }
+
+            causal_matrix[, base_mod := 0]
+            for (i in seq_along(match_res)){
+                match_res_temp <- match_res[[i]]
+                
+                if(length(match_res_temp$idx) ==0){
+                    cat("Model", i, "not found in the causal matrix. \n")
+                    message("Do you want to add this to the matrix?")
+                    response <- tolower(readline(prompt = "Enter 'yes' or 'no': "))
+                    if(response=="yes"){
+                        message("Adding...")
+                        b_t <- copy(ls_base[[i]])
+                        b_t[, base_mod:=1]
+                        b_t[, model := max(causal_matrix$model) + 1]
+                        causal_matrix <- rbind(causal_matrix, b_t)
+                    }
+                    else if (response=="no"){
+                        "Skipping..."
+                    }
+                    else{
+                        message("Invalid response. Skipping...")
+                    }
+                }
+                else{
+                    cat("Model", i, "found in the matrix.\n")
+                }
+            }
+            all_idx <- unname(do.call(c, lapply(match_res, function(x) x$idx)))
+            causal_matrix[, base_mod:= ifelse(model %in% all_idx | base_mod==1, 1, 0)]
+            
+        }
+        
+        
         
         return(causal_matrix)
-        
-        
     }
+        
+
 }
 
 message("function build_causal_matrix loaded")

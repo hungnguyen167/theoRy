@@ -68,7 +68,7 @@ build_formula_matrix <- function(causal_matrix) {
     formula_list <- lapply(split(causal_matrix, by = "model"), create_formula)
 
     formula_matrix <- data.table(formula = unlist(formula_list), model = unique(causal_matrix$model))
-    reduced_matrix <- unique(causal_matrix[, .SD, .SDcols = c("model", "base_mod")])
+    reduced_matrix <- unique(causal_matrix[, .SD, .SDcols = c("model", "user_mod")])
     formula_matrix <- formula_matrix[reduced_matrix, on = "model", nomatch = 0]
     
     # this makes sure that original model numbers are kept

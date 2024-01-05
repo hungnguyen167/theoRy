@@ -23,24 +23,13 @@ Generate causal matrix
 nodes <- c("a","b","c","d")
 timing <- c(-2,-1,-1,0)
 types <- c("ctr","ctr","test","otc")
-base_mods <- c("d ~ a + c; c~a; b~b", "d ~ c")
+user_mods <- c("d ~ a + c; c~a; b~b", "d ~ c")
 
 
-causal_matrix <- build_causal_node(nodes, types, timing, include_subsets=TRUE, base_mods = base_mods)
+ls_theory <- theoRy(nodes = nodes, timing = timing, types=types, include_subsets = FALSE, 
+                        user_mods=user_mods)
 
-node_timing <- build_causal_node(nodes, types, timing, return_node=TRUE)
-
-## Find or add models.
-new_base_mods <- c("d ~ a + b; a ~ c", "d ~ a + c; c~a; b~b") ## Model 1 is implausible because timing of c is -1 and timing of a is -2
-
-new_causal <- find_add_models(causal_matrix, node_timing, base_mods) ## Should find both in the matrix
-new_causal <- find_add_models(causal_matrix, node_timing, new_base_mods) ## Should not find the first but find the second in the matrix
-
-
-formula_matrix <- build_formula_matrix(causal_matrix)
-
-
-cmp_matrix <- add_compatible(formula_matrix, ref_mod = 11) ## Change ref_mod to whichever is your reference model (using base_mod and model variable in the formula matrix)
+cmp_matrix <- add_compatible(ls_theory$formula_matrix, ref_mod = 1) ## Change ref_mod to whichever is your reference model (using base_mod and model variable in the formula matrix)
 
 
 ```

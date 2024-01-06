@@ -11,6 +11,7 @@ output: html_document
 
 source("R/theoRy.R")
 library('tictoc')
+library('QCA')
 
 ```
 
@@ -31,8 +32,7 @@ user_mods <- c("a ~ b + d; b ~ c + d", # Model 1
                )
 
 tic()
-ls_theory <- theoRy(nodes = nodes, timing = timing, types=types, include_subsets = TRUE, 
-                        user_mods=user_mods)
+ls_theory <- theoRy(nodes = nodes, timing = timing, types=types, include_subsets = TRUE, user_mods=user_mods)
 toc()
 ```
 
@@ -72,30 +72,25 @@ ls_theory$causal_matrix <- ls_theory$causal_matrix %>%
 ls_theory$formula_matrix <- build_formula_matrix(ls_theory$causal_matrix)
 
 ```
-
+### Compare Models
 
 ```{r models}
-cmp_matrix <- add_compatible(ls_theory$formula_matrix, ref_mod = 1) ## Change ref_mod to whichever is your reference model (using base_mod and model variable in the formula matrix)
+cmp_matrix <- add_compatible(ls_theory$formula_matrix, ref_mod = 1) 
+
+## Change ref_mod to whichever is your reference model (using base_mod and model variable in the formula matrix)
 ```
 
-### Derive formulas
 
 
-### Derive plots
-
-#### Update Model Numbers
-
-
-
-#### Generate DAG formulas
+### Generate DAG formulas
 
 ```{r gen_dags}
 
-dag_matrix <- build_dag_matrix(formula_matrix, add_nodes = 2)
+dag_matrix <- build_dag_matrix(ls_theory$formula_matrix, add_nodes = 2)
 
 ```
 
-#### Generate Plots
+### Generate Plots
 
 Only need to save models 1-6 for the paper
 
@@ -104,6 +99,9 @@ dag_plots <- plot_dag_matrix(dag_matrix, save_plots = TRUE, choose_plots = c(2,6
 
 
 ```
+
+
+
 
 ##### Playing around with plotting as ggdag
 
@@ -126,185 +124,34 @@ d1plot <- ggdag(d1) +
 
 ```
 
-## Comparing DAGs
 
-### Generate Models
+## QCA
 
-#### Different Configurations
+### Build Set Matrix
 
-We will develop an easier method, but for now we do the 'long way' of assembling all (most) possible model combinations of the edges and nodes
+Here we focus on test_compatible as the outcome (= 1)
 
-```{r searching_dags}
-inputs <- list(nodes=c("a","b","c","d","e","f"),
-                timing=c(0,-1,-2,-3,-3, 1),
-                types=c("otc","test","ctr","ctr", "ctr","ctr"))
+We use cmp_matrix to get this information
 
+```{r build_set_matrix}
+set_matrix <- build_set_matrix(ls_theory$causal_matrix)
 
-causal_matrix1 <- build_causal_matrix(inputs) %>%
-    mutate(direction = ifelse(is.na(direction), "~", direction)) # this deals with the NA bug for variables happening after Y
+# think about whether we want model numbers in or not, just remove by hand here
 
-formula_matrix1 <- build_formula_matrix(causal_matrix1)
-
-# without X4
-causal_matrix2 <- causal_matrix1 %>%
-    subset(to != "X4") %>%
-    subset(from != "X4")
-# this automatically removes duplicates
-formula_matrix2 <- build_formula_matrix(causal_matrix2)
-
-# without X3
-causal_matrix3 <- causal_matrix1 %>%
-    subset(to != "X3") %>%
-    subset(from != "X3")
-
-formula_matrix3 <- build_formula_matrix(causal_matrix3)
-
-# without X2
-causal_matrix4 <- causal_matrix1 %>%
-    subset(to != "X2") %>%
-    subset(from != "X2")
-
-formula_matrix4 <- build_formula_matrix(causal_matrix4)
-
-# without X1
-causal_matrix5 <- causal_matrix1 %>%
-    subset(to != "X1") %>%
-    subset(from != "X1")
-
-formula_matrix5 <- build_formula_matrix(causal_matrix5)
-
-# without X3 and X4
-causal_matrix6 <- causal_matrix1 %>%
-    subset(to != "X1" & to != "X2") %>%
-    subset(from != "X1" & from != "X2")
-
-formula_matrix6 <- build_formula_matrix(causal_matrix6)
-
-#subset and re-number to have order
-causal_matrix2 <- causal_matrix2 %>%
-    subset(model %in% formula_matrix2$model) %>%
-    transform(model = (as.numeric(factor(model))+max(causal_matrix1$model)))
-
-causal_matrix3 <- causal_matrix3 %>%
-    subset(model %in% formula_matrix3$model) %>%
-    transform(model = (as.numeric(factor(model))+max(causal_matrix2$model)))
-
-causal_matrix4 <- causal_matrix4 %>%
-    subset(model %in% formula_matrix4$model) %>%
-    transform(model = (as.numeric(factor(model))+max(causal_matrix3$model)))
-
-causal_matrix5 <- causal_matrix5 %>%
-    subset(model %in% formula_matrix5$model) %>%
-    transform(model = (as.numeric(factor(model))+max(causal_matrix4$model)))
-
-causal_matrix6 <- causal_matrix6 %>%
-    subset(model %in% formula_matrix6$model) %>%
-    transform(model = (as.numeric(factor(model))+max(causal_matrix5$model)))
-
-
-causal_matrix <- rbind(causal_matrix1, causal_matrix2, causal_matrix3, causal_matrix4, causal_matrix5, causal_matrix6)
-
-formula_matrix <- rbind(formula_matrix1, formula_matrix2, formula_matrix3, formula_matrix4, formula_matrix5, formula_matrix6)
-
-formula_matrix <- formula_matrix %>%
-    mutate(model = row_number())
-
+set_matrix_nomod <- dplyr::select(set_matrix, -model)
 ```
 
 
-### Set Logic Comparison
-
-Starting with causal matrix
-1. Identify each component (node / edge) and make categorical as yes/no 1/0
-2. Select reference model
-3. Assign test_compatible and full_model_compatible
 
 
-
-#### Identify components
-
-```{r set_logic}
-causal_matrix_transf <- causal_matrix %>%
-    mutate(not_component = ifelse(direction == "", 1, 0),
-           direction = ifelse(direction == "", "~", direction),
-           component_link = ifelse(direction == "~~", "corr",
-                            ifelse(direction == "~", "cause", NA)),
-           component = paste(from, to, sep = "_"),
-           component = ifelse(from == to, from, component),
-           component_type = ifelse(from == to, "node", "edge"))
-```
-
-
-### Transform into sets
-
-```{r set_build}
-
-
-# v1 <- causal_matrix_transf[causal_matrix_transf$model < 4001]
-# v2 <- causal_matrix_transf[causal_matrix_transf$model > 4000 & causal_matrix_transf$model < 8001]
-# v3 <- causal_matrix_transf[causal_matrix_transf$model > 8000 & causal_matrix_transf$model < 12001]
-# v4 <- causal_matrix_transf[causal_matrix_transf$model > 12000]
-
-for (v in causal_matrix_transf$component) {
-v1[,paste0(v)] <- ifelse(v1$component == v & v1$not_component == 0, 1, 0)
-}
-
-for (v in causal_matrix_transf$component) {
-v2[,paste0(v)] <- ifelse(v2$component == v & v2$not_component == 0, 1, 0)
-}
-
-for (v in causal_matrix_transf$component) {
-v3[,paste0(v)] <- ifelse(v3$component == v & v3$not_component == 0, 1, 0)
-}
-
-for (v in causal_matrix_transf$component) {
-v4[,paste0(v)] <- ifelse(v4$component == v & v4$not_component == 0, 1, 0)
-}
-
-causal_matrix_transf <- rbind(v1, v2, v3, v4)
-
-causal_matrix_transf <- subset(causal_matrix_transf, select = -c(from, to, direction, timing_from, type_from, timing_to, type_to, component, not_component, component_link, component_type))
-
-causal_matrix_transf <- causal_matrix_transf %>%
-    group_by(model) %>%
-    summarise_all(max, na.rm = T)
-
-
-```
-
-#### Add MAS
-
-Use MAS as an example here, but in the future we will use test_compatible and test_model_compatible
-
-```{r formula_mas}
-mas <- subset(formula_matrix, select = c(model, mas))
-
-causal_matrix_transf <- causal_matrix_transf %>%
-    left_join(mas, by = "model")
-
-# make MAS = "{X1}" the outcome, this fits with the X4 models
-causal_matrix_transf_X1 <- causal_matrix_transf %>%
-    mutate(outcome = ifelse(mas == "{ X1 }", 1, 0)) %>%
-    select(-c(model,mas))
-```
-
-
-#### QCA
-
-Use set logic to identify the MAS outcome { X2 }
-
-Need to use a case study that has models with excluded nodes, and a confounder to see the full potential.
-
-The next step is to use test_compare and test_model_compare as the outcome
-
-##### Single Components
+### Single Components
 
 This can help us understand the role of single components. However, for most causal models a single component is rarely alone so important. For example a node often requires specific edges before it becomes important (e.g., becomes a confounder or collider)
 
 ```{r qca}
-test <- truthTable(as.data.frame(causal_matrix_transf), "outcome")
+#test <- truthTable(set_matrix, "outcome")
 
-pof(setms = select(as.data.frame(causal_matrix_transf_X1), -outcome), outcome = "outcome", data = as.data.frame(causal_matrix_transf_X1))
+pof(setms = select(set_matrix, -c(model,outcome)), outcome = "outcome", data = set_matrix)
 
 # try option relation = "sufficiency"
 
@@ -313,45 +160,21 @@ pof(setms = select(as.data.frame(causal_matrix_transf_X1), -outcome), outcome = 
 #RoN = relevence of necessity = is a necessary condition trivial
 ```
 
-              inclN   RoN   covN  
---------------------------------- 
- 1     X1_X2  0.479  0.562  0.127 
- 2     X1_X3  0.479  0.562  0.127 
- 3  X1_Xtest  1.000  0.588  0.257 
- 4      X1_Y  1.000  0.588  0.257 
- 5     X1_X4  0.486  0.563  0.129 
- 6     X2_X3  0.401  0.556  0.106 
- 7  X2_Xtest  0.300  0.535  0.077 
- 8      X2_Y  0.300  0.535  0.077 
- 9     X2_X4  0.465  0.561  0.123 
-10  X3_Xtest  0.300  0.534  0.077 
-11      X3_Y  0.300  0.534  0.077 
-12     X3_X4  0.465  0.560  0.123 
-13  Xtest_X4  0.486  0.547  0.125 
-14      Y_X4  0.486  0.547  0.125 
-15        X1  1.000  0.034  0.129 
-16        X2  0.958  0.033  0.123 
-17        X3  0.958  0.031  0.123 
-18     Xtest  1.000  0.000  0.125 
-19   Xtest_Y  1.000  0.000  0.125 
-20         Y  1.000  0.000  0.125 
-21        X4  0.972  0.032  0.125 
----------------------------------
 
-##### Multiple Component Analyses
+### Multiple Component Analyses
 
-###### Minimize
+#### Minimize
 
 Looking only positive outcomes (outcome = 1/MAS = {X1}), this procedure tries to find minimal sets of variables that are present in all positive cases, regardless of if these sets are present in outcome = 0 cases.
 
 ```{r minimize}
 
-min_results <- minimize(as.data.frame(causal_matrix_transf_X1), details = TRUE, outcome = "outcome")
+min_results <- minimize(set_matrix_nomod, details = TRUE, outcome = "outcome")
 
 ```
 
 
-###### Subsets
+#### Subsets
 
 ```{r qca}
 superSubset(as.data.frame(causal_matrix_transf_X1), outcome = "outcome")
@@ -445,4 +268,30 @@ superSubset(as.data.frame(causal_matrix_transf_X1), outcome = "outcome")
 84  ~X2_X3 + ~X2_Xtest + ~X3_Y        1.000  0.135  0.141 
 85  ~X2_X3 + ~X2_Y + ~X3_Xtest        1.000  0.135  0.141 
 --------------------------------------------------------- 
+
+
+## Comparing DAGs
+
+### Generate Models
+
+#### Different Configurations
+
+We will develop an easier method, but for now we do the 'long way' of assembling all (most) possible model combinations of the edges and nodes
+
+```{r searching_dags}
+nodes <- c("a","b","c","d","e","f")
+timing <- c(0,-1,-2,-3,-3, 1)
+types <- c("otc","test","ctr","ctr", "ctr","ctr")
+user_mods <- c("a ~ b + d; b ~ c + d", # Model 1
+               "a ~ b + c; b ~ c + d", # Model 2
+               "a ~ b + c + d; b ~ c + d", # Model 3
+               "a ~ b + d; b ~ c + d; f ~ a + b", # Model 4, add later
+               "a ~ b + d; b ~ d; c ~ c", # Model 5
+               "a ~ b + d; b ~ c + d + e; e ~ d" # Model 6
+               )
+
+tic()
+ls_theory2 <- theoRy(nodes = nodes, timing = timing, types=types, include_subsets = TRUE, user_mods=user_mods)
+toc()
+```
 

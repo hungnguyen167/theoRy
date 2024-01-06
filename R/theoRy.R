@@ -16,6 +16,8 @@ source("R/add_compatible.R")
 
 source("R/plot_dag_matrix.R")
 
+source("R/build_set_matrix.R")
+
 theoRy <- function(nodes, types, timing,include_subsets=FALSE, user_mods=NULL){
     causal_matrix <- build_causal_node(nodes, types, timing,include_subsets=include_subsets, 
                                          user_mods=user_mods, return_node=FALSE)

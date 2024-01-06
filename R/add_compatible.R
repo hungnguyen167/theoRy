@@ -1,16 +1,16 @@
 library(ggdag)
 library(dagitty)
 require(data.table)
+
 unq_nodes_detect <- function(row, additional_args){
     fvector <- strsplit(as.character(row[1]), ",")[[1]]
     dag_args <- lapply(fvector, as.formula)
     dag <- do.call(dagify, c(dag_args, additional_args))
-    unq_nodes <- unique(c(edges(dag)$v, edges(dag)$w))
-    row['nodes'] <- capture.output(unq_nodes)
-    return(row)
+    unq_nodes <- paste(unique(c(edges(dag)$v, edges(dag)$w)), collapse="_")
+    return(unq_nodes)
 }
 
-add_mas <- function(row, additional_args, adjusted=FALSE, unq_Xs=NULL) {
+add_mas <- function(row, additional_args, adjusted=FALSE, unq_Xs=NULL, return_string=FALSE) {
     fvector <- strsplit(as.character(row[1]), ",")[[1]]
     dag_args <- lapply(fvector, as.formula)
     dag <- do.call(dagify, c(dag_args, additional_args))
@@ -36,7 +36,12 @@ add_mas <- function(row, additional_args, adjusted=FALSE, unq_Xs=NULL) {
         } 
         else{
             mas_output <- capture.output(mas)
-            return(mas_output)
+            if(return_string){
+                return(paste(mas_output, collapse = ","))
+            }
+            else{
+                return(mas_output)
+            }
         }
     }
     
@@ -64,8 +69,6 @@ add_compatible <- function(formula_matrix, effect="direct",
     }
     ref_adj <- mas[[ref_mod]]
     cmp_adj <- mas[-ref_mod]
-    ctr <- 1
-    ref_adj_new <- list()
     for (i in seq_along(ref_adj)){
         ref_adj[[i]] <- gsub("\\{|\\}|\\s", "", ref_adj[[i]])
     }
@@ -73,15 +76,15 @@ add_compatible <- function(formula_matrix, effect="direct",
         cmp_adj[[i]] <- gsub("\\{|\\}|\\s", "",cmp_adj[[i]])
     }
     ls_cmp <- list()
-    
+    ctr <- 1
     for (i in seq_along(cmp_adj)){
         if (ref_mod==ctr){
             ctr = ctr+1
         }
-        identical <-  mapply(function(x, y) identical(x, y), ref_adj, cmp_adj[[i]])
-        if(any(identical==TRUE)){
+        identical <-  sapply(ref_adj, function(x) any(x %in% cmp_adj[[i]]))
+        if(any(isTRUE(identical))){
             ls_temp <- list(list(cat="compatible", model=ctr))
-            ls_cmp[[i]] <- append(ls_cmp, ls_temp)
+            ls_cmp <- append(ls_cmp, ls_temp)
         } else {
             ls_temp <- list(list(cat="incompatible", model=ctr))
             ls_cmp <- append(ls_cmp, ls_temp)
@@ -93,16 +96,16 @@ add_compatible <- function(formula_matrix, effect="direct",
     formula_cmp <- formula_matrix[-ref_mod]
     formula_cmp$test_compatible <- unlist(lapply(ls_cmp, function(sublist) sublist$cat))
     cmp_matrix <- rbind(formula_ref, formula_cmp)
-    ls_eq_nodes <- lapply(split(cmp_matrix, by="model"), unq_nodes_detect, additional_args)
-    cmp_matrix <- rbindlist(ls_eq_nodes)
-    
+    cmp_matrix$unq_nodes <- lapply(cmp_matrix$formula, unq_nodes_detect,additional_args)
+    ref_unq_nodes <- unlist(cmp_matrix[test_compatible=="reference model", "unq_nodes"])
     cmp_matrix <- cmp_matrix %>%
         as_tibble() %>%
         arrange(model) %>%
         mutate(
             full_model_compatible = case_when(
                 test_compatible == "reference model" ~ "reference model",
-                test_compatible  == "compatible"  & correct_test == "yes" ~ "compatible",
+                test_compatible != "reference model" & 
+                    unq_nodes  == ref_unq_nodes  & correct_test == "yes" ~ "compatible",
                 TRUE ~ "incompatible"
             )
         ) 

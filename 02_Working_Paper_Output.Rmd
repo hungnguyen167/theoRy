@@ -72,10 +72,18 @@ ls_theory$causal_matrix <- ls_theory$causal_matrix %>%
 ls_theory$formula_matrix <- build_formula_matrix(ls_theory$causal_matrix)
 
 ```
+### Table 2
+
+```{r t2}
+Table_2 <- subset(ls_theory$causal_matrix, model %in% c(1,3,4,5), select = c(from, to, timing_from, timing_to, model))
+
+write.csv(Table_2, here::here("Results", "Table_2.csv"), row.names = F)
+```
+
 ### Compare Models
 
 ```{r models}
-cmp_matrix <- add_compatible(ls_theory$formula_matrix, ref_mod = 1) 
+cmp_matrix <- add_compatible(ls_theory$formula_matrix, ref_mod = 1)
 
 ## Change ref_mod to whichever is your reference model (using base_mod and model variable in the formula matrix)
 ```
@@ -134,11 +142,11 @@ Here we focus on test_compatible as the outcome (= 1)
 We use cmp_matrix to get this information
 
 ```{r build_set_matrix}
-set_matrix <- build_set_matrix(ls_theory$causal_matrix)
+set_matrix <- build_set_matrix(ls_theory$causal_matrix, cmp_matrix = cmp_matrix)
 
 # think about whether we want model numbers in or not, just remove by hand here
 
-set_matrix_nomod <- dplyr::select(set_matrix, -model)
+set_matrix_c <- dplyr::select(set_matrix, -model)
 ```
 
 
@@ -149,9 +157,9 @@ set_matrix_nomod <- dplyr::select(set_matrix, -model)
 This can help us understand the role of single components. However, for most causal models a single component is rarely alone so important. For example a node often requires specific edges before it becomes important (e.g., becomes a confounder or collider)
 
 ```{r qca}
-#test <- truthTable(set_matrix, "outcome")
+set_truth <- truthTable(set_matrix, "outcome")
 
-pof(setms = select(set_matrix, -c(model,outcome)), outcome = "outcome", data = set_matrix)
+set_pof <- pof(setms = select(set_matrix, -c(model,outcome)), outcome = "outcome", data = set_matrix)
 
 # try option relation = "sufficiency"
 
@@ -169,105 +177,21 @@ Looking only positive outcomes (outcome = 1/MAS = {X1}), this procedure tries to
 
 ```{r minimize}
 
-min_results <- minimize(set_matrix_nomod, details = TRUE, outcome = "outcome")
+min_results <- minimize(set_matrix_c, details = TRUE, outcome = "outcome")
 
 ```
 
 
 #### Subsets
 
+*inclN* = inclusion = what percent of all models have outcome (Y = 1) and this component (X = 1)
+*covN* = necessity coverage = what percent of all models with this component (X = 1) have the outcome (Y = 1)
+*RoN* = relevence of necessity = is a necessary condition trivial
 ```{r qca}
-superSubset(as.data.frame(causal_matrix_transf_X1), outcome = "outcome")
+s_subset <- superSubset(set_matrix_c, outcome = "outcome")
 ```
 
-                                      inclN   RoN   covN  
---------------------------------------------------------- 
- 1  X1_Xtest                          1.000  0.588  0.257 
- 2  X1_Y                              1.000  0.588  0.257 
- 3  X1                                1.000  0.034  0.129 
- 4  Xtest                             1.000  0.000  0.125 
- 5  Xtest_Y                           1.000  0.000  0.125 
- 6  Y                                 1.000  0.000  0.125 
- 7  X1_Xtest*X1_Y                     1.000  0.865  0.514 
- 8  X1_Xtest*X1                       1.000  0.588  0.257 
- 9  X1_Xtest*Xtest                    1.000  0.588  0.257 
-10  X1_Xtest*Xtest_Y                  1.000  0.588  0.257 
-11  X1_Xtest*Y                        1.000  0.588  0.257 
-12  X1_Y*X1                           1.000  0.588  0.257 
-13  X1_Y*Xtest                        1.000  0.588  0.257 
-14  X1_Y*Xtest_Y                      1.000  0.588  0.257 
-15  X1_Y*Y                            1.000  0.588  0.257 
-16  X1*Xtest                          1.000  0.034  0.129 
-17  X1*Xtest_Y                        1.000  0.034  0.129 
-18  X1*Y                              1.000  0.034  0.129 
-19  Xtest*Xtest_Y                     1.000  0.000  0.125 
-20  Xtest*Y                           1.000  0.000  0.125 
-21  Xtest_Y*Y                         1.000  0.000  0.125 
-22  X1_Xtest*X1_Y*X1                  1.000  0.865  0.514 
-23  X1_Xtest*X1_Y*Xtest               1.000  0.865  0.514 
-24  X1_Xtest*X1_Y*Xtest_Y             1.000  0.865  0.514 
-25  X1_Xtest*X1_Y*Y                   1.000  0.865  0.514 
-26  X1_Xtest*X1*Xtest                 1.000  0.588  0.257 
-27  X1_Xtest*X1*Xtest_Y               1.000  0.588  0.257 
-28  X1_Xtest*X1*Y                     1.000  0.588  0.257 
-29  X1_Xtest*Xtest*Xtest_Y            1.000  0.588  0.257 
-30  X1_Xtest*Xtest*Y                  1.000  0.588  0.257 
-31  X1_Xtest*Xtest_Y*Y                1.000  0.588  0.257 
-32  X1_Y*X1*Xtest                     1.000  0.588  0.257 
-33  X1_Y*X1*Xtest_Y                   1.000  0.588  0.257 
-34  X1_Y*X1*Y                         1.000  0.588  0.257 
-35  X1_Y*Xtest*Xtest_Y                1.000  0.588  0.257 
-36  X1_Y*Xtest*Y                      1.000  0.588  0.257 
-37  X1_Y*Xtest_Y*Y                    1.000  0.588  0.257 
-38  X1*Xtest*Xtest_Y                  1.000  0.034  0.129 
-39  X1*Xtest*Y                        1.000  0.034  0.129 
-40  X1*Xtest_Y*Y                      1.000  0.034  0.129 
-41  Xtest*Xtest_Y*Y                   1.000  0.000  0.125 
-42  X1_Xtest*X1_Y*X1*Xtest            1.000  0.865  0.514 
-43  X1_Xtest*X1_Y*X1*Xtest_Y          1.000  0.865  0.514 
-44  X1_Xtest*X1_Y*X1*Y                1.000  0.865  0.514 
-45  X1_Xtest*X1_Y*Xtest*Xtest_Y       1.000  0.865  0.514 
-46  X1_Xtest*X1_Y*Xtest*Y             1.000  0.865  0.514 
-47  X1_Xtest*X1_Y*Xtest_Y*Y           1.000  0.865  0.514 
-48  X1_Xtest*X1*Xtest*Xtest_Y         1.000  0.588  0.257 
-49  X1_Xtest*X1*Xtest*Y               1.000  0.588  0.257 
-50  X1_Xtest*X1*Xtest_Y*Y             1.000  0.588  0.257 
-51  X1_Xtest*Xtest*Xtest_Y*Y          1.000  0.588  0.257 
-52  X1_Y*X1*Xtest*Xtest_Y             1.000  0.588  0.257 
-53  X1_Y*X1*Xtest*Y                   1.000  0.588  0.257 
-54  X1_Y*X1*Xtest_Y*Y                 1.000  0.588  0.257 
-55  X1_Y*Xtest*Xtest_Y*Y              1.000  0.588  0.257 
-56  X1*Xtest*Xtest_Y*Y                1.000  0.034  0.129 
-57  X1_Xtest*X1_Y*X1*Xtest*Xtest_Y    1.000  0.865  0.514 
-58  X1_Xtest*X1_Y*X1*Xtest*Y          1.000  0.865  0.514 
-59  X1_Xtest*X1_Y*X1*Xtest_Y*Y        1.000  0.865  0.514 
-60  X1_Xtest*X1_Y*Xtest*Xtest_Y*Y     1.000  0.865  0.514 
-61  X1_Xtest*X1*Xtest*Xtest_Y*Y       1.000  0.588  0.257 
-62  X1_Y*X1*Xtest*Xtest_Y*Y           1.000  0.588  0.257 
-63  X1_Xtest*X1_Y*X1*Xtest*Xtest_Y*Y  1.000  0.865  0.514 
-64  ~X1_X2 + X2                       1.000  0.000  0.125 
-65  ~X1_X3 + X3                       1.000  0.000  0.125 
-66  ~X1_X4 + X4                       1.000  0.000  0.125 
-67  ~X2_X3 + X2                       1.000  0.000  0.125 
-68  ~X2_X3 + X3                       1.000  0.000  0.125 
-69  ~X2_Xtest + ~X2_Y                 1.000  0.277  0.165 
-70  ~X2_Xtest + X2                    1.000  0.000  0.125 
-71  ~X2_Y + X2                        1.000  0.000  0.125 
-72  ~X2_X4 + X2                       1.000  0.000  0.125 
-73  ~X2_X4 + X4                       1.000  0.000  0.125 
-74  ~X3_Xtest + ~X3_Y                 1.000  0.278  0.165 
-75  ~X3_Xtest + X3                    1.000  0.000  0.125 
-76  ~X3_Y + X3                        1.000  0.000  0.125 
-77  ~X3_X4 + X3                       1.000  0.000  0.125 
-78  ~X3_X4 + X4                       1.000  0.000  0.125 
-79  ~Xtest_X4 + X4                    1.000  0.000  0.125 
-80  ~Y_X4 + X4                        1.000  0.000  0.125 
-81  X2 + X3                           1.000  0.000  0.125 
-82  X2 + X4                           1.000  0.000  0.125 
-83  X3 + X4                           1.000  0.000  0.125 
-84  ~X2_X3 + ~X2_Xtest + ~X3_Y        1.000  0.135  0.141 
-85  ~X2_X3 + ~X2_Y + ~X3_Xtest        1.000  0.135  0.141 
---------------------------------------------------------- 
+ 
 
 
 ## Comparing DAGs

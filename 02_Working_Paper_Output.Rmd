@@ -34,6 +34,8 @@ user_mods <- c("a ~ b + d; b ~ c + d", # Model 1
 tic()
 ls_theory <- theoRy(nodes = nodes, timing = timing, types=types, include_subsets = TRUE, user_mods=user_mods)
 toc()
+## Can run this instead of the chunk below. Numbering is also now correct, unless added later with find_add_models
+new_ls_theory <- find_add_models(ls_theory = ls_theory, on_ls=TRUE, add_nodes = list(var_names = "f", timing = 1, types = "ctr", node_names = "X4"), user_mods = c("a ~ b + d; b ~ c + d; f ~ a + b"))
 ```
 
 ### Add Model 4

@@ -15,14 +15,14 @@ remove_redundant <- function(nested_dt){
 match_base <- function(nested_dt, nested_base) {
     temp <- copy(nested_dt)
     temp[,model:=NULL]
-    temp <- temp[order(from,to)]
+    setorder(temp, from, to)
     ident <- ifelse(identical(temp, nested_base),1,0)
     return(ident)
 }
 
 
 dt_to_string <- function(dt) {
-    dt[order(c("from", "to"))]
+    setorder(dt, from, to)
     dt[,model:=NULL]
     return(dt)
 }
@@ -194,7 +194,7 @@ build_causal_node <- function(nodes, types, timing, user_mods=NULL,
             # Display a warning message
             message("Option include_subsets is set to true.")
             message("The size of the matrix could get exponentially larger with more variables") 
-            message("Do you want to proceed or set include_subsets to FALSE?")
+            message("Do you want to proceed (yes) or set include_subsets to FALSE (no)?")
             
             response <- tolower(readline(prompt = "Enter 'yes' or 'no': "))
             
@@ -268,7 +268,7 @@ build_causal_node <- function(nodes, types, timing, user_mods=NULL,
             for (i in seq_along(ls_base)){
                 b_t <- copy(ls_base[[i]])
                 b_t[, model:=NULL]
-                b_t <- b_t[order(from,to)]
+                setorder(b_t, from, to)
                 match_ls_temp <- lapply(split(causal_matrix, by = "model"), match_base,
                                    b_t)
                 user_mod_true <- as.numeric(names(match_ls_temp[match_ls_temp==1]))
@@ -277,6 +277,7 @@ build_causal_node <- function(nodes, types, timing, user_mods=NULL,
             }
 
             causal_matrix[, user_mod := 0]
+            causal_matrix[, add_mod_n := 0]
             for (i in seq_along(match_res)){
                 match_res_temp <- match_res[[i]]
                 
@@ -289,6 +290,7 @@ build_causal_node <- function(nodes, types, timing, user_mods=NULL,
                         b_t <- copy(ls_base[[i]])
                         b_t[, user_mod:=1]
                         b_t[, model := max(causal_matrix$model) + 1]
+                        b_t[, add_mod_n := i]
                         causal_matrix <- rbind(causal_matrix, b_t)
                     }
                     else if (response=="no"){
@@ -299,6 +301,7 @@ build_causal_node <- function(nodes, types, timing, user_mods=NULL,
                     }
                 }
                 else{
+                    causal_matrix[model==match_res_temp$idx, add_mod_n := i]
                     cat("Model: '", user_mods[i], "' found in the matrix.\n")
                 }
             }
@@ -308,8 +311,9 @@ build_causal_node <- function(nodes, types, timing, user_mods=NULL,
         }
         setorder(causal_matrix, -user_mod, model)
         causal_matrix[ , model:= .GRP, by=model]
-        
-        
+        causal_matrix[, model:= ifelse(add_mod_n !=0, add_mod_n, model)]
+        setorder(causal_matrix, -user_mod, model)
+        causal_matrix[, add_mod_n := NULL]
         return(causal_matrix)
     }
         
@@ -326,7 +330,7 @@ message("function build_causal_matrix loaded")
 #base_mod <- "d ~ a +c; c~a"
 
 #tic()
-#causal_matrix <- build_causal_matrix(nodes, types, timing, base_mod, include_subsets=TRUE,
-                                   #  return_node=FALSE)
+#causal_matrix <- build_causal_node(nodes = nodes, timing = timing, 
+ #                                   types=types, include_subsets = TRUE, user_mods=user_mods)
 #toc()
 

@@ -1,5 +1,6 @@
 require(data.table)
 require(tidyverse)
+source("R/build_formula_matrix.R")
 
 match_base <- function(nested_dt, nested_base) {
     temp <- copy(nested_dt)
@@ -10,7 +11,28 @@ match_base <- function(nested_dt, nested_base) {
 }
 
 
-find_add_models <- function(causal_matrix, node_timing, user_mods){
+find_add_models <- function(ls_theory=NULL, causal_matrix=NULL, node_timing=NULL, user_mods, 
+                            on_ls=FALSE, add_nodes=NULL){
+    if(is.null(user_mods)){
+        stop("User-defined models must be provided!")
+    }
+    if(isFALSE(on_ls)){
+        if(is.null(causal_matrix) | is.null(node_timing)){
+            stop("Causal matrix and node timing must be provided if on_ls=FALSE")
+        }
+    } else{
+        if(is.null(ls_theory) | !is.list(ls_theory)){
+            stop("ls_theory must be a list that contains at least the causal matrix and the node timing matrix!")
+        }
+        causal_matrix <- ls_theory$causal_matrix
+        node_timing <- ls_theory$node_timing
+        
+    }
+    if(!is.null(add_nodes)){
+        node_timing <- node_timing %>%
+            add_row(var_name = add_nodes$var_names, timing = add_nodes$timing, 
+                    type = add_nodes$types, node_name = add_nodes$node_names)
+    }
     base_matrix <- tibble()
     mod_ctr <- 1
     for (mod in user_mods){
@@ -65,7 +87,7 @@ find_add_models <- function(causal_matrix, node_timing, user_mods){
     }
     for (i in seq_along(match_res)){
         match_res_temp <- match_res[[i]]
-        
+        formula_new <- list()
         if(length(match_res_temp$idx) ==0){
             cat("Model: '", user_mods[i], "' not found in the causal matrix. \n")
             message("Do you want to add this to the matrix?")
@@ -75,6 +97,11 @@ find_add_models <- function(causal_matrix, node_timing, user_mods){
                 b_t <- copy(ls_base[[i]])
                 b_t[, user_mod:=1]
                 b_t[, model := max(causal_matrix$model) + 1]
+                if(isTRUE(on_ls)){
+                    formula_temp <- build_formula_matrix(b_t)
+                    formula_new[[i]] <- formula_temp
+                }
+                
                 causal_matrix <- rbind(causal_matrix, b_t)
             }
             else if (response=="no"){
@@ -88,9 +115,22 @@ find_add_models <- function(causal_matrix, node_timing, user_mods){
             cat("Model: '", user_mods[i], "' found in the matrix.\n")
         }
     }
+    
     all_idx <- unname(do.call(c, lapply(match_res, function(x) x$idx)))
     causal_matrix[, user_mod:= ifelse(model %in% all_idx | user_mod==1, 1, 0)]
-    return(causal_matrix)
+    
+    
+    if(isTRUE(on_ls)){
+        formula_dt <- rbindlist(formula_new)
+        formula_matrix <- rbind(ls_theory$formula_matrix, formula_dt)
+        new_ls_theory <- list(causal_matrix=causal_matrix, node_timing=node_timing, 
+                              formula_matrix=formula_matrix)
+        return(new_ls_theory)
+    }
+    else{
+        return(causal_matrix)
+    }
+   
 }
 
 

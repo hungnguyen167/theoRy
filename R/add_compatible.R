@@ -67,6 +67,10 @@ add_compatible <- function(formula_matrix, effect="direct",
     else {
         ref_mod = which(formula_matrix[,model]==ref_mod)
     }
+    ref_correct <- formula_matrix[formula_matrix[,model]==ref_mod, "correct_test"]
+    if(ref_correct == "no"){
+        warning("Reference model is not correctly adjusted. This is not recommended!")
+    }
     ref_adj <- mas[[ref_mod]]
     cmp_adj <- mas[-ref_mod]
     for (i in seq_along(ref_adj)){

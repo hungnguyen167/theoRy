@@ -1,5 +1,5 @@
-library(ggdag)
-library(dagitty)
+require(ggdag)
+require(dagitty)
 require(data.table)
 
 unq_nodes_detect <- function(row, additional_args){

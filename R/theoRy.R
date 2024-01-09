@@ -10,11 +10,10 @@ source("R/find_add_models.R")
 
 source("R/build_formula_matrix.R")
 
-source("R/build_dag_matrix.R")
 
 source("R/add_compatible.R")
 
-source("R/plot_dag_matrix.R")
+source("R/plot_dag.R")
 
 source("R/build_set_matrix.R")
 

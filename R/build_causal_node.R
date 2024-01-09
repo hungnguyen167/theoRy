@@ -14,8 +14,8 @@ remove_redundant <- function(nested_dt){
 
 match_base <- function(nested_dt, nested_base) {
     temp <- copy(nested_dt)
-    temp[,model:=NULL]
-    setorder(temp, from, to)
+    temp <- temp[, .(from, to, direction)]
+    setorder(temp, from, to, direction)
     ident <- ifelse(identical(temp, nested_base),1,0)
     return(ident)
 }
@@ -135,27 +135,27 @@ build_causal_node <- function(nodes, types, timing, user_mods=NULL,
                            ". Timing = ", no_Xtest_Y[i,"timing"]))
         }
         ## create node matrix without var_labels
-        node_timing <- node_timing %>%
-            select(-var_name)
-        
+
         ## Create tables for 'from' and 'to' nodes and join with node_timing for timings and types
         from_tbl <- node_timing %>%
+            select(-var_name) %>%
             expand_grid(node_from=node_timing$node_name,node_to=node_timing$node_name) %>%
             select(-node_name) %>%
             rename(node_name=node_from) %>%
             select(node_name) %>%
-            left_join(node_timing, by="node_name") %>%
+            left_join(select(node_timing,-var_name), by="node_name") %>%
             rename(
                 timing_from = timing,
                 node_from = node_name,
                 type_from = type
             ) 
         to_tbl <- node_timing %>%
+            select(-var_name) %>%
             expand_grid(node_from=node_timing$node_name,node_to=node_timing$node_name) %>%
             select(-node_name) %>%
             rename(node_name=node_to) %>%
             select(node_name) %>%
-            left_join(node_timing, by="node_name") %>%
+            left_join(select(node_timing,-var_name), by="node_name") %>%
             rename(
                 timing_to = timing,
                 node_to = node_name,
@@ -215,8 +215,7 @@ build_causal_node <- function(nodes, types, timing, user_mods=NULL,
                 stop("Invalid response. Please enter 'yes' or 'no'.\n")
             }
             
-        }
-        else{
+        } else{
             two_opt <- pairs_tbl %>%
                 filter(!grepl("Xtest_Y|^(X\\d+)_\\1$", pairs))
             one_opt <- pairs_tbl %>%
@@ -244,12 +243,12 @@ build_causal_node <- function(nodes, types, timing, user_mods=NULL,
             group_by(model) %>%
             filter(any(to == "Y" & str_detect(from, "Xtest"))) %>%
             ungroup() %>%
-            left_join(node_timing, by= join_by(from==node_name)) %>%
+            left_join(select(node_timing,-var_name), by= join_by(from==node_name)) %>%
             rename(
                 timing_from = timing,
                 type_from = type
             ) %>%
-            left_join(node_timing, by=join_by(to==node_name))%>%
+            left_join(select(node_timing,-var_name), by=join_by(to==node_name))%>%
             rename(
                 timing_to = timing,
                 type_to = type
@@ -262,13 +261,14 @@ build_causal_node <- function(nodes, types, timing, user_mods=NULL,
         dt_strings <- paste0(lapply(split(causal_matrix, by="model"), dt_to_string))
         unq_dts <- which(!duplicated(dt_strings))
         causal_matrix <- causal_matrix[model %in% unq_dts]
+        causal_matrix[ , model:= .GRP, by=model]
         if (!is.null(user_mods)){
             ls_base <- split(base_matrix,by="model")
             match_res <- list()
             for (i in seq_along(ls_base)){
                 b_t <- copy(ls_base[[i]])
-                b_t[, model:=NULL]
-                setorder(b_t, from, to)
+                b_t <- b_t[ ,.(from, to, direction)]
+                setorder(b_t, from, to, direction)
                 match_ls_temp <- lapply(split(causal_matrix, by = "model"), match_base,
                                    b_t)
                 user_mod_true <- as.numeric(names(match_ls_temp[match_ls_temp==1]))
@@ -277,7 +277,7 @@ build_causal_node <- function(nodes, types, timing, user_mods=NULL,
             }
 
             causal_matrix[, user_mod := 0]
-            causal_matrix[, add_mod_n := 0]
+            causal_matrix[, prev_mod := model]
             for (i in seq_along(match_res)){
                 match_res_temp <- match_res[[i]]
                 
@@ -289,8 +289,10 @@ build_causal_node <- function(nodes, types, timing, user_mods=NULL,
                         message("Added")
                         b_t <- copy(ls_base[[i]])
                         b_t[, user_mod:=1]
-                        b_t[, model := max(causal_matrix$model) + 1]
-                        b_t[, add_mod_n := i]
+                        b_t[, `:=`(model = i, prev_mod=i)]
+                        causal_matrix[, model:= ifelse(model >= i, 
+                                                       model+1, 
+                                                       model)]
                         causal_matrix <- rbind(causal_matrix, b_t)
                     }
                     else if (response=="no"){
@@ -301,19 +303,26 @@ build_causal_node <- function(nodes, types, timing, user_mods=NULL,
                     }
                 }
                 else{
-                    causal_matrix[model==match_res_temp$idx, add_mod_n := i]
-                    cat("Model: '", user_mods[i], "' found in the matrix.\n")
+                    cat("Model: '", user_mods[i], "' found in the matrix. Position:", match_res_temp$idx, ".\n")
+                    if(match_res_temp$idx != i){
+                        cat("Swap model number", match_res_temp$idx,"with model number", i, ".\n")
+                        cat("Swapped.\n")
+                        causal_matrix[,model:=fifelse(model==match_res_temp$idx,i,
+                                                      fifelse(model==i, match_res_temp$idx,
+                                                              model))]
+                        causal_matrix[,user_mod:=fifelse(model==i, 1, user_mod)]
+                 
+                     } else{
+                        cat("Asserted position is equal to current position. Skipped.\n")
+                    }
+
                 }
             }
-            all_idx <- unname(do.call(c, lapply(match_res, function(x) x$idx)))
-            causal_matrix[, user_mod:= ifelse(model %in% all_idx | user_mod==1, 1, 0)]
-            
+
         }
+
         setorder(causal_matrix, -user_mod, model)
-        causal_matrix[ , model:= .GRP, by=model]
-        causal_matrix[, model:= ifelse(add_mod_n !=0, add_mod_n, model)]
-        setorder(causal_matrix, -user_mod, model)
-        causal_matrix[, add_mod_n := NULL]
+        causal_matrix[, prev_mod := NULL]
         return(causal_matrix)
     }
         

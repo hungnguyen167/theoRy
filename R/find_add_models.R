@@ -4,15 +4,21 @@ source("R/build_formula_matrix.R")
 
 match_base <- function(nested_dt, nested_base) {
     temp <- copy(nested_dt)
-    temp[,model:=NULL]
-    setorder(temp, from, to)
+    temp <- temp[, .(from, to, direction)]
+    setorder(temp, from, to, direction)
     ident <- ifelse(identical(temp, nested_base),1,0)
     return(ident)
 }
 
 
-find_add_models <- function(ls_theory=NULL, causal_matrix=NULL, node_timing=NULL, user_mods, 
-                            on_ls=FALSE, add_nodes=NULL){
+find_add_models <- function(ls_theory=NULL, 
+                            causal_matrix=NULL, 
+                            node_timing=NULL, 
+                            user_mods, 
+                            on_ls=FALSE, 
+                            add_nodes=NULL, 
+                            assert_mod_num=NULL){
+
     if(is.null(user_mods)){
         stop("User-defined models must be provided!")
     }
@@ -22,41 +28,68 @@ find_add_models <- function(ls_theory=NULL, causal_matrix=NULL, node_timing=NULL
         }
     } else{
         if(is.null(ls_theory) | !is.list(ls_theory)){
-            stop("ls_theory must be a list that contains at least the causal matrix and the node timing matrix!")
+            stop("ls_theory must be a list that contains at least the causal matrix, the formula matrix, and the node timing matrix!")
         }
-        causal_matrix <- ls_theory$causal_matrix
-        node_timing <- ls_theory$node_timing
+        causal_matrix <- copy(ls_theory$causal_matrix)
+        node_timing <- copy(ls_theory$node_timing)
+        if(!"user_mod" %in% colnames(causal_matrix)){
+            causal_matrix[,user_mod:=0]
+        }
+        formula_matrix <- copy(ls_theory$formula_matrix)
         
     }
     if(!is.null(add_nodes)){
         node_timing <- node_timing %>%
-            add_row(var_name = add_nodes$var_names, timing = add_nodes$timing, 
-                    type = add_nodes$types, node_name = add_nodes$node_names)
+            mutate(
+                unq_indentifier = paste(var_name, timing, type, node_name, sep="_"),
+                timing = as.numeric(timing)
+            )
+        compare_ident <- unlist(node_timing$unq_indentifier)
+        for (i in seq_along(add_nodes)){
+            unq_identifier <- paste(add_nodes[[i]], collapse="_")
+            match_ident <- any(unq_identifier %in% compare_ident)
+            if(isTRUE(match_ident)){
+                cat("The unique identifier",unq_identifier, "is already in the node_timing matrix!\n")
+            }
+            else{
+                node_timing <- node_timing %>%
+                    add_row(var_name = add_nodes[[i]]["var_name"], timing = as.numeric(add_nodes[[i]]["timing"]), 
+                            type = add_nodes[[i]]["type"], node_name = add_nodes[[i]]["node_name"])
+            }
+        }
+        node_timing <- node_timing %>%
+            select(-unq_indentifier)
     }
     base_matrix <- tibble()
-    mod_ctr <- 1
-    for (mod in user_mods){
-        ls_formulas <- strsplit(mod, "\\;")[[1]]
-        for (formula in ls_formulas){
-            if (grepl("[ A-Za-z]~[ A-Za-z]", formula)){
-                node_to = strsplit(formula, "\\~")[[1]][1]
-                node_froms = strsplit(strsplit(formula, "~")[[1]][2],"\\+")[[1]]
+    for (i in seq_along(user_mods)){
+        ls_formulas <- strsplit(user_mods[[i]], "\\;")[[1]]
+        for (j in seq_along(ls_formulas)){
+            if (grepl("[ A-Za-z]~[ A-Za-z]", ls_formulas[[j]])){
+                node_to = strsplit(ls_formulas[[j]], "\\~")[[1]][1]
+                node_froms = strsplit(strsplit(ls_formulas[[j]], "~")[[1]][2],"\\+")[[1]]
                 for (node_from in node_froms){
-                    df_temp <- tibble(from_var = node_from, to_var=node_to, 
-                                      direction = "->", model = mod_ctr)
+                    df_temp <- tibble(from_var = node_from, 
+                                      to_var=node_to, 
+                                      direction = "->", 
+                                      model = ifelse(!is.null(assert_mod_num),
+                                                     assert_mod_num[i],
+                                                     i))
                     base_matrix <- bind_rows(base_matrix, df_temp)
                 }
             }
-            else if (grepl("[ A-Za-z]~~[ A-Za-z]", formula)){
-                node_from = strsplit(formula, "\\~\\~")[[1]][1]
-                node_to = strsplit(formula, "\\~\\~")[[1]][2]
-                df_temp <- tibble(from_var = node_from, to_var=node_to, 
-                                  direction = "<->", model=mod_ctr)
+            else if (grepl("[ A-Za-z]~~[ A-Za-z]", ls_formulas[[j]])){
+                node_from = strsplit(ls_formulas[[j]], "\\~\\~")[[1]][1]
+                node_to = strsplit(ls_formulas[[j]], "\\~\\~")[[1]][2]
+                df_temp <- tibble(from_var = node_from, 
+                                  to_var=node_to, 
+                                  direction = "<->", 
+                                  model=ifelse(!is.null(assert_mod_num),
+                                                                  assert_mod_num[i],
+                                                                  i))
                 base_matrix <- bind_rows(base_matrix, df_temp)
                 
             }
         }
-        mod_ctr <- mod_ctr+1
     }
     
     
@@ -67,27 +100,29 @@ find_add_models <- function(ls_theory=NULL, causal_matrix=NULL, node_timing=NULL
         left_join(node_timing, by=c("to_var"="var_name")) %>%
         rename(timing_to = timing, type_to=type, to=node_name) %>% 
         mutate(
-            component = ifelse(from!=to, paste(from,to,sep="_"), from) 
+            component = ifelse(from!=to, paste(from,to,sep="_"), from)
         ) %>%
         select(from, to, direction, model, component, timing_from, type_from, timing_to, type_to)
     setDT(base_matrix)
+    
     ls_base <- split(base_matrix,by="model")
     match_res <- list()
-    new_causal <- copy(causal_matrix)
-    new_causal[, user_mod := NULL]
+    
     for (i in seq_along(ls_base)){
         b_t <- copy(ls_base[[i]])
-        b_t[, model:=NULL]
-        setorder(b_t, from, to)
-        match_ls_temp <- lapply(split(new_causal, by = "model"), match_base,
+        b_t <- b_t[, .(from, to, direction)]
+        setorder(b_t, from, to, direction)
+        match_ls_temp <- lapply(split(causal_matrix, by = "model"), match_base,
                                 b_t)
         user_mod_true <- as.numeric(names(match_ls_temp[match_ls_temp==1]))
         match_res_temp <- list(idx = unlist(user_mod_true), user_mod_n = i)
         match_res[[i]] <- match_res_temp
     }
+
+    causal_matrix[,prev_mod:=model]
+    formula_new <- list()
     for (i in seq_along(match_res)){
         match_res_temp <- match_res[[i]]
-        formula_new <- list()
         if(length(match_res_temp$idx) ==0){
             cat("Model: '", user_mods[i], "' not found in the causal matrix. \n")
             message("Do you want to add this to the matrix?")
@@ -95,14 +130,28 @@ find_add_models <- function(ls_theory=NULL, causal_matrix=NULL, node_timing=NULL
             if(response=="yes"){
                 message("Added")
                 b_t <- copy(ls_base[[i]])
-                b_t[, user_mod:=1]
-                b_t[, model := max(causal_matrix$model) + 1]
-                if(isTRUE(on_ls)){
+                
+                if(!is.null(assert_mod_num)){
+                    b_t[,`:=`(prev_mod=max(causal_matrix$model)+1,user_mod=1)]
+                    setorder(b_t, from, to)
+                    causal_matrix[, model:= ifelse(model < assert_mod_num[[i]],
+                                                   model,
+                                                   model+1)]
+                    causal_matrix <- rbind(causal_matrix, b_t)
+
+                } else{
+                    b_t[, `:=`(model= max(causal_matrix$model)+1,prev_mod=max(causal_matrix$model)+1,user_mod=1)]
+                    setorder(b_t, from, to)
+                    causal_matrix <- rbind(causal_matrix, b_t)
+
+                }
+                
+                if(isTRUE(on_ls) & length(match_res_temp) >0){
                     formula_temp <- build_formula_matrix(b_t)
                     formula_new[[i]] <- formula_temp
                 }
-                
-                causal_matrix <- rbind(causal_matrix, b_t)
+
+               
             }
             else if (response=="no"){
                 "Skipped"
@@ -112,25 +161,64 @@ find_add_models <- function(ls_theory=NULL, causal_matrix=NULL, node_timing=NULL
             }
         }
         else{
-            cat("Model: '", user_mods[i], "' found in the matrix.\n")
+            
+            cat("Model: '", user_mods[i], "' found in the matrix. Position:", match_res_temp$idx, ".\n")
+            if(!is.null(assert_mod_num)){
+                if(match_res_temp$idx != assert_mod_num[[i]]){
+                    cat("Do you want to swap model", match_res_temp$idx,"with model number", assert_mod_num[[i]], "?\n")
+                    response <- tolower(readline(prompt = "Enter 'yes' or 'no': "))
+                    if(response=="yes"){
+                        cat("Swapped.\n")
+                        causal_matrix[,model:=fifelse(model==match_res_temp$idx,assert_mod_num[[i]],
+                                                          fifelse(model==assert_mod_num[[i]], match_res_temp$idx,
+                                                                  model))]
+                        causal_matrix[,user_mod:=fifelse(model==assert_mod_num[[i]], 1, user_mod)]
+                    } else if(response=="no"){
+                        cat("Skipped.\n")
+                    } else{
+                        cat("Invalid response. Moving on.\n")
+                    }
+
+                } else{
+                    cat("Asserted position is equal to current position. Skipped.\n")
+                }
+                
+            }
+            
         }
     }
     
-    all_idx <- unname(do.call(c, lapply(match_res, function(x) x$idx)))
-    causal_matrix[, user_mod:= ifelse(model %in% all_idx | user_mod==1, 1, 0)]
-    
-    
     if(isTRUE(on_ls)){
-        formula_dt <- rbindlist(formula_new)
-        formula_matrix <- rbind(ls_theory$formula_matrix, formula_dt)
+        
+        
+        causal_copy <- copy(causal_matrix)
+        causal_copy[, model_ref:=model]
+        causal_copy <- causal_copy[, .(model_ref, prev_mod)]
+        formula_matrix_m <- formula_matrix[causal_copy, on = .(model = prev_mod), nomatch = NA]
+        formula_matrix_m <- unique(formula_matrix_m, by="formula")
+        formula_matrix_m[, model:=model_ref]
+        formula_matrix_m[, model_ref:=NULL]
+        formula_matrix_m <- formula_matrix_m[!is.na(formula),]
+        if(any(length(match_res_temp)>0)){
+            formula_matrix_add <- rbindlist(formula_new)
+            formula_matrix <- rbind(formula_matrix_m, formula_matrix_add)
+        } else{
+            formula_matrix <- formula_matrix_m
+        }
+        
+        setorder(formula_matrix,-user_mod, model)
+        setorder(causal_matrix,-user_mod, model)
         new_ls_theory <- list(causal_matrix=causal_matrix, node_timing=node_timing, 
                               formula_matrix=formula_matrix)
+        #causal_matrix[, prev_mod:= NULL]
+        
         return(new_ls_theory)
-    }
-    else{
+    } else{
+        #causal_matrix[, prev_mod:= NULL]
+        setorder(causal_matrix, -user_mod, model)
         return(causal_matrix)
     }
-   
+    
 }
 
 

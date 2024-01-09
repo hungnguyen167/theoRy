@@ -49,6 +49,8 @@ add_mas <- function(row, additional_args, adjusted=FALSE, unq_Xs=NULL, return_st
 
 add_compatible <- function(formula_matrix, effect="direct",
                                 ref_mod=NULL){
+    formula_matrix_t <- copy(formula_matrix)
+    setDT(formula_matrix_t)
     additional_args <- list(
         exposure="Xtest",
         outcome="Y"
@@ -57,7 +59,7 @@ add_compatible <- function(formula_matrix, effect="direct",
         effect = "direct"
         warning("Effect not given, use default (direct) instead.")
     }
-    mas <- lapply(formula_matrix$formula, add_mas, additional_args)
+    mas <- lapply(formula_matrix_t$formula, add_mas, additional_args)
 
 
     if (is.null(ref_mod)){
@@ -65,9 +67,9 @@ add_compatible <- function(formula_matrix, effect="direct",
         warning("User did not choose a reference model, default to the first model")
     }
     else {
-        ref_mod = which(formula_matrix[,model]==ref_mod)
+        ref_mod = which(formula_matrix_t[,model]==ref_mod)
     }
-    ref_correct <- formula_matrix[formula_matrix[,model]==ref_mod, "correct_test"]
+    ref_correct <- formula_matrix_t[formula_matrix_t[,model]==ref_mod, "correct_test"]
     if(ref_correct == "no"){
         warning("Reference model is not correctly adjusted. This is not recommended!")
     }
@@ -95,9 +97,9 @@ add_compatible <- function(formula_matrix, effect="direct",
         }
         ctr <- ctr+1
     }
-    formula_ref <- formula_matrix[ref_mod]
+    formula_ref <- formula_matrix_t[ref_mod]
     formula_ref$test_compatible <- "reference model"
-    formula_cmp <- formula_matrix[-ref_mod]
+    formula_cmp <- formula_matrix_t[-ref_mod]
     formula_cmp$test_compatible <- unlist(lapply(ls_cmp, function(sublist) sublist$cat))
     cmp_matrix <- rbind(formula_ref, formula_cmp)
     cmp_matrix$unq_nodes <- lapply(cmp_matrix$formula, unq_nodes_detect,additional_args)

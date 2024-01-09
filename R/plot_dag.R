@@ -1,6 +1,7 @@
 require(tidyverse)
 require(data.table)
-
+require(ggplot2)
+require(ragg)
 build_plot_info <- function(ls_theory) { 
     formula_matrix <- ls_theory$formula_matrix
     node_timing <- ls_theory$node_timing
@@ -97,7 +98,7 @@ build_plot_info <- function(ls_theory) {
 
 
 
-plot_dag_matrix <- function(ls_theory,
+plot_dag <- function(ls_theory,
                             choose_plots = "all", # if not all, must be a vector with model numbers
                             choose_mas ="all",
                             save_path=NULL) {
@@ -111,8 +112,7 @@ plot_dag_matrix <- function(ls_theory,
         if(choose_plots=="all") {
             plots <- as.vector(formula_matrix$model) 
             cat("Plotting all model numbers\n")
-        }
-        else {
+        } else {
             stop("choose_plots must be 'all' or a vector of model numbers\n")
         }
         
@@ -138,23 +138,22 @@ plot_dag_matrix <- function(ls_theory,
             }
         }
         
-    }
-    else if(is.character(choose_mas) & length(choose_mas) > 1){
+    } else if(is.character(choose_mas) & length(choose_mas) > 1){
         cat("Plotting only models with MAS:", paste(choose_mas, collapse="or"), "\n")
         plots_mas <- list()
         for(i in seq_along(mas)){
             have_mas <- any(mas[[i]] %in% choose_mas)
             plots_mas[[i]] <- ifelse(have_mas, i, 0)
         }
-    }
-    else{
+    } else{
         stop("choose_mas must be either 'all' (default) or a vector of chosen MAS to plot\n")
     }
         
     plots_mas <- plots_mas[plots_mas != 0]
     # subset by choose_plots and/or choose_plots_mas
-    formula_matrix <- formula_matrix[formula_matrix$model %in% plots,]
     formula_matrix <- formula_matrix[plots_mas, ]
+    formula_matrix <- formula_matrix[formula_matrix$model %in% plots,]
+    
     
     
     
@@ -163,29 +162,35 @@ plot_dag_matrix <- function(ls_theory,
     if(dist>=0){
         ylim <- c(plot_info$minY-0.25-dist, plot_info$maxY + 0.25)
     } else{
-        ylim <- c(plot_info$minY-0.25, plot_info$maxY + 0.25+dist)
+        ylim <- c(plot_info$minY-0.25, plot_info$maxY + 0.25+abs(dist))
     }
     dag_plots <- list()
-    for (i in seq_along(formula_matrix)){
+    for (i in 1:nrow(formula_matrix)){
         mod = as.numeric(formula_matrix[i, "model"])
-        plot<- ggdag(plot_info$dag_matrix[[i]]) + 
+        plot <- plot_info$dag_matrix[[i]] %>%
+            ggplot(aes(x = x, y = y, xend = xend, yend = yend)) +
+            geom_dag_point(colour="white", na.rm=FALSE) +
+            geom_dag_edges() +
+            geom_dag_text(colour="black", na.rm=FALSE) +
             xlim(xlim)+
             ylim(ylim) +
             annotate("text", label = paste0("MAS = ", paste(mas[as.numeric(formula_matrix$model[formula_matrix$model == i])],
                                                       collapse="|")),
                      x=xlim[2]-0.75, y= ylim[1]+0.15) +
             annotate("text", label=paste0("Model ", formula_matrix$model[formula_matrix$model == i]),
-                     x=xlim[1]+1.0, y = ylim[2] -0.15, size=3)
+                     x=xlim[1]+1.0, y = ylim[2] -0.15, size=7) +
+            theme_dag()
         dag_plots[[i]] <- plot
         }
 
     if(!is.null(save_path)) {
         if(is.vector(choose_plots) & is.numeric(choose_plots)) {
             cat("Saving plots", paste(choose_plots, collapse=","), "to", save_path)
-            for (n in 1:length(formula_matrix$model)) {
-                png(file = paste0("Results/", paste0("model_", n, ".png")), width = 480, height = 240)
-                replayPlot(dag_plots[[n]])
-                dev.off()
+            for (i in seq_along(formula_matrix)) {
+                model_name <- as.numeric(formula_matrix[i,"model"])
+                agg_png(filename = paste0(save_path, "model_", model_name, ".png"), width = 2400, height = 1200, res=360)
+                print(dag_plots[[i]])
+                invisible(dev.off())
             }
         }
     }
@@ -195,4 +200,4 @@ plot_dag_matrix <- function(ls_theory,
     return(dag_plots)
 }
         
-cat("function plot_dag_matrix loaded")
+message("function plot_dag loaded\n")

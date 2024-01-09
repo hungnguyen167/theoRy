@@ -1,5 +1,5 @@
 # build a matrix ready for set theory analysis out of the causal matrix
-require(dyplyr)
+require(dplyr)
 build_set_matrix <- function(causal_matrix,
                              outcome_var="test_compatible",
                              outcome_positive = "compatible", # choose the string that indicates a positive outcome

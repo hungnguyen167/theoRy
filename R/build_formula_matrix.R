@@ -66,13 +66,13 @@ add_mas <- function(row, additional_args, adjusted=FALSE, unq_Xs=NULL, return_st
 }
 
 build_formula_matrix <- function(causal_matrix) {
-    setDT(causal_matrix) # Convert to data.table if not already
-    
+    causal_matrix_t <- copy(causal_matrix) # Convert to data.table if not already
+    setDT(causal_matrix_t)
     # Use lapply to apply the function to each group
-    formula_list <- lapply(split(causal_matrix, by = "model"), create_formula)
+    formula_list <- lapply(split(causal_matrix_t, by = "model"), create_formula)
 
-    formula_matrix <- data.table(formula = unlist(formula_list), model = unique(causal_matrix$model))
-    reduced_matrix <- unique(causal_matrix[, .SD, .SDcols = c("model", "user_mod")])
+    formula_matrix <- data.table(formula = unlist(formula_list), model = unique(causal_matrix_t$model))
+    reduced_matrix <- unique(causal_matrix_t[, .SD, .SDcols = c("model", "user_mod")])
     formula_matrix <- formula_matrix[reduced_matrix, on = "model", nomatch = 0]
     
     # this makes sure that original model numbers are kept

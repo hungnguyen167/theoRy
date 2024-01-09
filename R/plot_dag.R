@@ -103,7 +103,7 @@ plot_dag <- function(ls_theory,
                             choose_mas ="all",
                             save_path=NULL) {
     
-    formula_matrix <- ls_theory$formula_matrix
+    formula_matrix <- copy(ls_theory$formula_matrix)
     plot_info <- build_plot_info(ls_theory)
     if(is.numeric(choose_plots)){
             plots <- as.numeric(formula_matrix$model[formula_matrix$model %in% choose_plots])
@@ -185,8 +185,9 @@ plot_dag <- function(ls_theory,
 
     if(!is.null(save_path)) {
         if(is.vector(choose_plots) & is.numeric(choose_plots)) {
-            cat("Saving plots", paste(choose_plots, collapse=","), "to", save_path)
-            for (i in seq_along(formula_matrix)) {
+            cat("Saving plots", paste(choose_plots, collapse=","), "to", save_path,"\n")
+            for (i in seq_along(dag_plots)) {
+                cat("Saving plot of model", i,"\n")
                 model_name <- as.numeric(formula_matrix[i,"model"])
                 agg_png(filename = paste0(save_path, "model_", model_name, ".png"), width = 2400, height = 1200, res=360)
                 print(dag_plots[[i]])

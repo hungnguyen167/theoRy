@@ -19,60 +19,24 @@ library('QCA')
 
 ### Generate causal and formula matrix
 
-```{r models}
-nodes <- c("a","b","c","d","e")
-timing <- c(0,-1,-3,-3,-2)
-types <- c("otc","test","ctr","ctr", "ctr")
-user_mods <- c("a ~ b + d; b ~ c + d", # Model 1
-               "a ~ b + c; b ~ c + d", # Model 2
-               "a ~ b + c + d; b ~ c + d", # Model 3
-               #"a ~ b + d; b ~ c + d; f ~ a + b", # Model 4, add later
-               "a ~ b + d; b ~ d; c ~ c", # Model 5
-               "a ~ b + d; b ~ c + d + e; e ~ d" # Model 6
+
+```{r six_var_comp}
+nodes <- c("a","b","c","d","e","f")
+timing <- c(0,-1,-2,-3,-3, 1)
+types <- c("otc","test","ctr","ctr", "ctr","ctr")
+user_mods <- c("a ~ b + d; b ~ e + d", # Model 1
+               "a ~ b + e; b ~ e + d", # Model 2
+               "a ~ b + e + d; b ~ e + d", # Model 3
+               "a ~ b + d; b ~ e + d; f ~ a + b", # Model 4
+               "a ~ b + d; b ~ d; e ~ e", # Model 5
+               "a ~ b + d; b ~ d + c + e; c ~ e" # Model 6
                )
 
 tic()
-ls_theory <- theoRy(nodes = nodes, timing = timing, types=types, include_subsets = TRUE, user_mods=user_mods)
+ls_theory2 <- theoRy(nodes = nodes, timing = timing, types=types, include_subsets = TRUE, user_mods=user_mods)
 toc()
-## Can run this instead of the chunk below. Numbering is also now correct, unless added later with find_add_models
-new_ls_theory <- find_add_models(ls_theory = ls_theory, on_ls=TRUE, add_nodes = list(var_names = "f", timing = 1, types = "ctr", node_names = "X4"), user_mods = c("a ~ b + d; b ~ c + d; f ~ a + b"))
-```
 
-### Add Model 4
-
-With X4 in the model, the multiverse is huge. for now we simply add the confounding Model 4 as a single model that might threaten this multiverse for illustrative purposes.
-
-Adding a single model with a new variable requires adjusting the node_timing matrix too (we will update this later)
-
-when theoRy is run the model numbers change
-1 = 3
-2 = 5
-3 = 2
-4 = 6 (after addition)
-5 = 4
-6 = 1
-
-```{r m4}
-# add X4 to node_timing
-ls_theory$node_timing <- ls_theory$node_timing %>% add_row(var_name = "f", timing = 1, type = "ctr", node_name = "X4")
-
-ls_theory$causal_matrix <- find_add_models(causal_matrix = ls_theory$causal_matrix, node_timing = ls_theory$node_timing, user_mods = c("a ~ b + d; b ~ c + d; f ~ a + b"))
-
-# rearrange so that models 1 thru 6 match Table 1 numbering
-ls_theory$causal_matrix <- ls_theory$causal_matrix %>%
-    mutate(model = dplyr::recode(model,
-                  `3` = 1,
-                  `5` = 2,
-                  `2` = 3,
-                  `1166` = 4,
-                  `4` = 5,
-                  `1` = 6,
-                  .default = model
-                  )) %>%
-    arrange(model)
-
-ls_theory$formula_matrix <- build_formula_matrix(ls_theory$causal_matrix)
-
+# On the server this took 12767.746 sec elapsed
 ```
 ### Table 2
 
@@ -82,16 +46,13 @@ Table_2 <- subset(ls_theory$causal_matrix, model %in% c(1,3,4,5), select = c(fro
 write.csv(Table_2, here::here("Results", "Table_2.csv"), row.names = F)
 ```
 
-### Compare Models
+```{r cmp}
+cmp_matrix <- add_compatible(ls_theory2$formula_matrix, ref_mod = 1)
 
-```{r models}
-cmp_matrix <- add_compatible(ls_theory$formula_matrix, ref_mod = 1)
+saveRDS(ls_theory2, here::here("Results", "ls_theory2.RDS"))
+saveRDS(cmp_matrix, here::here("Results", "cmp_matrix_theory2.RDS"))
 
-## Change ref_mod to whichever is your reference model (using base_mod and model variable in the formula matrix)
 ```
-
-
-
 ### Generate DAG formulas
 
 ```{r gen_dags}
@@ -192,32 +153,3 @@ min_results <- minimize(set_matrix_c, details = TRUE, outcome = "outcome")
 ```{r qca}
 s_subset <- superSubset(set_matrix_c, outcome = "outcome")
 ```
-
- 
-
-
-## Comparing DAGs
-
-### Generate Models
-
-#### Different Configurations
-
-We will develop an easier method, but for now we do the 'long way' of assembling all (most) possible model combinations of the edges and nodes
-
-```{r searching_dags}
-nodes <- c("a","b","c","d","e","f")
-timing <- c(0,-1,-2,-3,-3, 1)
-types <- c("otc","test","ctr","ctr", "ctr","ctr")
-user_mods <- c("a ~ b + d; b ~ c + d", # Model 1
-               "a ~ b + c; b ~ c + d", # Model 2
-               "a ~ b + c + d; b ~ c + d", # Model 3
-               "a ~ b + d; b ~ c + d; f ~ a + b", # Model 4, add later
-               "a ~ b + d; b ~ d; c ~ c", # Model 5
-               "a ~ b + d; b ~ c + d + e; e ~ d" # Model 6
-               )
-
-tic()
-ls_theory2 <- theoRy(nodes = nodes, timing = timing, types=types, include_subsets = TRUE, user_mods=user_mods)
-toc()
-```
-

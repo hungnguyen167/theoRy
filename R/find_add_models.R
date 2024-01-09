@@ -5,7 +5,7 @@ source("R/build_formula_matrix.R")
 match_base <- function(nested_dt, nested_base) {
     temp <- copy(nested_dt)
     temp[,model:=NULL]
-    temp <- temp[order(from,to)]
+    setorder(temp, from, to)
     ident <- ifelse(identical(temp, nested_base),1,0)
     return(ident)
 }
@@ -78,7 +78,7 @@ find_add_models <- function(ls_theory=NULL, causal_matrix=NULL, node_timing=NULL
     for (i in seq_along(ls_base)){
         b_t <- copy(ls_base[[i]])
         b_t[, model:=NULL]
-        b_t <- b_t[order(from,to)]
+        setorder(b_t, from, to)
         match_ls_temp <- lapply(split(new_causal, by = "model"), match_base,
                                 b_t)
         user_mod_true <- as.numeric(names(match_ls_temp[match_ls_temp==1]))

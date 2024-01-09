@@ -1,103 +1,198 @@
 require(tidyverse)
+require(data.table)
 
-# TO DO
-# need to find a way to add commas see NOTE 1
-
-plot_dag_matrix <- function(dag_matrix,
-                            choose_plots = "all", # if not all, must be a vector with model numbers
-                            choose_plots_mas = "all", # must be either all or "{x}", where 'x' is the MAS
-                            formula_matrix_name = formula_matrix, # in case using a different named formula matrix
-                            save_plots = FALSE, # option to save plots as png
-                            title = TRUE,
-                            #suppress_plots = FALSE, # to view plots or not while they are plotting
-                            title_pos = 0.5,
-                            title_labels = formula_matrix_name$model,
-                            plot_xlim = c(minX,1.1), 
-                            plot_ylim = c(-1.1,1.5)) {
+build_plot_info <- function(ls_theory) { 
+    formula_matrix <- ls_theory$formula_matrix
+    node_timing <- ls_theory$node_timing
+    setDT(formula_matrix)
+    setorder(formula_matrix, model)
+    node_timing <- node_timing %>%
+        as_tibble() %>%
+        mutate(
+            timing = as.numeric(timing)
+        ) %>%
+        arrange(desc(timing)) 
     
-    
-    
-    # error if choose_plots not a numeric vector or all
-    if(!is.vector(choose_plots)) {
-        # start with all plots specified for selection
-        plots <- as.vector(formula_matrix_name$model) 
-        message("Plotting all model numbers")
-    } else {
-        # change plot specification for subsetting
-        plots <- as.numeric(formula_matrix_name$model[formula_matrix_name$model %in% choose_plots])
-        if(is.vector(choose_plots) & is.numeric(choose_plots)) {
-            # NOTE 1: need to find a way to add commas between choose_plots numbers
-            message(paste(c("Plotting only plots ", choose_plots)))
-        }
-        else {
-            stop("choose_plots must be a numeric vector with model numbers")
-        }
-    }
-    
-    # check choose_plots_mas
-    # right now we can only search for a single MAS, update to vector in future for multiple
-    if(is.vector(choose_plots_mas)) {
-        message("Not subsetting by MAS")
-        # choose all
-        plots_mas <- as.vector(formula_matrix_name$mas) 
-    } else {
-        # check that parentheses with spaces occur
-        if(grepl("\\{ | \\}", choose_plots_mas)) {
-            message(paste(c("Plotting only plots with unique MAS", choose_plots_mas)))
-            #setup subset
-            plots_mas <- choose_plots_mas
+    ## x_coords
+    x_coords <- list()
+    pl <- round(2/(length(unique(node_timing$timing))-1),3)
+    for (i in seq_along(node_timing$timing)){
+        if(i==1){
+            x_coords[[i]] <- 1
         } else {
-            stop("choose_plots_mas needs to have brackets with spaces, exactly the way MAS appears in formula_matrix$mas. For example \\{ X1,X2 \\}")
+            if(node_timing$timing[i] == node_timing$timing[i-1]){
+                x_coords[[i]] <- x_coords[[i-1]]
+            } else{
+                x_coords[[i]] <- x_coords[[i-1]] - pl
+            }
         }
     }
+    x_coords <- unlist(x_coords)
+    names(x_coords) <- node_timing$node_name
     
-    if(save_plots) {
-        if(is.vector(choose_plots) & is.numeric(choose_plots)) {
-            # NOTE 1: need to find a way to add commas between choose_plots numbers
-            message(paste(c("Saving only plots ", choose_plots," to png files")))
+    
+    ## y_coords
+    y_coords <- list()
+    buffer_y <- 2
+    previous_timing <- Inf
+    last_idx <- 1
+    for (i in seq_along(node_timing$timing)){
+        noXtestY <- node_timing[which(!node_timing$node_name %in% c("Xtest","Y")),]
+        if(node_timing$node_name[i] %in% c("Xtest","Y")){
+            y_coords[[i]] <- 0
+            
+        } else{
+            if(node_timing$timing[i] == max(noXtestY$timing)){
+                if(node_timing$timing[i] == previous_timing){
+                    y_coords[[i]] <- y_coords[[i-1]] - buffer_y
+                } 
+                else{
+                    y_coords[[i]] <- 0.5
+                    last_idx <- i
+                }
+            }
+            else {
+                if(node_timing$timing[i] == previous_timing){
+                    y_coords[[i]] <- y_coords[[i-1]] - buffer_y
+                } 
+                else{
+                    y_coords[[i]] <- y_coords[[last_idx]] + 0.25
+                    last_idx <- i
+                }
+            }
+            previous_timing <- node_timing$timing[i]
+        }
+        
+    }
+    y_coords <- unlist(y_coords)
+    names(y_coords) <- node_timing$node_name
+    
+    
+    
+    crds <- list(x = x_coords, 
+                 y = y_coords)
+    
+    additional_args <- list(
+        exposure="Xtest",
+        outcome="Y",
+        coords = crds
+    )
+    dag_matrix <- list()
+    for (f in 1:nrow(formula_matrix)) {
+        fvector <- strsplit(unlist(formula_matrix[f,1]), ",")[[1]]
+        # create dag object syntax
+        dag <- do.call(dagify, c(lapply(fvector, as.formula), additional_args))
+        # extract adjustment sets
+        model <- formula_matrix$model[f]
+        dag_matrix[[model]] <- dag
+    }
+    minX <- min(x_coords)
+    maxX <- max(x_coords)
+    minY <- min(y_coords)
+    maxY <- max(y_coords)
+    plot_info <- list(minX=minX, maxX=maxX, minY=minY, maxY=maxY, dag_matrix=dag_matrix)
+    
+    return(plot_info)
+}
+
+
+
+plot_dag_matrix <- function(ls_theory,
+                            choose_plots = "all", # if not all, must be a vector with model numbers
+                            choose_mas ="all",
+                            save_path=NULL) {
+    
+    formula_matrix <- ls_theory$formula_matrix
+    plot_info <- build_plot_info(ls_theory)
+    if(is.numeric(choose_plots)){
+            plots <- as.numeric(formula_matrix$model[formula_matrix$model %in% choose_plots])
+            cat("Plotting only models", paste(choose_plots, collapse=","),"\n")
+    } else {
+        if(choose_plots=="all") {
+            plots <- as.vector(formula_matrix$model) 
+            cat("Plotting all model numbers\n")
         }
         else {
-            stop("choose_plots must be a numeric vector with model numbers")
-        }        
+            stop("choose_plots must be 'all' or a vector of model numbers\n")
+        }
+        
     }
     
-    # subset by choose_plots and/or choose_plots_mas
-    formula_matrix_name <- formula_matrix_name[formula_matrix_name$model %in% plots,]
-    formula_matrix_name <- formula_matrix_name[formula_matrix_name$mas %in% plots_mas,]
     
-    dag_plots <- list()
-    
-    # find lowest X position in dagitty object
-    minX <- as.numeric(readRDS(here::here("Results", "minX.RDS"))[1,1])-0.1
-    
-    formula_matrix_name$title <- title_labels
-    
-    if(title) { 
-        for (l in formula_matrix_name$model){
-            plot(dag_matrix[[l]], xlim = plot_xlim, ylim = plot_ylim)
-            text(0.5,-1, paste0("MAS = ",formula_matrix_name$mas[formula_matrix_name$model == l]))
-            text(minX+title_pos,1.4, paste0("Model ", formula_matrix_name$title[formula_matrix_name$model == l]), font = 2)
-            dag_plots <- append(dag_plots, list(recordPlot()))
+
+    mas <- formula_matrix$mas
+    for (i in seq_along(mas)){
+        mas[[i]] <- gsub("\\{|\\}|\\s", "",mas[[i]])
+    }
+    if(is.character(choose_mas) & length(choose_mas)==1){
+        if(choose_mas=="all"){
+            cat("Plotting models with any MAS\n")
+            plots_mas <- 1:length(mas)
+        }
+        else {
+            cat("Plotting only models with MAS:", choose_mas, "\n")
+            plots_mas <- list()
+            for(i in seq_along(mas)){
+                have_mas <- any(mas[[i]] %in% choose_mas)
+                plots_mas[[i]] <- ifelse(have_mas, i, 0)
             }
-    } else {
-        for (l in formula_matrix_name$model){
-            plot(dag_matrix[[l]], xlim = plot_xlim, ylim = plot_ylim)
-            text(0.5,-1, paste0("MAS = ",formula_matrix_name$mas[formula_matrix_name$model == l]))
-            dag_plots <- append(dag_plots, list(recordPlot()))
+        }
+        
+    }
+    else if(is.character(choose_mas) & length(choose_mas) > 1){
+        cat("Plotting only models with MAS:", paste(choose_mas, collapse="or"), "\n")
+        plots_mas <- list()
+        for(i in seq_along(mas)){
+            have_mas <- any(mas[[i]] %in% choose_mas)
+            plots_mas[[i]] <- ifelse(have_mas, i, 0)
         }
     }
+    else{
+        stop("choose_mas must be either 'all' (default) or a vector of chosen MAS to plot\n")
+    }
+        
+    plots_mas <- plots_mas[plots_mas != 0]
+    # subset by choose_plots and/or choose_plots_mas
+    formula_matrix <- formula_matrix[formula_matrix$model %in% plots,]
+    formula_matrix <- formula_matrix[plots_mas, ]
     
+    
+    
+    xlim <- c(plot_info$minX-0.25, plot_info$maxX+0.25)
+    dist <- abs(plot_info$maxY) - abs(plot_info$minY)
+    if(dist>=0){
+        ylim <- c(plot_info$minY-0.25-dist, plot_info$maxY + 0.25)
+    } else{
+        ylim <- c(plot_info$minY-0.25, plot_info$maxY + 0.25+dist)
+    }
+    dag_plots <- list()
+    for (i in seq_along(formula_matrix)){
+        mod = as.numeric(formula_matrix[i, "model"])
+        plot<- ggdag(plot_info$dag_matrix[[i]]) + 
+            xlim(xlim)+
+            ylim(ylim) +
+            annotate("text", label = paste0("MAS = ", paste(mas[as.numeric(formula_matrix$model[formula_matrix$model == i])],
+                                                      collapse="|")),
+                     x=xlim[2]-0.75, y= ylim[1]+0.15) +
+            annotate("text", label=paste0("Model ", formula_matrix$model[formula_matrix$model == i]),
+                     x=xlim[1]+1.0, y = ylim[2] -0.15, size=3)
+        dag_plots[[i]] <- plot
+        }
+
+    if(!is.null(save_path)) {
+        if(is.vector(choose_plots) & is.numeric(choose_plots)) {
+            cat("Saving plots", paste(choose_plots, collapse=","), "to", save_path)
+            for (n in 1:length(formula_matrix$model)) {
+                png(file = paste0("Results/", paste0("model_", n, ".png")), width = 480, height = 240)
+                replayPlot(dag_plots[[n]])
+                dev.off()
+            }
+        }
+    }
         
     
-    if(save_plots) {
-        for (n in 1:length(formula_matrix_name$model)) {
-            png(file = here::here("Results", paste0("model_", title_labels[n], ".png")), width = 480, height = 240)
-            replayPlot(dag_plots[[n]])
-            dev.off()
-        }
-    }
-    
+
     return(dag_plots)
 }
         
-message("function plot_dag_matrix loaded")
+cat("function plot_dag_matrix loaded")

@@ -83,7 +83,7 @@ build_formula_matrix <- function(causal_matrix) {
         exposure="Xtest",
         outcome="Y"
     )
-    mas <- lapply(formula_matrix$formula, add_mas, additional_args, return_string=TRUE)
+    mas <- lapply(formula_matrix$formula, add_mas, additional_args, return_string=FALSE)
     
     formula_matrix$mas <- mas
     
@@ -97,7 +97,7 @@ message("function build_formula_matrix loaded")
 
 
 #tic()
-#formula_matrix <-build_formula_matrix(causal_matrix)
+#formula_matrix <-build_formula_matrix(ls_theory$causal_matrix)
 #toc()
 
 

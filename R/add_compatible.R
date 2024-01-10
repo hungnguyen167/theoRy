@@ -14,7 +14,7 @@ add_mas <- function(row, additional_args, adjusted=FALSE, unq_Xs=NULL, return_st
     fvector <- strsplit(as.character(row[1]), ",")[[1]]
     dag_args <- lapply(fvector, as.formula)
     dag <- do.call(dagify, c(dag_args, additional_args))
-    
+
     if (adjusted==TRUE){
         unq_nodes <- unique(c(edges(dag)$v, edges(dag)$w))
         unq_Xs <- unq_nodes[!unq_nodes %in% c("Y","Xtest")]
@@ -22,18 +22,18 @@ add_mas <- function(row, additional_args, adjusted=FALSE, unq_Xs=NULL, return_st
         mas <- adjustmentSets(dag, exposure = "Xtest", outcome = "Y", effect = "direct")
         if (length(mas)==0) {
             return("no")
-        } 
+        }
         else{
             return("yes")
         }
     }
-    
+
     else {
-        
+
         mas <- adjustmentSets(dag, exposure = "Xtest", outcome = "Y", effect = "direct")
         if (length(unlist(mas)) == 0) {
             return("none")
-        } 
+        }
         else{
             mas_output <- capture.output(mas)
             if(return_string){
@@ -44,7 +44,7 @@ add_mas <- function(row, additional_args, adjusted=FALSE, unq_Xs=NULL, return_st
             }
         }
     }
-    
+
 }
 
 add_compatible <- function(formula_matrix, effect="direct",
@@ -110,21 +110,13 @@ add_compatible <- function(formula_matrix, effect="direct",
         mutate(
             full_model_compatible = case_when(
                 test_compatible == "reference model" ~ "reference model",
-                test_compatible != "reference model" & 
+                test_compatible != "reference model" &
                     unq_nodes  == ref_unq_nodes  & correct_test == "yes" ~ "compatible",
                 TRUE ~ "incompatible"
             )
-        ) 
+        )
     setDT(cmp_matrix)
     return(cmp_matrix)
 }
-
-message("function add_compatible loaded")
-#cmp_matrix <- test_compatible(formula_matrix, ref_mod = 10)
-
-
-
-#formulas_vector <- strsplit(unlist(formula_matrix[9,1]), ",")[[1]]
-#dag <- do.call(dagify, c(lapply(formulas_vector, as.formula), additional_args))
 
 

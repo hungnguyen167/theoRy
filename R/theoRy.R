@@ -4,21 +4,21 @@ message("Breznau, Nate and Hung H.V. Nguyen")
 
 
 
-source("R/build_causal_node.R")
+#source("R/build_causal_node.R")
 
-source("R/find_add_models.R")
+#source("R/find_add_models.R")
 
-source("R/build_formula_matrix.R")
+#source("R/build_formula_matrix.R")
 
 
-source("R/add_compatible.R")
+#source("R/add_compatible.R")
 
-source("R/plot_dag.R")
+#source("R/plot_dag.R")
 
-source("R/build_set_matrix.R")
+#source("R/build_set_matrix.R")
 
 theoRy <- function(nodes, types, timing,include_subsets=FALSE, user_mods=NULL){
-    causal_matrix <- build_causal_node(nodes, types, timing,include_subsets=include_subsets, 
+    causal_matrix <- build_causal_node(nodes, types, timing,include_subsets=include_subsets,
                                          user_mods=user_mods, return_node=FALSE)
     node_timing <- build_causal_node(nodes, types, timing,include_subsets=include_subsets, return_node=TRUE)
     formula_matrix <- build_formula_matrix(causal_matrix)
@@ -27,5 +27,4 @@ theoRy <- function(nodes, types, timing,include_subsets=FALSE, user_mods=NULL){
 }
 
 
-message("function theoRy loaded")
 

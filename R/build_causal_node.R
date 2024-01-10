@@ -1,34 +1,55 @@
-require(tidyverse)
-require(data.table)
+#' Build causal matrix or build node-timing matrix
+#'
+#' @description
+#' `build_causal_node` returns either the causal matrix or the node-timing matrix used in theory comparison
+#'
+#' @details
+#' This function is included in theoRy. Unless computing the causal matrix separately is require, users are encouraged to use
+#' theoRy instead.
+#'
+#'
+#' @param nodes the input nodes/variable names, a character vector/list.
+#' Should be of the same length and order with types and timing.
+#' @param types the input types of nodes, a character vector/list. Takes only three values: "otc" (outcome), "ctr" (control),
+#' or "test" (test). Should be of the same length and order with nodes and timing.
+#' @param timing the input timing of nodes, a character vector/list. Should be of the same length and order with nodes and types.
+#' @param user_mods User-defined model(s), optional. This argument allows users to input their theoretical biases.
+#' If the model(s) are found in the matrix, they will be pushed to the top in the orders that they are introduced.
+#' If the model(s) are not found in the matrix, the user can choose to add it to the matrix or not.
+#' @param include_subsets if TRUE, the matrix will include models where certain nodes (besides outcome and exposure)
+#' do not exist. Note that model A where X does not cause anything but still exists is a different theoretical claim than
+#' model B where X does not exist entirely. The matrix can get significantly larger when this option is allowed. Default to FALSE.
+#' @param return_node if TRUE, returns the node-timing matrix instead of the causal matrix.
+#'
+#'
+#' @returns Returns either a causal matrix or a node-timing matrix. The causal matrix is the basis for comparing theoretical models. The causal matrix consists of at least 9 columns:
+#' from, to, direction, model, component, timing_from, type_from, timing_to, type_to. The direction only takes two values "->" or
+#' "<->". "<-" is omitted because X2 <- X1 is similar to X1 -> X2. The column user_mod is introduced when user_mods are provided.
+#' In the causal matrix, nodes are called by conventional node names for causal inference (Y, Xtest, X1, X2, etc.) instead of
+#' their original variable names. A summary of variable names, timing, and types is provided when the function runs. Users can
+#' check this information in the node-timing matrix.
+#' @examples
+#' nodes <- c("y","xtest","ctr1","ctr2")
+#' timing <- c(0,-1,-3,-2)
+#' types <- c("otc","test","ctr","ctr", "ctr")
+#' user_mods <- c("y ~ xtest + ctr2; xtest ~ ctr1 + ctr2", "y ~ xtest + ctr1; xtest ~ ctr1 + ctr2")
+#' causal_matrix <- build_causal_node(nodes=nodes, types=types, timing=timing, user_mods=user_mods, include_subsets=TRUE, return_node=FALSE)
+#'
+#' @export
 
 
-remove_redundant <- function(nested_dt){
-    unique_from <- nested_dt[, .(UniqueValues = names(table(from)[table(from) == 1]))]
-    unique_to <- nested_dt[, .(UniqueValues = names(table(to)[table(to) == 1]))]
-    common_unq <- intersect(unique_from$UniqueValues, unique_to$UniqueValues)
-    common_unq <- unique(common_unq)
-    nested_dt <- nested_dt[!(from == to & !(from %in% common_unq))]
-    return(nested_dt)
-    
-}
-
-match_base <- function(nested_dt, nested_base) {
-    temp <- copy(nested_dt)
-    temp <- temp[, .(from, to, direction)]
-    setorder(temp, from, to, direction)
-    ident <- ifelse(identical(temp, nested_base),1,0)
-    return(ident)
-}
 
 
-dt_to_string <- function(dt) {
-    setorder(dt, from, to)
-    dt[,model:=NULL]
-    return(dt)
-}
 
-build_causal_node <- function(nodes, types, timing, user_mods=NULL, 
-                                include_subsets=FALSE,return_node=FALSE){ 
+
+#require(tidyverse)
+#require(data.table)
+
+
+
+
+build_causal_node <- function(nodes, types, timing, user_mods=NULL,
+                                include_subsets=FALSE,return_node=FALSE){
     # Check if 'inputs' is a list and has required components
     if (!is.character(nodes) | !is.character(types) | !is.double(timing)) {
         stop("Wrong input format. Please check that nodes and types are character and timing is double!")
@@ -38,7 +59,7 @@ build_causal_node <- function(nodes, types, timing, user_mods=NULL,
     if (length(nodes) != length(timing) | length(nodes) != length(types)) {
         stop("'nodes', 'timing', and 'types' must be of the same length.")
     }
-    
+
     # Check that only one outcome and one test variable are specified
     if (length(types[types == "test"]) > 1) {
         stop("Please specify only one variable as 'test'")
@@ -49,17 +70,17 @@ build_causal_node <- function(nodes, types, timing, user_mods=NULL,
     }
     # Check if 'timing' has more than 4 unique values
     if (length(unique(timing)) > 5) {
-        stop("Function not executed: The total number of unique 'timing' values 
+        stop("Function not executed: The total number of unique 'timing' values
              must be less than 4.")
         # In the future we should program this to be number of total variables minus 1
     }
     # Start of function
     ## Turn input from lavaan format into list
-   
+
 
     ## Change variable names to Xn, Xtest, Y based on types
-    
-    
+
+
     node_timing <- tibble(var_name=nodes, timing=timing,
                               type=types) %>%
         arrange(timing) %>%
@@ -82,7 +103,7 @@ build_causal_node <- function(nodes, types, timing, user_mods=NULL,
                     node_to = strsplit(formula, "\\~")[[1]][1]
                     node_froms = strsplit(strsplit(formula, "~")[[1]][2],"\\+")[[1]]
                     for (node_from in node_froms){
-                        df_temp <- tibble(from_var = node_from, to_var=node_to, 
+                        df_temp <- tibble(from_var = node_from, to_var=node_to,
                                           direction = "->", model = mod_ctr)
                         base_matrix <- bind_rows(base_matrix, df_temp)
                     }
@@ -90,29 +111,29 @@ build_causal_node <- function(nodes, types, timing, user_mods=NULL,
                 else if (grepl("[ A-Za-z]~~[ A-Za-z]", formula)){
                     node_from = strsplit(formula, "\\~\\~")[[1]][1]
                     node_to = strsplit(formula, "\\~\\~")[[1]][2]
-                    df_temp <- tibble(from_var = node_from, to_var=node_to, 
+                    df_temp <- tibble(from_var = node_from, to_var=node_to,
                                       direction = "<->", model=mod_ctr)
                     base_matrix <- bind_rows(base_matrix, df_temp)
-                    
+
                 }
             }
             mod_ctr <- mod_ctr+1
         }
-        
-        
+
+
         base_matrix <- base_matrix %>%
             mutate_at(vars(all_of(c("from_var","to_var"))), ~ str_replace_all(., " ", "")) %>%
             left_join(node_timing, by=c("from_var"="var_name")) %>%
             rename(timing_from = timing, type_from=type, from=node_name) %>%
             left_join(node_timing, by=c("to_var"="var_name")) %>%
-            rename(timing_to = timing, type_to=type, to=node_name) %>% 
+            rename(timing_to = timing, type_to=type, to=node_name) %>%
             mutate(
-                component = ifelse(from!=to, paste(from,to,sep="_"), from) 
+                component = ifelse(from!=to, paste(from,to,sep="_"), from)
             ) %>%
             select(from, to, direction, model, component, timing_from, type_from, timing_to, type_to)
-        setDT(base_matrix) 
+        setDT(base_matrix)
     }
-    
+
     x_test_time <- node_timing[which(node_timing$type=="test"),"timing"]
     y_time <- node_timing[which(node_timing$type=="otc"),"timing"]
     if (x_test_time >= y_time){
@@ -123,15 +144,15 @@ build_causal_node <- function(nodes, types, timing, user_mods=NULL,
     }
     else{
         ## Create report for user
-        
+
         message("VARIABLE SUMMARY")
-        message(paste0("Y. Label = ", node_timing$var_name[node_timing$node_name == "Y"], 
+        message(paste0("Y. Label = ", node_timing$var_name[node_timing$node_name == "Y"],
                        ". Timing = ", node_timing$timing[node_timing$node_name == "Y"]))
-        message(paste0("Xtest. Label = ", node_timing$var_name[node_timing$node_name == "Xtest"], 
+        message(paste0("Xtest. Label = ", node_timing$var_name[node_timing$node_name == "Xtest"],
                        ". Timing = ", node_timing$timing[node_timing$node_name == "Xtest"]))
         no_Xtest_Y <- node_timing %>% filter(!node_name %in% c("Y","Xtest"))
         for (i in 1:nrow(no_Xtest_Y)){
-            message(paste0(no_Xtest_Y[i,"node_name"], ". Label = ", no_Xtest_Y[i,"var_name"], 
+            message(paste0(no_Xtest_Y[i,"node_name"], ". Label = ", no_Xtest_Y[i,"var_name"],
                            ". Timing = ", no_Xtest_Y[i,"timing"]))
         }
         ## create node matrix without var_labels
@@ -148,7 +169,7 @@ build_causal_node <- function(nodes, types, timing, user_mods=NULL,
                 timing_from = timing,
                 node_from = node_name,
                 type_from = type
-            ) 
+            )
         to_tbl <- node_timing %>%
             select(-var_name) %>%
             expand_grid(node_from=node_timing$node_name,node_to=node_timing$node_name) %>%
@@ -160,9 +181,9 @@ build_causal_node <- function(nodes, types, timing, user_mods=NULL,
                 timing_to = timing,
                 node_to = node_name,
                 type_to = type
-            ) 
+            )
         # Combine from_tbl and to_tbl to create pairs and determine the direction of influence
-        
+
         pairs_tbl <- bind_cols(from_tbl, to_tbl) %>%
             distinct(node_from, node_to, .keep_all=TRUE) %>%
             mutate(
@@ -170,9 +191,9 @@ build_causal_node <- function(nodes, types, timing, user_mods=NULL,
                     str_detect(node_from, "X[0-9A-Za-z]+") & node_to == "Y" & timing_from <= timing_to ~ "->",
                     node_from == "Y" & str_detect(node_to, "X\\d+") & timing_from <= timing_to ~ "->",
                     node_from == node_to & timing_from == timing_to ~  "->",
-                    str_detect(node_from, "X[0-9A-Za-z]+") & str_detect(node_to, "X[0-9A-Za-z]+") 
+                    str_detect(node_from, "X[0-9A-Za-z]+") & str_detect(node_to, "X[0-9A-Za-z]+")
                     & timing_from <  timing_to ~ "->",
-                    str_detect(node_from, "X\\d+") & str_detect(node_to, "X\\d+") 
+                    str_detect(node_from, "X\\d+") & str_detect(node_to, "X\\d+")
                     & timing_from ==  timing_to ~ "<->",
                     TRUE ~ NA_character_
                 )
@@ -182,29 +203,29 @@ build_causal_node <- function(nodes, types, timing, user_mods=NULL,
             ) %>%
             filter(!is.na(direction))
         pairs_dha <- pairs_tbl %>% filter(direction == "~~") %>% distinct(pairs, .keep_all = TRUE)
-        pairs_other <- pairs_tbl %>% filter(direction != "~~") 
+        pairs_other <- pairs_tbl %>% filter(direction != "~~")
         pairs_tbl <- bind_rows(pairs_dha, pairs_other) %>%
             mutate(
                 pairs = paste(node_from, node_to, sep="_")
             ) %>%
-            select(node_from, node_to,pairs, direction) 
-        
+            select(node_from, node_to,pairs, direction)
+
         # Define two types of options based on the direction
         if (include_subsets == TRUE){
             # Display a warning message
             message("Option include_subsets is set to true.")
-            message("The size of the matrix could get exponentially larger with more variables") 
+            message("The size of the matrix could get exponentially larger with more variables")
             message("Do you want to proceed (yes) or set include_subsets to FALSE (no)?")
-            
+
             response <- tolower(readline(prompt = "Enter 'yes' or 'no': "))
-            
+
             if (response == "yes") {
                 cat("Continue with include_subsets=TRUE\n")
                 two_opt <- pairs_tbl %>%
                     filter(pairs != "Xtest_Y")
                 one_opt <- pairs_tbl %>%
                     filter(pairs == "Xtest_Y")
-                
+
             } else if (response == "no") {
                 cat("Set include_subsets to FALSE.\n")
                 two_opt <- pairs_tbl %>%
@@ -214,19 +235,19 @@ build_causal_node <- function(nodes, types, timing, user_mods=NULL,
             } else {
                 stop("Invalid response. Please enter 'yes' or 'no'.\n")
             }
-            
+
         } else{
             two_opt <- pairs_tbl %>%
                 filter(!grepl("Xtest_Y|^(X\\d+)_\\1$", pairs))
             one_opt <- pairs_tbl %>%
                 filter(grepl("Xtest_Y|^(X\\d+)_\\1$", pairs))
         }
-         
+
         # Create a unique values list from the options
         unique_values_list <- lapply(seq_len(nrow(two_opt)), function(i) c(two_opt$direction[i], "none"))
         names(unique_values_list) <- two_opt$pairs
         unique_values_list <- c(unique_values_list, setNames(one_opt$direction, one_opt$pairs))
-        
+
         ## Create all possible combinations
         causal_matrix <- expand.grid(unique_values_list, stringsAsFactors = FALSE) %>%
             distinct(.keep_all=TRUE) %>%
@@ -254,8 +275,8 @@ build_causal_node <- function(nodes, types, timing, user_mods=NULL,
                 type_to = type
             )
         setDT(causal_matrix)
-        
-        
+
+
         rmv_ls <- lapply(split(causal_matrix, by = "model"), remove_redundant)
         causal_matrix <- rbindlist(rmv_ls)
         dt_strings <- paste0(lapply(split(causal_matrix, by="model"), dt_to_string))
@@ -288,11 +309,11 @@ build_causal_node <- function(nodes, types, timing, user_mods=NULL,
                         b_t <- copy(ls_base[[i]])
                         b_t[, user_mod:=1]
                         b_t[, `:=`(model = i, prev_mod=i)]
-                        causal_matrix[, model:= ifelse(model >= i, 
-                                                       model+1, 
+                        causal_matrix[, model:= ifelse(model >= i,
+                                                       model+1,
                                                        model)]
                         causal_matrix <- rbind(causal_matrix, b_t)
-                        
+
                     }
                     else if (response=="no"){
                         "Skipped"
@@ -300,11 +321,11 @@ build_causal_node <- function(nodes, types, timing, user_mods=NULL,
                     else{
                         message("Invalid response. Skipped")
                     }
-                    
+
                 }
                 else{
                     cat("Model: '", user_mods[i], "' found in the matrix. Position:", match_res[[i]]$idx,"\n")
-                    
+
 
                     if(match_res[[i]]$idx != i){
                         cat("Placed current model (", match_res[[i]]$idx,") to model number",i, " and vice versa. \n")
@@ -320,14 +341,14 @@ build_causal_node <- function(nodes, types, timing, user_mods=NULL,
                             }
                         }
                         match_res[[i]]$idx <- i
-                        
+
                     } else{
                         cat("Current model is at already at position",i,".\n")
                     }
-                    
-                    
+
+
                 }
-                
+
             }
 
         }
@@ -336,21 +357,8 @@ build_causal_node <- function(nodes, types, timing, user_mods=NULL,
         causal_matrix[, prev_mod := NULL]
         return(causal_matrix)
     }
-        
+
 
 }
 
-message("function build_causal_matrix loaded")
-
-
-## Example: 
-#nodes <- c("a","b","c","d")
-#timing <- c(-2,-1,-1,0)
-#types <- c("ctr","ctr","test","otc")
-#base_mod <- "d ~ a +c; c~a"
-
-#tic()
-#causal_matrix <- build_causal_node(nodes = nodes, timing = timing, 
- #                                   types=types, include_subsets = TRUE, user_mods=user_mods)
-#toc()
 

@@ -2,7 +2,7 @@ require(tidyverse)
 require(data.table)
 require(ggplot2)
 require(ragg)
-build_plot_info <- function(ls_theory) { 
+build_plot_info <- function(ls_theory) {
     formula_matrix <- ls_theory$formula_matrix
     node_timing <- ls_theory$node_timing
     setDT(formula_matrix)
@@ -12,8 +12,8 @@ build_plot_info <- function(ls_theory) {
         mutate(
             timing = as.numeric(timing)
         ) %>%
-        arrange(desc(timing)) 
-    
+        arrange(desc(timing))
+
     ## x_coords
     x_coords <- list()
     pl <- round(2/(length(unique(node_timing$timing))-1),3)
@@ -30,8 +30,8 @@ build_plot_info <- function(ls_theory) {
     }
     x_coords <- unlist(x_coords)
     names(x_coords) <- node_timing$node_name
-    
-    
+
+
     ## y_coords
     y_coords <- list()
     buffer_y <- 2
@@ -41,12 +41,12 @@ build_plot_info <- function(ls_theory) {
         noXtestY <- node_timing[which(!node_timing$node_name %in% c("Xtest","Y")),]
         if(node_timing$node_name[i] %in% c("Xtest","Y")){
             y_coords[[i]] <- 0
-            
+
         } else{
             if(node_timing$timing[i] == max(noXtestY$timing)){
                 if(node_timing$timing[i] == previous_timing){
                     y_coords[[i]] <- y_coords[[i-1]] - buffer_y
-                } 
+                }
                 else{
                     y_coords[[i]] <- 0.5
                     last_idx <- i
@@ -55,7 +55,7 @@ build_plot_info <- function(ls_theory) {
             else {
                 if(node_timing$timing[i] == previous_timing){
                     y_coords[[i]] <- y_coords[[i-1]] - buffer_y
-                } 
+                }
                 else{
                     y_coords[[i]] <- y_coords[[last_idx]] + 0.25
                     last_idx <- i
@@ -63,16 +63,16 @@ build_plot_info <- function(ls_theory) {
             }
             previous_timing <- node_timing$timing[i]
         }
-        
+
     }
     y_coords <- unlist(y_coords)
     names(y_coords) <- node_timing$node_name
-    
-    
-    
-    crds <- list(x = x_coords, 
+
+
+
+    crds <- list(x = x_coords,
                  y = y_coords)
-    
+
     additional_args <- list(
         exposure="Xtest",
         outcome="Y",
@@ -92,7 +92,7 @@ build_plot_info <- function(ls_theory) {
     minY <- min(y_coords)
     maxY <- max(y_coords)
     plot_info <- list(minX=minX, maxX=maxX, minY=minY, maxY=maxY, dag_matrix=dag_matrix)
-    
+
     return(plot_info)
 }
 
@@ -102,7 +102,7 @@ plot_dag <- function(ls_theory,
                             choose_plots = "all", # if not all, must be a vector with model numbers
                             choose_mas ="all",
                             save_path=NULL) {
-    
+
     formula_matrix <- copy(ls_theory$formula_matrix)
     plot_info <- build_plot_info(ls_theory)
     if(is.numeric(choose_plots)){
@@ -110,15 +110,15 @@ plot_dag <- function(ls_theory,
             cat("Plotting only models", paste(choose_plots, collapse=","),"\n")
     } else {
         if(choose_plots=="all") {
-            plots <- as.vector(formula_matrix$model) 
+            plots <- as.vector(formula_matrix$model)
             cat("Plotting all model numbers\n")
         } else {
             stop("choose_plots must be 'all' or a vector of model numbers\n")
         }
-        
+
     }
-    
-    
+
+
 
     mas <- formula_matrix$mas
     for (i in seq_along(mas)){
@@ -137,7 +137,7 @@ plot_dag <- function(ls_theory,
                 plots_mas[[i]] <- ifelse(have_mas, i, 0)
             }
         }
-        
+
     } else if(is.character(choose_mas) & length(choose_mas) > 1){
         cat("Plotting only models with MAS:", paste(choose_mas, collapse="or"), "\n")
         plots_mas <- list()
@@ -148,15 +148,15 @@ plot_dag <- function(ls_theory,
     } else{
         stop("choose_mas must be either 'all' (default) or a vector of chosen MAS to plot\n")
     }
-        
+
     plots_mas <- plots_mas[plots_mas != 0]
     # subset by choose_plots and/or choose_plots_mas
     formula_matrix <- formula_matrix[plots_mas, ]
     formula_matrix <- formula_matrix[formula_matrix$model %in% plots,]
-    
-    
-    
-    
+
+
+
+
     xlim <- c(plot_info$minX-0.25, plot_info$maxX+0.25)
     dist <- abs(plot_info$maxY) - abs(plot_info$minY)
     if(dist>=0){
@@ -195,10 +195,9 @@ plot_dag <- function(ls_theory,
             }
         }
     }
-        
-    
+
+
 
     return(dag_plots)
 }
-        
-message("function plot_dag loaded\n")
+

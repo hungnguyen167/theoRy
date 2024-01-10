@@ -279,9 +279,7 @@ build_causal_node <- function(nodes, types, timing, user_mods=NULL,
             causal_matrix[, user_mod := 0]
             causal_matrix[, prev_mod := model]
             for (i in seq_along(match_res)){
-                match_res_temp <- match_res[[i]]
-                
-                if(length(match_res_temp$idx) ==0){
+                if(length(match_res[[i]]$idx) ==0){
                     cat("Model: '", user_mods[i], "' not found in the causal matrix. \n")
                     message("Do you want to add this to the matrix?")
                     response <- tolower(readline(prompt = "Enter 'yes' or 'no': "))
@@ -294,6 +292,7 @@ build_causal_node <- function(nodes, types, timing, user_mods=NULL,
                                                        model+1, 
                                                        model)]
                         causal_matrix <- rbind(causal_matrix, b_t)
+                        
                     }
                     else if (response=="no"){
                         "Skipped"
@@ -301,22 +300,34 @@ build_causal_node <- function(nodes, types, timing, user_mods=NULL,
                     else{
                         message("Invalid response. Skipped")
                     }
+                    
                 }
                 else{
-                    cat("Model: '", user_mods[i], "' found in the matrix. Position:", match_res_temp$idx, ".\n")
-                    if(match_res_temp$idx != i){
-                        cat("Swap model number", match_res_temp$idx,"with model number", i, ".\n")
-                        cat("Swapped.\n")
-                        causal_matrix[,model:=fifelse(model==match_res_temp$idx,i,
-                                                      fifelse(model==i, match_res_temp$idx,
+                    cat("Model: '", user_mods[i], "' found in the matrix. Position:", match_res[[i]]$idx,"\n")
+                    
+
+                    if(match_res[[i]]$idx != i){
+                        cat("Placed current model (", match_res[[i]]$idx,") to model number",i, " and vice versa. \n")
+                        causal_matrix[,model:=fifelse(model==match_res[[i]]$idx,i,
+                                                      fifelse(model==i, match_res[[i]]$idx,
                                                               model))]
                         causal_matrix[,user_mod:=fifelse(model==i, 1, user_mod)]
-                 
-                     } else{
-                        cat("Asserted position is equal to current position. Skipped.\n")
+                        for (j in i:length(match_res)){
+                            if(length(match_res[[j]]$idx)>0){
+                                if (match_res[[j]]$idx == i){
+                                    match_res[[j]]$idx <- match_res[[i]]$idx
+                                }
+                            }
+                        }
+                        match_res[[i]]$idx <- i
+                        
+                    } else{
+                        cat("Current model is at already at position",i,".\n")
                     }
-
+                    
+                    
                 }
+                
             }
 
         }

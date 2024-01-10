@@ -5,6 +5,7 @@ require(ggdag)
 
 
 create_formula <- function(nested_dt) {
+    setorder(nested_dt, from, to, direction)
     causal_dt <- nested_dt[direction == "->"]
     causal_dt[, direction:= "~"]
     causal_dt[, formula := paste(to, direction, paste(from, collapse = " + "), sep=" "), by = .(model, to)]

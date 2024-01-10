@@ -115,15 +115,15 @@ find_add_models <- function(ls_theory=NULL,
         match_ls_temp <- lapply(split(causal_matrix, by = "model"), match_base,
                                 b_t)
         user_mod_true <- as.numeric(names(match_ls_temp[match_ls_temp==1]))
-        match_res_temp <- list(idx = unlist(user_mod_true), user_mod_n = i)
-        match_res[[i]] <- match_res_temp
+        match_res[[i]] <- list(idx = unlist(user_mod_true), user_mod_n = i)
+        match_res[[i]] <- match_res[[i]]
     }
 
     causal_matrix[,prev_mod:=model]
     formula_new <- list()
+
     for (i in seq_along(match_res)){
-        match_res_temp <- match_res[[i]]
-        if(length(match_res_temp$idx) ==0){
+        if(length(match_res[[i]]$idx) ==0){
             cat("Model: '", user_mods[i], "' not found in the causal matrix. \n")
             message("Do you want to add this to the matrix?")
             response <- tolower(readline(prompt = "Enter 'yes' or 'no': "))
@@ -133,60 +133,61 @@ find_add_models <- function(ls_theory=NULL,
                 
                 if(!is.null(assert_mod_num)){
                     b_t[,`:=`(prev_mod=max(causal_matrix$model)+1,user_mod=1)]
-                    setorder(b_t, from, to)
-                    causal_matrix[, model:= ifelse(model < assert_mod_num[[i]],
+                    causal_matrix[, model:= fifelse(model < assert_mod_num[[i]],
                                                    model,
                                                    model+1)]
                     causal_matrix <- rbind(causal_matrix, b_t)
-
+                    
                 } else{
                     b_t[, `:=`(model= max(causal_matrix$model)+1,prev_mod=max(causal_matrix$model)+1,user_mod=1)]
-                    setorder(b_t, from, to)
                     causal_matrix <- rbind(causal_matrix, b_t)
-
+                    
                 }
-                
-                if(isTRUE(on_ls) & length(match_res_temp) >0){
+                if(isTRUE(on_ls)){
                     formula_temp <- build_formula_matrix(b_t)
                     formula_new[[i]] <- formula_temp
                 }
 
-               
-            }
-            else if (response=="no"){
+           
+                   
+           } else if (response=="no"){
                 "Skipped"
-            }
-            else{
+            } else{
                 message("Invalid response. Skipped")
             }
+            
         }
         else{
-            
-            cat("Model: '", user_mods[i], "' found in the matrix. Position:", match_res_temp$idx, ".\n")
-            if(!is.null(assert_mod_num)){
-                if(match_res_temp$idx != assert_mod_num[[i]]){
-                    cat("Do you want to swap model", match_res_temp$idx,"with model number", assert_mod_num[[i]], "?\n")
-                    response <- tolower(readline(prompt = "Enter 'yes' or 'no': "))
-                    if(response=="yes"){
-                        cat("Swapped.\n")
-                        causal_matrix[,model:=fifelse(model==match_res_temp$idx,assert_mod_num[[i]],
-                                                          fifelse(model==assert_mod_num[[i]], match_res_temp$idx,
-                                                                  model))]
-                        causal_matrix[,user_mod:=fifelse(model==assert_mod_num[[i]], 1, user_mod)]
-                    } else if(response=="no"){
-                        cat("Skipped.\n")
-                    } else{
-                        cat("Invalid response. Moving on.\n")
-                    }
+            cat("Model: '", user_mods[i], "' found in the matrix. Position:", match_res[[i]]$idx,"\n")
 
+            if(!is.null(assert_mod_num)){
+                if(match_res[[i]]$idx != assert_mod_num[[i]]){
+                    cat("Swapped current model (", match_res[[i]]$idx,") to model number", assert_mod_num[[i]], " and vice versa. \n")
+                    causal_matrix[,prev_mod:=model]
+                    causal_matrix[,model:=fifelse(model==match_res[[i]]$idx,assert_mod_num[[i]],
+                                                  fifelse(model==assert_mod_num[[i]], match_res[[i]]$idx,
+                                                          model))]
+                    causal_matrix[,user_mod:=fifelse(model==assert_mod_num[[i]], 1, user_mod)]
+
+                    for (j in i:length(match_res)){
+                        if(length(match_res[[j]]$idx)>0){
+                            if (match_res[[j]]$idx == assert_mod_num[[i]]){
+                                match_res[[j]]$idx <- match_res[[i]]$idx
+                            }
+                        }
+                    }
+                    match_res[[i]]$idx <- assert_mod_num[[i]]
+                    
                 } else{
-                    cat("Asserted position is equal to current position. Skipped.\n")
+                        cat("Asserted position is equal to current position. Skipped.\n")
+                    }
                 }
+                
                 
             }
             
         }
-    }
+    
     
     if(isTRUE(on_ls)){
         
@@ -199,7 +200,7 @@ find_add_models <- function(ls_theory=NULL,
         formula_matrix_m[, model:=model_ref]
         formula_matrix_m[, model_ref:=NULL]
         formula_matrix_m <- formula_matrix_m[!is.na(formula),]
-        if(any(length(match_res_temp)>0)){
+        if(any(length(match_res[[i]])>0)){
             formula_matrix_add <- rbindlist(formula_new)
             formula_matrix <- rbind(formula_matrix_m, formula_matrix_add)
         } else{

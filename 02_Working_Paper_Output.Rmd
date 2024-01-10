@@ -31,6 +31,7 @@ user_mods <- c("a ~ b + d; b ~ c + d", # Model 1
                "a ~ b + d; b ~ c + d + e; e ~ d" # Model 6
                )
 
+
 tic()
 ls_theory <- theoRy(nodes = nodes, timing = timing, types=types, include_subsets = TRUE, user_mods=user_mods)
 toc()
@@ -42,19 +43,25 @@ toc()
 
 ls_theory <- find_add_models(ls_theory = ls_theory, on_ls=TRUE, add_nodes = list(c(var_name = "f", timing = 1, type = "ctr", node_name = "X4")), user_mods = c("a ~ b + d; b ~ c + d; f ~ a + b"), assert_mod_num = 4)
 
+test <- copy(ls_theory)
 
-## If you run a second, ls_theory should let users know whether models or nodes exists
+## If you run a second time, ls_theory should let users know whether models or nodes exists
 
-ls_theory <- find_add_models(ls_theory = ls_theory, on_ls=TRUE, add_nodes = list(c(var_name = "f", timing = 1, type = "ctr", node_name = "X4")), user_mods = c("a ~ b + d; b ~ c + d; f ~ a + b"), assert_mod_num = 4)
-
+test <- find_add_models(ls_theory = test, on_ls=TRUE, add_nodes = list(c(var_name = "f", timing = 1, type = "ctr", node_name = "X4")), user_mods = c("a ~ b + d; b ~ c + d; f ~ a + b"), assert_mod_num = 4)
 
 ## Can also change swap model numbers. 
 
-ls_theory <- find_add_models(ls_theory = ls_theory, on_ls=TRUE, add_nodes = list(c(var_name = "f", timing = 1, type = "ctr", node_name = "X4")), user_mods = c("a ~ b + d; b ~ c + d; f ~ a + b"), assert_mod_num = 6)
+test <- find_add_models(ls_theory = test, on_ls=TRUE, add_nodes = list(c(var_name = "f", timing = 1, type = "ctr", node_name = "X4")), user_mods = c("a ~ b + d; b ~ c + d; f ~ a + b", "a ~ b + d; b ~ c + d + e; e ~ d"), assert_mod_num = c(6,4))
 
-## Swap back for later functions
 
-ls_theory <- find_add_models(ls_theory = ls_theory, on_ls=TRUE, add_nodes = list(c(var_name = "f", timing = 1, type = "ctr", node_name = "X4")), user_mods = c("a ~ b + d; b ~ c + d; f ~ a + b"), assert_mod_num = 4)
+## Can add and swap at the same time. Here, model 1-2 and an implausible model `max(causal_matrix$model)+1` becomes model 3-1-2
+test <- find_add_models(ls_theory = test, on_ls=TRUE, add_nodes = list(c(var_name = "f", timing = 1, type = "ctr", node_name = "X4")), user_mods = c("a ~ b + d; b ~ c + d", "a ~ b + c; b ~ c + d", "a ~ b + c + d; b ~ c + d; d~e"), assert_mod_num = c(3,1,2))
+
+
+
+
+
+
 
 ```
 

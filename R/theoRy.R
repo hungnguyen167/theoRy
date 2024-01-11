@@ -1,5 +1,5 @@
 message("theoRy v1.0")
-message("Breznau, Nate and Hung H.V. Nguyen")
+message("Breznau, Nate and Nguyen, Hung H. V.")
 
 
 

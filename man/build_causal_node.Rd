@@ -50,7 +50,7 @@ theoRy instead.
 \examples{
 nodes <- c("y","xtest","ctr1","ctr2")
 timing <- c(0,-1,-3,-2)
-types <- c("otc","test","ctr","ctr", "ctr")
+types <- c("otc","test","ctr","ctr")
 user_mods <- c("y ~ xtest + ctr2; xtest ~ ctr1 + ctr2", "y ~ xtest + ctr1; xtest ~ ctr1 + ctr2")
 causal_matrix <- build_causal_node(nodes=nodes, types=types, timing=timing, user_mods=user_mods, include_subsets=TRUE, return_node=FALSE)
 

@@ -1,65 +1,43 @@
-require(ggdag)
-require(dagitty)
-require(data.table)
+#' Add test compatible or full model compatible columns to the formula matrix
+#'
+#' @description
+#' `add_compatible` returns a comparison matrix, which is a formula matrix
+#'  with both the test compatible and full model compatible columns. The user is strongly recommended to
+#'  pick a reference model which they want to compare against the model universe.
+#'  If not chosen, reference model is default to the first model in the formula matrix.
+#'
+#' @details
+#' add_compatible requires both correct_test and formula to be present in the formula matrix.
+#' This is the default behavior when using build_formula_matrix to create the formula matrix.
+#'
+#'
+#' @param formula_matrix the input formula matrix. Created from \code{\link{build_formula_matrix}}
+#' @param effect Effect type for computing the minimum adjustment sets (MAS). See also \code{\link[dagitty]{adjustmentSets}}
+#' @param ref_mod the input reference model. Should avoid using models with correct_test=="no" (incorrectly adjusted)
+#' as the reference model.
 
-unq_nodes_detect <- function(row, additional_args){
-    fvector <- strsplit(as.character(row[1]), ",")[[1]]
-    dag_args <- lapply(fvector, as.formula)
-    dag <- do.call(dagify, c(dag_args, additional_args))
-    unq_nodes <- paste(unique(c(edges(dag)$v, edges(dag)$w)), collapse="_")
-    return(unq_nodes)
-}
+#'
+#' @returns A comparison matrix (data.table format) with two notable columns: test_compatible and full_model_compatible.
+#' Consult the paper that goes along with the package for a deeper understanding of what test_compatible and full_model_compatible are.
+#'
+#' @examples
+#' cmp_matrix <- add_compatible(formula_matrix, effect="direct", ref_mod=1)
+#'
+#' @references TBA
+#' @export
 
-add_mas <- function(row, additional_args, adjusted=FALSE, unq_Xs=NULL, return_string=FALSE) {
-    fvector <- strsplit(as.character(row[1]), ",")[[1]]
-    dag_args <- lapply(fvector, as.formula)
-    dag <- do.call(dagify, c(dag_args, additional_args))
 
-    if (adjusted==TRUE){
-        unq_nodes <- unique(c(edges(dag)$v, edges(dag)$w))
-        unq_Xs <- unq_nodes[!unq_nodes %in% c("Y","Xtest")]
-        adjustedNodes(dag) <- unq_Xs
-        mas <- adjustmentSets(dag, exposure = "Xtest", outcome = "Y", effect = "direct")
-        if (length(mas)==0) {
-            return("no")
-        }
-        else{
-            return("yes")
-        }
-    }
 
-    else {
 
-        mas <- adjustmentSets(dag, exposure = "Xtest", outcome = "Y", effect = "direct")
-        if (length(unlist(mas)) == 0) {
-            return("none")
-        }
-        else{
-            mas_output <- capture.output(mas)
-            if(return_string){
-                return(paste(mas_output, collapse = ","))
-            }
-            else{
-                return(mas_output)
-            }
-        }
-    }
+add_compatible <- function(formula_matrix,
+                           effect="direct",
+                           ref_mod=NULL){
+    ## Check routines
 
-}
-
-add_compatible <- function(formula_matrix, effect="direct",
-                                ref_mod=NULL){
-    formula_matrix_t <- copy(formula_matrix)
-    setDT(formula_matrix_t)
-    additional_args <- list(
-        exposure="Xtest",
-        outcome="Y"
-    )
     if (is.null(effect)){
         effect = "direct"
         warning("Effect not given, use default (direct) instead.")
     }
-    mas <- lapply(formula_matrix_t$formula, add_mas, additional_args)
 
 
     if (is.null(ref_mod)){
@@ -73,6 +51,19 @@ add_compatible <- function(formula_matrix, effect="direct",
     if(ref_correct == "no"){
         warning("Reference model is not correctly adjusted. This is not recommended!")
     }
+
+
+
+    ## Add MAS
+    data.table::setDT(formula_matrix)
+    formula_matrix_t <- data.table::copy(formula_matrix)
+    additional_args <- list(
+        exposure="Xtest",
+        outcome="Y"
+    )
+    mas <- lapply(formula_matrix_t$formula, add_mas, additional_args)
+
+    ## Extract reference and comparison MAS
     ref_adj <- mas[[ref_mod]]
     cmp_adj <- mas[-ref_mod]
     for (i in seq_along(ref_adj)){
@@ -81,6 +72,8 @@ add_compatible <- function(formula_matrix, effect="direct",
     for (i in seq_along(cmp_adj)){
         cmp_adj[[i]] <- gsub("\\{|\\}|\\s", "",cmp_adj[[i]])
     }
+
+    ## Compare
     ls_cmp <- list()
     ctr <- 1
     for (i in seq_along(cmp_adj)){
@@ -97,6 +90,8 @@ add_compatible <- function(formula_matrix, effect="direct",
         }
         ctr <- ctr+1
     }
+
+    ## Add back in
     formula_ref <- formula_matrix_t[ref_mod]
     formula_ref$test_compatible <- "reference model"
     formula_cmp <- formula_matrix_t[-ref_mod]
@@ -105,17 +100,18 @@ add_compatible <- function(formula_matrix, effect="direct",
     cmp_matrix$unq_nodes <- lapply(cmp_matrix$formula, unq_nodes_detect,additional_args)
     ref_unq_nodes <- unlist(cmp_matrix[test_compatible=="reference model", "unq_nodes"])
     cmp_matrix <- cmp_matrix %>%
-        as_tibble() %>%
-        arrange(model) %>%
-        mutate(
-            full_model_compatible = case_when(
+        tibble::as_tibble() %>%
+        dplyr::arrange(model) %>%
+        dplyr::mutate(
+            full_model_compatible = dplyr::case_when(
                 test_compatible == "reference model" ~ "reference model",
                 test_compatible != "reference model" &
                     unq_nodes  == ref_unq_nodes  & correct_test == "yes" ~ "compatible",
                 TRUE ~ "incompatible"
             )
         )
-    setDT(cmp_matrix)
+    data.table::setDT(cmp_matrix)
+
     return(cmp_matrix)
 }
 

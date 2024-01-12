@@ -1,20 +1,18 @@
 #' Build formula matrix
 #'
 #' @description
-#' `add_compatible` returns a comparison matrix, which is a formula matrix
-#'  with both the test compatible and full model compatible columns. The user is strongly recommended to
-#'  pick a reference model which they want to compare against the model universe.
-#'  If not chosen, reference model is default to the first model in the formula matrix.
+#' `build_formula_matrix` creates a formula matrix (in the lavaan format) from an input causal matrix.
 #'
 #' @details
-#' add_compatible requires both correct_test and formula to be present in the formula matrix.
-#' This is the default behavior when using build_formula_matrix to create the formula matrix.
+#' This function is included in theoRy. Unless computing the causal matrix separately is require, users are encouraged to use
+#' theoRy instead.
+#'
 #'
 #'
 #' @param causal_matrix the input causal matrix. Create from \code{\link{build_causal_matrix}}
 
 #'
-#' @returns
+#' @returns Returns a formula matrix
 #'
 #' @examples
 #' formula_matrix <- build_formula_matrix(causal_matrix)

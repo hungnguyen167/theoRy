@@ -99,6 +99,7 @@ add_compatible <- function(formula_matrix,
     cmp_matrix <- rbind(formula_ref, formula_cmp)
     cmp_matrix$unq_nodes <- lapply(cmp_matrix$formula, unq_nodes_detect,additional_args)
     ref_unq_nodes <- unlist(cmp_matrix[test_compatible=="reference model", "unq_nodes"])
+    ref_correct_test <- unlist(cmp_matrix[test_compatible=="reference model", "correct_test"])
     cmp_matrix <- cmp_matrix %>%
         tibble::as_tibble() %>%
         dplyr::arrange(model) %>%
@@ -106,7 +107,8 @@ add_compatible <- function(formula_matrix,
             full_model_compatible = dplyr::case_when(
                 test_compatible == "reference model" ~ "reference model",
                 test_compatible != "reference model" &
-                    unq_nodes  == ref_unq_nodes  & correct_test == "yes" ~ "compatible",
+                    unq_nodes  == ref_unq_nodes  &
+                    correct_test == ref_correct_test ~ "compatible",
                 TRUE ~ "incompatible"
             )
         )

@@ -118,17 +118,14 @@ plot_dag <- function(ls_theory,
     }
 
 
-
     mas <- formula_matrix$mas
-    for (i in seq_along(mas)){
-        mas[[i]] <- gsub("\\{|\\}|\\s", "",mas[[i]])
-    }
+
+
     if(is.character(choose_mas) & length(choose_mas)==1){
         if(choose_mas=="all"){
             cat("Plotting models with any MAS\n")
             plots_mas <- 1:length(mas)
-        }
-        else {
+        } else {
             cat("Plotting only models with MAS:", choose_mas, "\n")
             plots_mas <- list()
             for(i in seq_along(mas)){
@@ -147,11 +144,24 @@ plot_dag <- function(ls_theory,
     } else{
         stop("choose_mas must be either 'all' (default) or a vector of chosen MAS to plot\n")
     }
-
     plots_mas <- plots_mas[plots_mas != 0]
-    # subset by choose_plots and/or choose_plots_mas
     formula_matrix <- formula_matrix[plots_mas, ]
     formula_matrix <- formula_matrix[formula_matrix$model %in% plots,]
+
+
+    mas <- formula_matrix$mas
+    for (i in seq_along(mas)){
+        if(str_detect(mas[[i]], "\\},\\{")){
+            temp <- unlist(strsplit(mas[[i]], "\\},\\{"))
+            for(j in seq_along(temp)){
+                mas[[i]][[j]] <- gsub("\\{|\\}|\\s", "", temp[[j]])
+                mas[[i]][[j]] <- paste0("{",mas[[i]][[j]],"}")
+            }
+        } else{
+            mas[[i]] <- gsub("\\{|\\}|\\s", "",mas[[i]])
+            mas[[i]] <- paste0("{", mas[[i]], "}")
+        }
+    }
 
     ls_info <- list(formula_matrix=formula_matrix, node_timing=node_timing)
     plot_info <- build_plot_info(ls_info)
@@ -165,7 +175,7 @@ plot_dag <- function(ls_theory,
         ylim <- c(plot_info$minY-0.25, plot_info$maxY + 0.25+abs(dist))
     }
     dag_plots <- list()
-    for (i in 1:nrow(formula_matrix)){
+    for (i in 1:length(mas)){
         mod = as.numeric(formula_matrix[i, "model"])
         plot <- plot_info$dag_matrix[[i]] %>%
             ggplot(aes(x = x, y = y, xend = xend, yend = yend)) +
@@ -174,8 +184,10 @@ plot_dag <- function(ls_theory,
             geom_dag_text(colour="black", na.rm=FALSE) +
             xlim(xlim)+
             ylim(ylim) +
-            annotate("text", label = paste0("MAS = ", paste(mas[as.numeric(formula_matrix$model[formula_matrix$model == i])],
-                                                      collapse="|")),
+            annotate("text", label = ifelse(length(mas)>1,
+                                            paste0("MAS = ", paste0(mas[[i]],
+                                                             collapse="|")),
+                                            paste0("MAS = ", mas[[i]])),
                      x=xlim[2]-0.75, y= ylim[1]+0.15) +
             annotate("text", label=paste0("Model ", mod),
                      x=xlim[1]+1.0, y = ylim[2] -0.15, size=7) +
@@ -187,8 +199,9 @@ plot_dag <- function(ls_theory,
         if(is.vector(choose_plots) & is.numeric(choose_plots)) {
             cat("Saving plots", paste(choose_plots, collapse=","), "to", save_path,"\n")
             for (i in seq_along(dag_plots)) {
-                cat("Saving plot of model", i,"\n")
+
                 model_name <- as.numeric(formula_matrix[i,"model"])
+                cat("Saving plot of model", model_name,"\n")
                 agg_png(filename = paste0(save_path, "model_", model_name, ".png"), width = 2400, height = 1200, res=360)
                 print(dag_plots[[i]])
                 invisible(dev.off())

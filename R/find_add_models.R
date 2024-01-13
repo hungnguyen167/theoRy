@@ -1,22 +1,14 @@
 require(data.table)
 require(tidyverse)
-source("R/build_formula_matrix.R")
-
-match_base <- function(nested_dt, nested_base) {
-    temp <- copy(nested_dt)
-    temp <- temp[, .(from, to, direction)]
-    setorder(temp, from, to, direction)
-    ident <- ifelse(identical(temp, nested_base),1,0)
-    return(ident)
-}
+#source("R/build_formula_matrix.R")
 
 
-find_add_models <- function(ls_theory=NULL, 
-                            causal_matrix=NULL, 
-                            node_timing=NULL, 
-                            user_mods, 
-                            on_ls=FALSE, 
-                            add_nodes=NULL, 
+find_add_models <- function(ls_theory=NULL,
+                            causal_matrix=NULL,
+                            node_timing=NULL,
+                            user_mods,
+                            on_ls=FALSE,
+                            add_nodes=NULL,
                             assert_mod_num=NULL){
 
     if(is.null(user_mods)){
@@ -36,7 +28,7 @@ find_add_models <- function(ls_theory=NULL,
             causal_matrix[,user_mod:=0]
         }
         formula_matrix <- copy(ls_theory$formula_matrix)
-        
+
     }
     if(!is.null(add_nodes)){
         node_timing <- node_timing %>%
@@ -53,7 +45,7 @@ find_add_models <- function(ls_theory=NULL,
             }
             else{
                 node_timing <- node_timing %>%
-                    add_row(var_name = add_nodes[[i]]["var_name"], timing = as.numeric(add_nodes[[i]]["timing"]), 
+                    add_row(var_name = add_nodes[[i]]["var_name"], timing = as.numeric(add_nodes[[i]]["timing"]),
                             type = add_nodes[[i]]["type"], node_name = add_nodes[[i]]["node_name"])
             }
         }
@@ -68,9 +60,9 @@ find_add_models <- function(ls_theory=NULL,
                 node_to = strsplit(ls_formulas[[j]], "\\~")[[1]][1]
                 node_froms = strsplit(strsplit(ls_formulas[[j]], "~")[[1]][2],"\\+")[[1]]
                 for (node_from in node_froms){
-                    df_temp <- tibble(from_var = node_from, 
-                                      to_var=node_to, 
-                                      direction = "->", 
+                    df_temp <- tibble(from_var = node_from,
+                                      to_var=node_to,
+                                      direction = "->",
                                       model = ifelse(!is.null(assert_mod_num),
                                                      assert_mod_num[i],
                                                      i))
@@ -80,34 +72,34 @@ find_add_models <- function(ls_theory=NULL,
             else if (grepl("[ A-Za-z]~~[ A-Za-z]", ls_formulas[[j]])){
                 node_from = strsplit(ls_formulas[[j]], "\\~\\~")[[1]][1]
                 node_to = strsplit(ls_formulas[[j]], "\\~\\~")[[1]][2]
-                df_temp <- tibble(from_var = node_from, 
-                                  to_var=node_to, 
-                                  direction = "<->", 
+                df_temp <- tibble(from_var = node_from,
+                                  to_var=node_to,
+                                  direction = "<->",
                                   model=ifelse(!is.null(assert_mod_num),
                                                                   assert_mod_num[i],
                                                                   i))
                 base_matrix <- bind_rows(base_matrix, df_temp)
-                
+
             }
         }
     }
-    
-    
+
+
     base_matrix <- base_matrix %>%
         mutate_at(vars(all_of(c("from_var","to_var"))), ~ str_replace_all(., " ", "")) %>%
         left_join(node_timing, by=c("from_var"="var_name")) %>%
         rename(timing_from = timing, type_from=type, from=node_name) %>%
         left_join(node_timing, by=c("to_var"="var_name")) %>%
-        rename(timing_to = timing, type_to=type, to=node_name) %>% 
+        rename(timing_to = timing, type_to=type, to=node_name) %>%
         mutate(
             component = ifelse(from!=to, paste(from,to,sep="_"), from)
         ) %>%
         select(from, to, direction, model, component, timing_from, type_from, timing_to, type_to)
     setDT(base_matrix)
-    
+
     ls_base <- split(base_matrix,by="model")
     match_res <- list()
-    
+
     for (i in seq_along(ls_base)){
         b_t <- copy(ls_base[[i]])
         b_t <- b_t[, .(from, to, direction)]
@@ -130,32 +122,32 @@ find_add_models <- function(ls_theory=NULL,
             if(response=="yes"){
                 message("Added")
                 b_t <- copy(ls_base[[i]])
-                
+
                 if(!is.null(assert_mod_num)){
                     b_t[,`:=`(prev_mod=max(causal_matrix$model)+1,user_mod=1)]
                     causal_matrix[, model:= fifelse(model < assert_mod_num[[i]],
                                                    model,
                                                    model+1)]
                     causal_matrix <- rbind(causal_matrix, b_t)
-                    
+
                 } else{
                     b_t[, `:=`(model= max(causal_matrix$model)+1,prev_mod=max(causal_matrix$model)+1,user_mod=1)]
                     causal_matrix <- rbind(causal_matrix, b_t)
-                    
+
                 }
                 if(isTRUE(on_ls)){
                     formula_temp <- build_formula_matrix(b_t)
                     formula_new[[i]] <- formula_temp
                 }
 
-           
-                   
+
+
            } else if (response=="no"){
                 "Skipped"
             } else{
                 message("Invalid response. Skipped")
             }
-            
+
         }
         else{
             cat("Model: '", user_mods[i], "' found in the matrix. Position:", match_res[[i]]$idx,"\n")
@@ -177,21 +169,21 @@ find_add_models <- function(ls_theory=NULL,
                         }
                     }
                     match_res[[i]]$idx <- assert_mod_num[[i]]
-                    
+
                 } else{
                         cat("Asserted position is equal to current position. Skipped.\n")
                     }
                 }
-                
-                
+
+
             }
-            
+
         }
-    
-    
+
+
     if(isTRUE(on_ls)){
-        
-        
+
+
         causal_copy <- copy(causal_matrix)
         causal_copy[, model_ref:=model]
         causal_copy <- causal_copy[, .(model_ref, prev_mod)]
@@ -206,20 +198,20 @@ find_add_models <- function(ls_theory=NULL,
         } else{
             formula_matrix <- formula_matrix_m
         }
-        
+
         setorder(formula_matrix,-user_mod, model)
         setorder(causal_matrix,-user_mod, model)
-        new_ls_theory <- list(causal_matrix=causal_matrix, node_timing=node_timing, 
+        new_ls_theory <- list(causal_matrix=causal_matrix, node_timing=node_timing,
                               formula_matrix=formula_matrix)
         #causal_matrix[, prev_mod:= NULL]
-        
+
         return(new_ls_theory)
     } else{
         #causal_matrix[, prev_mod:= NULL]
         setorder(causal_matrix, -user_mod, model)
         return(causal_matrix)
     }
-    
+
 }
 
 

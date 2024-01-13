@@ -9,12 +9,15 @@ build_formula_matrix(causal_matrix)
 \arguments{
 \item{causal_matrix}{the input causal matrix. Create from \code{\link{build_causal_matrix}}}
 }
+\value{
+Returns a formula matrix
+}
 \description{
 \code{build_formula_matrix} creates a formula matrix (in the lavaan format) from an input causal matrix.
 }
 \details{
 This function is included in theoRy. Unless computing the causal matrix separately is require, users are encouraged to use
-theoRy instead. \n
+theoRy instead.
 }
 \examples{
 formula_matrix <- build_formula_matrix(causal_matrix)

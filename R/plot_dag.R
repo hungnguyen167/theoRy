@@ -2,9 +2,9 @@ require(tidyverse)
 require(data.table)
 require(ggplot2)
 require(ragg)
-build_plot_info <- function(ls_theory) {
-    formula_matrix <- ls_theory$formula_matrix
-    node_timing <- ls_theory$node_timing
+build_plot_info <- function(ls_info) {
+    formula_matrix <- ls_info$formula_matrix
+    node_timing <- ls_info$node_timing
     setDT(formula_matrix)
     setorder(formula_matrix, model)
     node_timing <- node_timing %>%
@@ -104,7 +104,7 @@ plot_dag <- function(ls_theory,
                             save_path=NULL) {
 
     formula_matrix <- copy(ls_theory$formula_matrix)
-    plot_info <- build_plot_info(ls_theory)
+    node_timing <- copy(ls_theory$node_timing)
     if(is.numeric(choose_plots)){
             plots <- as.numeric(formula_matrix$model[formula_matrix$model %in% choose_plots])
             cat("Plotting only models", paste(choose_plots, collapse=","),"\n")
@@ -154,7 +154,8 @@ plot_dag <- function(ls_theory,
     formula_matrix <- formula_matrix[plots_mas, ]
     formula_matrix <- formula_matrix[formula_matrix$model %in% plots,]
 
-
+    ls_info <- list(formula_matrix=formula_matrix, node_timing=node_timing)
+    plot_info <- build_plot_info(ls_info)
 
 
     xlim <- c(plot_info$minX-0.25, plot_info$maxX+0.25)

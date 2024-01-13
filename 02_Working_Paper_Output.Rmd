@@ -15,67 +15,69 @@ library('QCA')
 
 ```
 
-## Showcase how functions work
+## Generate Model Multiverse
 
 ### Generate causal and formula matrix
 
-```{r models}
-nodes <- c("a","b","c","d","e")
-timing <- c(0,-1,-3,-3,-2)
-types <- c("otc","test","ctr","ctr", "ctr")
-user_mods <- c("a ~ b + d; b ~ c + d", # Model 1
-               "a ~ b + c; b ~ c + d", # Model 2
-               "a ~ b + c + d; b ~ c + d", # Model 3
-               #"a ~ b + d; b ~ c + d; f ~ a + b", # Model 4, add later
-               "a ~ b + d; b ~ d; c ~ c", # Model 5
-               "a ~ b + d; b ~ c + d + e; e ~ d" # Model 6
-               )
+Generating a 6 variable model multiverse takes about 3.5 hours. It will likely fail under 36 GB of RAM. Therefore, we save the results for the user and they can call them in the next code chunk.
 
+```{r six_var_comp}
+nodes <- c("a","b","c","d","e","f")
+timing <- c(0,-1,-2,-3,-3, 1)
+types <- c("otc","test","ctr","ctr", "ctr","ctr")
+user_mods <- c("a ~ b + e; b ~ e + d", # Model 1
+               "a ~ b + d; b ~ e + d", # Model 2
+               "a ~ b + e + d; b ~ e + d", # Model 3
+               "a ~ b + e; b ~ e + d; f ~ a + b", # Model 4
+               "a ~ b + e; b ~ e; d ~ d", # Model 5
+               "a ~ b + e; b ~ d + c + e; c ~ e" # Model 6
+               )
 
 tic()
 ls_theory <- theoRy(nodes = nodes, timing = timing, types=types, include_subsets = TRUE, user_mods=user_mods)
 toc()
 
+# Demonstration: If we wanted to add models and/or model numbers after
 
-
-## Add model 4 with an extra node (f). Assert model number = 4
-
-
-ls_theory <- find_add_models(ls_theory = ls_theory, on_ls=TRUE, add_nodes = list(c(var_name = "f", timing = 1, type = "ctr", node_name = "X4")), user_mods = c("a ~ b + d; b ~ c + d; f ~ a + b"), assert_mod_num = 4)
-
-test <- copy(ls_theory)
-
-## If you run a second time, ls_theory should let users know whether models or nodes exists
-
-test <- find_add_models(ls_theory = test, on_ls=TRUE, add_nodes = list(c(var_name = "f", timing = 1, type = "ctr", node_name = "X4")), user_mods = c("a ~ b + d; b ~ c + d; f ~ a + b"), assert_mod_num = 4)
-
-## Can also change swap model numbers. 
-
-test <- find_add_models(ls_theory = test, on_ls=TRUE, add_nodes = list(c(var_name = "f", timing = 1, type = "ctr", node_name = "X4")), user_mods = c("a ~ b + d; b ~ c + d; f ~ a + b", "a ~ b + d; b ~ c + d + e; e ~ d"), assert_mod_num = c(6,4))
-
-
-## Can add and swap at the same time. Here, model 1-2 and an implausible model `max(causal_matrix$model)+1` becomes model 3-1-2
-test <- find_add_models(ls_theory = test, on_ls=TRUE, add_nodes = list(c(var_name = "f", timing = 1, type = "ctr", node_name = "X4")), user_mods = c("a ~ b + d; b ~ c + d", "a ~ b + c; b ~ c + d", "a ~ b + c + d; b ~ c + d; d~e"), assert_mod_num = c(3,1,2))
-
-
-
-
-
-
-
+ls_theory <- find_add_models(ls_theory = ls_theory, on_ls = TRUE, user_mods = c("a ~ b + e; b ~ e + d", # Model 1
+               "a ~ b + d; b ~ e + d", # Model 2
+               "a ~ b + e + d; b ~ e + d", # Model 3
+               "a ~ b + e; b ~ e + d; f ~ a + b", # Model 4
+               "a ~ b + e; b ~ e; d ~ d", # Model 5
+               "a ~ b + e; b ~ d + c + e; c ~ e" # Model 6
+               ), assert_mod_num = c(1,2,3,4,5,6))
 ```
 
+### Load Matricies
 
-### Compare Models
+```{r loadm}
+saveRDS(ls_theory, here::here("Results", "ls_theory.RDS"))
 
-```{r models}
+ls_theory <- readRDS(here:::here("Results", "ls_theory.RDS"))
+```
+
+### Table 2
+
+```{r t2}
+Table_2 <- subset(ls_theory$causal_matrix, model %in% c(1,3,4,5), select = c(from, to, timing_from, timing_to, model))
+
+write.csv(Table_2, here::here("Results", "Table_2.csv"), row.names = F)
+```
+
+## 1. A Potential Collider
+
+### Compare Results
+
+```{r cmp}
 cmp_matrix <- add_compatible(ls_theory$formula_matrix, ref_mod = 1)
 
-## Change ref_mod to whichever is your reference model (using base_mod and model variable in the formula matrix)
+saveRDS(cmp_matrix, here::here("Results", "cmp_matrix.RDS"))
+
+cmp_matrix <- readRDS(here::here("Results", "cmp_matrix.RDS"))
+
 ```
 
-
-### Generate Plots
+### Generate Plots. Table 1
 
 Only need to save models 1-6 for the paper
 
@@ -87,105 +89,6 @@ for(plot in dag_plots){
 }
 ```
 
-
-### Build set matrix
-
-```{r}
-set_matrix <- build_set_matrix(ls_theory$causal_matrix, cmp_matrix = cmp_matrix)
-
-```
-
-
-
-
-
-
-
-
-
-
-
-## Generate Model Multiverse
-
-### Generate causal and formula matrix
-
-
-```{r six_var_comp}
-nodes <- c("a","b","c","d","e","f")
-timing <- c(0,-1,-2,-3,-3, 1)
-types <- c("otc","test","ctr","ctr", "ctr","ctr")
-user_mods <- c("a ~ b + d; b ~ e + d", # Model 1
-               "a ~ b + e; b ~ e + d", # Model 2
-               "a ~ b + e + d; b ~ e + d", # Model 3
-               "a ~ b + d; b ~ e + d; f ~ a + b", # Model 4
-               "a ~ b + d; b ~ d; e ~ e", # Model 5
-               "a ~ b + d; b ~ d + c + e; c ~ e" # Model 6
-               )
-
-tic()
-ls_theory2 <- theoRy(nodes = nodes, timing = timing, types=types, include_subsets = TRUE, user_mods=user_mods)
-toc()
-
-# On the server this took 12767.746 sec elapsed
-```
-### Table 2
-
-```{r t2}
-Table_2 <- subset(ls_theory$causal_matrix, model %in% c(1,3,4,5), select = c(from, to, timing_from, timing_to, model))
-
-write.csv(Table_2, here::here("Results", "Table_2.csv"), row.names = F)
-```
-
-```{r cmp}
-cmp_matrix <- add_compatible(ls_theory2$formula_matrix, ref_mod = 1)
-
-saveRDS(ls_theory2, here::here("Results", "ls_theory2.RDS"))
-saveRDS(cmp_matrix, here::here("Results", "cmp_matrix_theory2.RDS"))
-
-```
-### Generate DAG formulas
-
-```{r gen_dags}
-
-dag_matrix <- build_dag_matrix(ls_theory$formula_matrix, add_nodes = 2)
-
-```
-
-### Generate Plots
-
-Only need to save models 1-6 for the paper
-
-```{r gen_plots, warning = F}
-dag_plots <- plot_dag_matrix(dag_matrix, save_plots = TRUE, choose_plots = c(2,6,8,18,33,34), title_labels = c(3,1,5,2,4,6))
-
-
-```
-
-
-
-
-##### Playing around with plotting as ggdag
-
-```{r ggdag}
-
-fvector <- strsplit(as.character(formula_matrix[1]), ",")[[1]]
-dag_args <- lapply(fvector, as.formula)
-additional_args <- list(
-     exposure="Xtest",
-     outcome="Y"
-     )
-
-d1 <- do.call(dagify, c(dag_args, additional_args))
-
-
-ggdag(d1)
-
-d1plot <- ggdag(d1) +
-    geom_dag_edges(edge_color = "green")
-
-```
-
-
 ## QCA
 
 ### Build Set Matrix
@@ -195,11 +98,15 @@ Here we focus on test_compatible as the outcome (= 1)
 We use cmp_matrix to get this information
 
 ```{r build_set_matrix}
-set_matrix <- build_set_matrix(ls_theory$causal_matrix, cmp_matrix = cmp_matrix)
+set_matrix <- build_set_matrix(ls_theory$causal_matrix, cmp_matrix = cmp_matrix, outcome_var = "test_compatible")
+
+set_matrix_full_comp <-  build_set_matrix(ls_theory$causal_matrix, cmp_matrix = cmp_matrix, outcome_var= "full_model_compatible")
 
 # think about whether we want model numbers in or not, just remove by hand here
 
-set_matrix_c <- dplyr::select(set_matrix, -model)
+# it makes no sense to have Xtest_Y because it is in every model
+
+set_matrix_c <- dplyr::select(set_matrix, -c(model, Xtest_Y))
 ```
 
 
@@ -210,15 +117,17 @@ set_matrix_c <- dplyr::select(set_matrix, -model)
 This can help us understand the role of single components. However, for most causal models a single component is rarely alone so important. For example a node often requires specific edges before it becomes important (e.g., becomes a confounder or collider)
 
 ```{r qca}
-set_truth <- truthTable(set_matrix, "outcome")
+#set_truth <- truthTable(set_matrix_c, "outcome")
 
-set_pof <- pof(setms = select(set_matrix, -c(model,outcome)), outcome = "outcome", data = set_matrix)
+set_pof <- pof(setms = select(set_matrix, -c(model,outcome, Xtest_Y)), outcome = "outcome", data = set_matrix)
 
 # try option relation = "sufficiency"
 
 #inclN = inclusion = what percent of all models have outcome (Y = 1) and this component (X = 1)
 #covN = necessity coverage = what percent of all models with this component (X = 1) have the outcome (Y = 1)
 #RoN = relevence of necessity = is a necessary condition trivial
+
+set_pof
 ```
 
 
@@ -242,4 +151,77 @@ min_results <- minimize(set_matrix_c, details = TRUE, outcome = "outcome")
 *RoN* = relevence of necessity = is a necessary condition trivial
 ```{r qca}
 s_subset <- superSubset(set_matrix_c, outcome = "outcome")
+
+s_subset
 ```
+### Comparing the same # of variables
+
+We have included all subsets. So these models have different variables. We might want to know about all causal models with a fixed set of variables. 
+
+#### Identify vars
+
+```{r var_find}
+# identify models by their variables
+subset_models <- as.data.frame(cmp_matrix) %>%
+    mutate(X1 = ifelse(grepl("X1", unq_nodes), 1, 0),
+           X2 = ifelse(grepl("X2", unq_nodes), 1, 0),
+           X3 = ifelse(grepl("X3", unq_nodes), 1, 0),
+           X4 = ifelse(grepl("X4", unq_nodes), 1, 0)) %>%
+    subset(select = c(model, X1, X2, X3, X4))
+
+
+```
+
+#### Subset list
+
+```{r subs}
+models_X1X2X4 <- subset(subset_models, X1 == 1 & X2 == 1 & X3 == 0 & X4 == 1, select = model)$model
+
+set_matrix_X1X2X4 <- subset(set_matrix, model %in% models_X1X2X4)
+# flip to not_compatible
+
+set_matrix_full_comp_X1X2X4 <- subset(set_matrix_full_comp, model %in% models_X1X2X4)
+
+set_matrix_X1X2X4 <- set_matrix_X1X2X4 %>%
+    mutate(outcome = (outcome-1)*-1)
+
+set_matrix_full_comp_X1X2X4 <- set_matrix_full_comp_X1X2X4 %>%
+    mutate(outcome = (outcome-1)*-1)
+
+```
+
+#### Subset X1X2X4 Test Compatible
+
+So far this keeps M1 as the comparison model. Keep that in mind. 
+
+We flipped the outcome because we want to know which are not test_compatible
+
+
+*inclN* = inclusion = what percent of all models have outcome (Y = 1) and this component (X = 1)
+*covN* = necessity coverage = what percent of all models with this component (X = 1) have the outcome (Y = 1)
+*RoN* = relevence of necessity = is a necessary condition trivial
+
+```{r subX1X2X4}
+s_subset_X1X2X4 <- superSubset(dplyr::select(set_matrix_X1X2X4, -c(model, Xtest_Y)), outcome = "outcome")
+
+s_subset_X1X2X4
+```
+Of all models with X1, X2 and X4, `r round(mean(set_matrix_X1X2X4$outcome)*100,1)`% are not test compatible with M1. If all models were equally plausible, a fair majority would not be test compatible with M1. 
+
+### Subset X1X2X4 full model compatible
+
+Again the inverse. So not full model compatible. 
+
+
+```{r subfullx1x2x4}
+s_subset_full_X1X2X4 <- superSubset(dplyr::select(set_matrix_full_comp_X1X2X4, -c(model, Xtest_Y)), outcome = "outcome")
+
+s_subset_full_X1X2X4
+```
+
+None are compatible. Thats because our model does not have X4. To simulate this we need to compare a version of M1 that has a solo X4 (no paths to it) and compare that at full_model_compatible.
+
+```{r next}
+
+```
+

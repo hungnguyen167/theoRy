@@ -3,9 +3,8 @@ require(data.table)
 require(ggplot2)
 require(ragg)
 build_plot_info <- function(ls_info) {
-    formula_matrix <- ls_info$formula_matrix
-    node_timing <- ls_info$node_timing
-    setDT(formula_matrix)
+    formula_matrix <- copy(ls_info$formula_matrix)
+    node_timing <- copy(ls_info$node_timing)
     setorder(formula_matrix, model)
     node_timing <- node_timing %>%
         as_tibble() %>%
@@ -85,7 +84,7 @@ build_plot_info <- function(ls_info) {
         dag <- do.call(dagify, c(lapply(fvector, as.formula), additional_args))
         # extract adjustment sets
         model <- formula_matrix$model[f]
-        dag_matrix[[model]] <- dag
+        dag_matrix[[f]] <- dag
     }
     minX <- min(x_coords)
     maxX <- max(x_coords)
@@ -178,7 +177,7 @@ plot_dag <- function(ls_theory,
             annotate("text", label = paste0("MAS = ", paste(mas[as.numeric(formula_matrix$model[formula_matrix$model == i])],
                                                       collapse="|")),
                      x=xlim[2]-0.75, y= ylim[1]+0.15) +
-            annotate("text", label=paste0("Model ", formula_matrix$model[formula_matrix$model == i]),
+            annotate("text", label=paste0("Model ", mod),
                      x=xlim[1]+1.0, y = ylim[2] -0.15, size=7) +
             theme_dag()
         dag_plots[[i]] <- plot

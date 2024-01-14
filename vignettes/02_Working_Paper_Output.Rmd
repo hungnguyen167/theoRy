@@ -12,7 +12,7 @@ output: html_document
 #source("R/theoRy.R")
 library('tictoc')
 library('QCA')
-devtools::document() ## For now, run this to load all functions
+library('theoRy') ## For now, run this to load all functions
 
 ```
 

@@ -9,10 +9,9 @@ output: html_document
 
 ```{r setup}
 
-#source("R/theoRy.R")
 library('tictoc')
 library('QCA')
-library('theoRy') ## For now, run this to load all functions
+library('theoRy') 
 
 ```
 

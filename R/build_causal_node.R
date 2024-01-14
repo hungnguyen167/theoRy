@@ -22,7 +22,7 @@
 #' @param return_node if TRUE, returns the node-timing matrix instead of the causal matrix.
 #'
 #'
-#' @returns Returns either a causal matrix or a node-timing matrix. The causal matrix is the basis for comparing theoretical models. The causal matrix consists of at least 9 columns:
+#' @returns Either a causal matrix or a node-timing matrix. The causal matrix is the basis for comparing theoretical models. The causal matrix consists of at least 9 columns:
 #' from, to, direction, model, component, timing_from, type_from, timing_to, type_to. The direction only takes two values "->" or
 #' "<->". "<-" is omitted because X2 <- X1 is similar to X1 -> X2. The column user_mod is introduced when user_mods are provided.
 #' In the causal matrix, nodes are called by conventional node names for causal inference (Y, Xtest, X1, X2, etc.) instead of

@@ -4,16 +4,18 @@
 #' `build_formula_matrix` creates a formula matrix (in the lavaan format) from an input causal matrix.
 #'
 #' @details
-#' This function is included in theoRy. Unless computing the causal matrix separately is require, users are encouraged to use
+#' This function is included in theoRy. Unless computing the formula matrix separately is require, users are encouraged to use
 #' theoRy instead.
 #'
 #'
 #'
-#' @param causal_matrix the input causal matrix. Create from \code{\link{build_causal_matrix}}
+#' @param causal_matrix the input causal matrix. Created from \code{\link{build_causal_matrix}}
 
 #'
-#' @returns Returns a formula matrix
-#'
+#' @returns A formula matrix with 5 columns. The formula column is in the lavaan format. See \code{\link[lavaan]}.
+#' The MAS column is the minimum adjustment sets to measure the direct effect from Xtest to Y. correct_test (yes or no)
+#' is whether the model is correctly adjusted when all X variables are adjusted. This is useful for \code{\link{add_compatible}}
+#' later.
 #' @examples
 #' formula_matrix <- build_formula_matrix(causal_matrix)
 #'

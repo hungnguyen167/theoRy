@@ -1,109 +1,34 @@
-require(tidyverse)
-require(data.table)
-require(ggplot2)
-require(ragg)
-build_plot_info <- function(ls_info) {
-    formula_matrix <- copy(ls_info$formula_matrix)
-    node_timing <- copy(ls_info$node_timing)
-    setorder(formula_matrix, model)
-    node_timing <- node_timing %>%
-        as_tibble() %>%
-        mutate(
-            timing = as.numeric(timing)
-        ) %>%
-        arrange(desc(timing))
-
-    ## x_coords
-    x_coords <- list()
-    pl <- round(2/(length(unique(node_timing$timing))-1),3)
-    for (i in seq_along(node_timing$timing)){
-        if(i==1){
-            x_coords[[i]] <- 1
-        } else {
-            if(node_timing$timing[i] == node_timing$timing[i-1]){
-                x_coords[[i]] <- x_coords[[i-1]]
-            } else{
-                x_coords[[i]] <- x_coords[[i-1]] - pl
-            }
-        }
-    }
-    x_coords <- unlist(x_coords)
-    names(x_coords) <- node_timing$node_name
-
-
-    ## y_coords
-    y_coords <- list()
-    buffer_y <- 2
-    previous_timing <- Inf
-    last_idx <- 1
-    for (i in seq_along(node_timing$timing)){
-        noXtestY <- node_timing[which(!node_timing$node_name %in% c("Xtest","Y")),]
-        if(node_timing$node_name[i] %in% c("Xtest","Y")){
-            y_coords[[i]] <- 0
-
-        } else{
-            if(node_timing$timing[i] == max(noXtestY$timing)){
-                if(node_timing$timing[i] == previous_timing){
-                    y_coords[[i]] <- y_coords[[i-1]] - buffer_y
-                }
-                else{
-                    y_coords[[i]] <- 0.5
-                    last_idx <- i
-                }
-            }
-            else {
-                if(node_timing$timing[i] == previous_timing){
-                    y_coords[[i]] <- y_coords[[i-1]] - buffer_y
-                }
-                else{
-                    y_coords[[i]] <- y_coords[[last_idx]] + 0.25
-                    last_idx <- i
-                }
-            }
-            previous_timing <- node_timing$timing[i]
-        }
-
-    }
-    y_coords <- unlist(y_coords)
-    names(y_coords) <- node_timing$node_name
-
-
-
-    crds <- list(x = x_coords,
-                 y = y_coords)
-
-    additional_args <- list(
-        exposure="Xtest",
-        outcome="Y",
-        coords = crds
-    )
-    dag_matrix <- list()
-    for (f in 1:nrow(formula_matrix)) {
-        fvector <- strsplit(unlist(formula_matrix[f,1]), ",")[[1]]
-        # create dag object syntax
-        dag <- do.call(dagify, c(lapply(fvector, as.formula), additional_args))
-        # extract adjustment sets
-        model <- formula_matrix$model[f]
-        dag_matrix[[f]] <- dag
-    }
-    minX <- min(x_coords)
-    maxX <- max(x_coords)
-    minY <- min(y_coords)
-    maxY <- max(y_coords)
-    plot_info <- list(minX=minX, maxX=maxX, minY=minY, maxY=maxY, dag_matrix=dag_matrix)
-
-    return(plot_info)
-}
-
+#' Plot DAG models
+#'
+#' @description
+#' `plot_dag` creates ggplot2-style plots from a ls_theory object.
+#'
+#' @details
+#' This requires the ls_theory object, created from \code{\link{theoRy}} to work. Plot functions are inhereted from
+#' the \code{\link[ggdag]} package.
+#'
+#'
+#'
+#' @param ls_theory the input ls_theory object. Created from \code{\link{theoRy}}.
+#' @param choose_plots models to plot. Default to "all". However, this option can be resource-intensive if
+#' the model universe is too large. It is recommended to choose certain models to compare against one another.
+#' @param save_path path to save plots. Default to NULL (not saving)
+#' @returns DAG plots of chosen DAG models from the ls_theory.
+#' @examples
+#' dag_plots <- plot_dag(ls_theory, choose_plots=c(1,2,3,4,5,6))
+#' for (i in seq_along(dag_plots)){
+#'     print(dag_plots[[i]])
+#' }
+#' @references TBA
+#' @export
 
 
 plot_dag <- function(ls_theory,
-                            choose_plots = "all", # if not all, must be a vector with model numbers
-                            choose_mas ="all",
-                            save_path=NULL) {
+                     choose_plots = "all",
+                     save_path=NULL) {
 
-    formula_matrix <- copy(ls_theory$formula_matrix)
-    node_timing <- copy(ls_theory$node_timing)
+    formula_matrix <- data.table::copy(ls_theory$formula_matrix)
+    node_timing <- data.table::copy(ls_theory$node_timing)
     if(is.numeric(choose_plots)){
             plots <- as.numeric(formula_matrix$model[formula_matrix$model %in% choose_plots])
             cat("Plotting only models", paste(choose_plots, collapse=","),"\n")
@@ -117,41 +42,12 @@ plot_dag <- function(ls_theory,
 
     }
 
-
-    mas <- formula_matrix$mas
-
-
-    if(is.character(choose_mas) & length(choose_mas)==1){
-        if(choose_mas=="all"){
-            cat("Plotting models with any MAS\n")
-            plots_mas <- 1:length(mas)
-        } else {
-            cat("Plotting only models with MAS:", choose_mas, "\n")
-            plots_mas <- list()
-            for(i in seq_along(mas)){
-                have_mas <- any(mas[[i]] %in% choose_mas)
-                plots_mas[[i]] <- ifelse(have_mas, i, 0)
-            }
-        }
-
-    } else if(is.character(choose_mas) & length(choose_mas) > 1){
-        cat("Plotting only models with MAS:", paste(choose_mas, collapse="or"), "\n")
-        plots_mas <- list()
-        for(i in seq_along(mas)){
-            have_mas <- any(mas[[i]] %in% choose_mas)
-            plots_mas[[i]] <- ifelse(have_mas, i, 0)
-        }
-    } else{
-        stop("choose_mas must be either 'all' (default) or a vector of chosen MAS to plot\n")
-    }
-    plots_mas <- plots_mas[plots_mas != 0]
-    formula_matrix <- formula_matrix[plots_mas, ]
-    formula_matrix <- formula_matrix[formula_matrix$model %in% plots,]
+    formula_matrix <- formula_matrix[model %in% plots,]
 
 
     mas <- formula_matrix$mas
     for (i in seq_along(mas)){
-        if(str_detect(mas[[i]], "\\},\\{")){
+        if(stringr::str_detect(mas[[i]], "\\},\\{")){
             temp <- unlist(strsplit(mas[[i]], "\\},\\{"))
             for(j in seq_along(temp)){
                 mas[[i]][[j]] <- gsub("\\{|\\}|\\s", "", temp[[j]])
@@ -178,20 +74,20 @@ plot_dag <- function(ls_theory,
     for (i in 1:length(mas)){
         mod = as.numeric(formula_matrix[i, "model"])
         plot <- plot_info$dag_matrix[[i]] %>%
-            ggplot(aes(x = x, y = y, xend = xend, yend = yend)) +
-            geom_dag_point(colour="white", na.rm=FALSE) +
-            geom_dag_edges() +
-            geom_dag_text(colour="black", na.rm=FALSE) +
+            ggplot2::ggplot(ggplot2::aes(x = x, y = y, xend = xend, yend = yend)) +
+            ggdag::geom_dag_point(colour="white", na.rm=FALSE) +
+            ggdag::geom_dag_edges() +
+            ggdag::geom_dag_text(colour="black", na.rm=FALSE) +
             xlim(xlim)+
             ylim(ylim) +
-            annotate("text", label = ifelse(length(mas)>1,
+            ggplot2::annotate("text", label = ifelse(length(mas)>1,
                                             paste0("MAS = ", paste0(mas[[i]],
                                                              collapse="|")),
                                             paste0("MAS = ", mas[[i]])),
                      x=xlim[2]-0.75, y= ylim[1]+0.15) +
-            annotate("text", label=paste0("Model ", mod),
+            ggplot2::annotate("text", label=paste0("Model ", mod),
                      x=xlim[1]+1.0, y = ylim[2] -0.15, size=7) +
-            theme_dag()
+            ggdag::theme_dag()
         dag_plots[[i]] <- plot
         }
 
@@ -202,7 +98,7 @@ plot_dag <- function(ls_theory,
 
                 model_name <- as.numeric(formula_matrix[i,"model"])
                 cat("Saving plot of model", model_name,"\n")
-                agg_png(filename = paste0(save_path, "model_", model_name, ".png"), width = 2400, height = 1200, res=360)
+                ragg::agg_png(filename = paste0(save_path, "model_", model_name, ".png"), width = 2400, height = 1200, res=360)
                 print(dag_plots[[i]])
                 invisible(dev.off())
             }

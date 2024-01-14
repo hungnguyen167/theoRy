@@ -2,7 +2,6 @@
 % Please edit documentation in R/theoRy-package.R
 \docType{package}
 \name{theoRy-package}
-\alias{theoRy}
 \alias{theoRy-package}
 \title{theoRy: What the Package Does (One Line, Title Case)}
 \description{

@@ -2,7 +2,7 @@
 An R app for comparing many causal models
 
 [Nate Breznau](https://sites.google.com/site/nbreznau/) <br>
-Hung H.V. Nguyen
+[Hung H.V. Nguyen](https://orcid.org/0000-0001-9496-6217) <br>
 
 ## Overview
 

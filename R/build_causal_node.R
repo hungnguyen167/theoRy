@@ -4,8 +4,8 @@
 #' `build_causal_node` returns either the causal matrix or the node-timing matrix used in theory comparison
 #'
 #' @details
-#' This function is included in theoRy. Unless computing the causal matrix separately is require, users are encouraged to use
-#' theoRy instead.
+#' This function is included in `run_theoRy`. Unless computing the causal matrix separately is require, users are encouraged to use
+#' `run_theoRy` instead.
 #'
 #'
 #' @param nodes the input nodes/variable names, a character vector/list.

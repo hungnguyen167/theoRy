@@ -44,8 +44,8 @@ check this information in the node-timing matrix.
 `build_causal_node` returns either the causal matrix or the node-timing matrix used in theory comparison
 }
 \details{
-This function is included in theoRy. Unless computing the causal matrix separately is require, users are encouraged to use
-theoRy instead.
+This function is included in `run_theoRy`. Unless computing the causal matrix separately is require, users are encouraged to use
+`run_theoRy` instead.
 }
 \examples{
 nodes <- c("y","xtest","ctr1","ctr2")

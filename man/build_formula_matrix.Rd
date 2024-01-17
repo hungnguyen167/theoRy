@@ -19,8 +19,8 @@ later.
 `build_formula_matrix` creates a formula matrix (in the lavaan format) from an input causal matrix.
 }
 \details{
-This function is included in theoRy. Unless computing the formula matrix separately is require, users are encouraged to use
-theoRy instead.
+This function is included in `run_theoRy`. Unless computing the formula matrix separately is require, users are encouraged to use
+`run_theoRy` instead.
 }
 \examples{
 formula_matrix <- build_formula_matrix(causal_matrix)

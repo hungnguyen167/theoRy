@@ -7,7 +7,7 @@
 plot_dag(ls_theory, choose_plots = "all", save_path = "Results")
 }
 \arguments{
-\item{ls_theory}{the input ls_theory object. Created from \code{\link{theoRy}}.}
+\item{ls_theory}{the input ls_theory object. Created from \code{\link{run_theoRy}}.}
 
 \item{choose_plots}{models to plot. Default to "all". However, this option can be resource-intensive if
 the model universe is too large. It is recommended to choose certain models to compare against one another.}
@@ -21,7 +21,7 @@ DAG plots of chosen DAG models from the ls_theory.
 `plot_dag` creates ggplot2-style plots from a ls_theory object.
 }
 \details{
-This requires the ls_theory object, created from \code{\link{theoRy}} to work. Plot functions are inhereted from
+This requires the ls_theory object, created from \code{\link{run_theoRy}} to work. Plot functions are inhereted from
 the \code{\link[ggdag]} package.
 }
 \examples{

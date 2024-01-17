@@ -3,21 +3,23 @@ Title: An R package for comparing many causal models
 Version: 0.1.0
 Authors@R: 
     c(
-    person(given="Nate", family="Breznau", email="breznau.nate@gmail.com", role = c("aut", "cre"),
-           comment = c(ORCID = "https://orcid.org/0000-0003-4983-3137")),
     person(given="Hung H. V.", family="Nguyen", email="hunghvnguyen@gmail.com", role = c("aut","cre"),
-           comment = c(ORCID = "https://orcid.org/0000-0001-9496-6217"))
+           comment = c(ORCID = "https://orcid.org/0000-0001-9496-6217")),
+    person(given="Nate", family="Breznau", email="breznau.nate@gmail.com", role = "aut",
+           comment = c(ORCID = "https://orcid.org/0000-0003-4983-3137"))
            )
 Description: This package helps researchers build all possible causal models from variables and efficiently compare them. The package is built on top of the "dagitty" and "ggdag" packages, which are already widely used in causal inferences. 
 License: MIT + file LICENSE
 Encoding: UTF-8
 URL: https://github.com/hungnguyen167/theoRy
 Depends: 
+    R (>= 4.2.2),
     data.table (>= 1.14.8),
     digest (>= 0.6.31),
     dplyr (>= 1.1.0),
     ggdag (>= 0.2.10),
     ggplot2 (>= 3.4.1),
+    magrittr (>= 2.0.3),
     ragg (>= 1.2.5),
     stringr (>= 1.5.0),
     tibble (>= 3.2.0),

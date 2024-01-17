@@ -7,7 +7,7 @@
 #'
 #'
 #'
-#' @param ls_theory the input ls_theory object. Created from \code{\link{theoRy}}.
+#' @param ls_theory the input ls_theory object. Created from \code{\link{run_theoRy}}.
 #' @param causal_matrix the input causal_matrix. Created from \code{\link{build_causal_matrix}}. Used only
 #' when ls_theory=NULL.
 #' @param node_timing the input node_timing Created from \code{\link{build_causal_matrix}}. Used only

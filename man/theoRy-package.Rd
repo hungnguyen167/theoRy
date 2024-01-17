@@ -2,6 +2,7 @@
 % Please edit documentation in R/theoRy-package.R
 \docType{package}
 \name{theoRy-package}
+\alias{theoRy}
 \alias{theoRy-package}
 \title{theoRy: An R package for comparing many causal models}
 \description{
@@ -15,7 +16,12 @@ Useful links:
 
 }
 \author{
-\strong{Maintainer}: Nate Breznau \email{breznau.nate@gmail.com} (\href{https://orcid.org/0000-0003-4983-3137}{ORCID})
+\strong{Maintainer}: Hung H. V. Nguyen \email{hunghvnguyen@gmail.com} (\href{https://orcid.org/0000-0001-9496-6217}{ORCID})
+
+Authors:
+\itemize{
+  \item Nate Breznau \email{breznau.nate@gmail.com} (\href{https://orcid.org/0000-0003-4983-3137}{ORCID})
+}
 
 }
 \keyword{internal}

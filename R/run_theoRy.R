@@ -22,11 +22,11 @@
 #' timing <- c(0,-1,-3,-2)
 #' types <- c("otc","test","ctr","ctr")
 #' user_mods <- c("y ~ xtest + ctr2; xtest ~ ctr1 + ctr2", "y ~ xtest + ctr1; xtest ~ ctr1 + ctr2")
-#' ls_theory <- theoRy(nodes=nodes, types=types, timing=timing, include_subsets=TRUE, user_mods=user_mods)
+#' ls_theory <- run_theoRy(nodes=nodes, types=types, timing=timing, include_subsets=TRUE, user_mods=user_mods)
 #'
 #' @export
 
-theoRy <- function(nodes, types, timing,include_subsets=FALSE, user_mods=NULL){
+run_theoRy <- function(nodes, types, timing,include_subsets=FALSE, user_mods=NULL){
     causal_matrix <- build_causal_node(nodes, types, timing,include_subsets=include_subsets,
                                          user_mods=user_mods, return_node=FALSE)
     node_timing <- build_causal_node(nodes, types, timing,include_subsets=include_subsets, return_node=TRUE)

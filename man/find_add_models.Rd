@@ -15,7 +15,7 @@ find_add_models(
 )
 }
 \arguments{
-\item{ls_theory}{the input ls_theory object. Created from \code{\link{theoRy}}.}
+\item{ls_theory}{the input ls_theory object. Created from \code{\link{run_theoRy}}.}
 
 \item{causal_matrix}{the input causal_matrix. Created from \code{\link{build_causal_matrix}}. Used only
 when ls_theory=NULL.}

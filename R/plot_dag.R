@@ -4,12 +4,12 @@
 #' `plot_dag` creates ggplot2-style plots from a ls_theory object.
 #'
 #' @details
-#' This requires the ls_theory object, created from \code{\link{theoRy}} to work. Plot functions are inhereted from
+#' This requires the ls_theory object, created from \code{\link{run_theoRy}} to work. Plot functions are inhereted from
 #' the \code{\link[ggdag]} package.
 #'
 #'
 #'
-#' @param ls_theory the input ls_theory object. Created from \code{\link{theoRy}}.
+#' @param ls_theory the input ls_theory object. Created from \code{\link{run_theoRy}}.
 #' @param choose_plots models to plot. Default to "all". However, this option can be resource-intensive if
 #' the model universe is too large. It is recommended to choose certain models to compare against one another.
 #' @param save_path path to save plots. Default to NULL (not saving)

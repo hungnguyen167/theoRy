@@ -19,10 +19,10 @@ A comparison matrix (data.table format) with two notable columns: test_compatibl
 Consult the paper that goes along with the package for a deeper understanding of what test_compatible and full_model_compatible are.
 }
 \description{
-\code{add_compatible} returns a comparison matrix, which is a formula matrix
-with both the test compatible and full model compatible columns. The user is strongly recommended to
-pick a reference model which they want to compare against the model universe.
-If not chosen, reference model is default to the first model in the formula matrix.
+`add_compatible` returns a comparison matrix, which is a formula matrix
+ with both the test compatible and full model compatible columns. The user is strongly recommended to
+ pick a reference model which they want to compare against the model universe.
+ If not chosen, reference model is default to the first model in the formula matrix.
 }
 \details{
 add_compatible requires both correct_test and formula to be present in the formula matrix.

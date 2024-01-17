@@ -85,7 +85,7 @@ cmp_matrix <- readRDS(here::here("data", "cmp_matrix.RDS"))
 Only need to save models 1-6 for the paper
 
 ```{r gen_plots, warning = F}
-dag_plots <- plot_dag(ls_theory, choose_plots=c(1,2,3,4,5,6), save_path="Results")
+dag_plots <- plot_dag(ls_theory, choose_plots=c(1,2,3,4,5,6), save_path=paste0(dirname(getwd()), "/Results")) ## save to Results folder in the parent directory
 
 for(plot in dag_plots){
     print(plot)

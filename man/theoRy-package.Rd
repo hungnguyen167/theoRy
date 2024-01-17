@@ -3,12 +3,19 @@
 \docType{package}
 \name{theoRy-package}
 \alias{theoRy-package}
-\title{theoRy: What the Package Does (One Line, Title Case)}
+\title{theoRy: An R package for comparing many causal models}
 \description{
-What the package does (one paragraph).
+This package helps researchers build all possible causal models from variables and efficiently compare them. The package is built on top of the "dagitty" and "ggdag" packages, which are already widely used in causal inferences.
+}
+\seealso{
+Useful links:
+\itemize{
+  \item \url{https://github.com/hungnguyen167/theoRy}
+}
+
 }
 \author{
-\strong{Maintainer}: First Last \email{first.last@example.com} (\href{https://orcid.org/YOUR-ORCID-ID}{ORCID})
+\strong{Maintainer}: Nate Breznau \email{breznau.nate@gmail.com} (\href{https://orcid.org/0000-0003-4983-3137}{ORCID})
 
 }
 \keyword{internal}

@@ -4,7 +4,7 @@
 \alias{plot_dag}
 \title{Plot DAG models}
 \usage{
-plot_dag(ls_theory, choose_plots = "all", save_path = NULL)
+plot_dag(ls_theory, choose_plots = "all", save_path = "Results")
 }
 \arguments{
 \item{ls_theory}{the input ls_theory object. Created from \code{\link{theoRy}}.}
@@ -18,7 +18,7 @@ the model universe is too large. It is recommended to choose certain models to c
 DAG plots of chosen DAG models from the ls_theory.
 }
 \description{
-\code{plot_dag} creates ggplot2-style plots from a ls_theory object.
+`plot_dag` creates ggplot2-style plots from a ls_theory object.
 }
 \details{
 This requires the ls_theory object, created from \code{\link{theoRy}} to work. Plot functions are inhereted from

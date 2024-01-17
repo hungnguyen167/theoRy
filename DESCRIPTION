@@ -2,10 +2,12 @@ Package: theoRy
 Title: An R package for comparing many causal models
 Version: 0.1.0
 Authors@R: 
-    person(first="Nate", last="Breznau", email="breznau.nate@gmail.com", role = c("aut", "cre"),
-           comment = c(ORCID = "https://orcid.org/0000-0003-4983-3137"))
-    person(first="Hung H. V.", last="Nguyen", email="hunghvnguyen@gmail.com", role = c("aut","cre"),
+    c(
+    person(given="Nate", family="Breznau", email="breznau.nate@gmail.com", role = c("aut", "cre"),
+           comment = c(ORCID = "https://orcid.org/0000-0003-4983-3137")),
+    person(given="Hung H. V.", family="Nguyen", email="hunghvnguyen@gmail.com", role = c("aut","cre"),
            comment = c(ORCID = "https://orcid.org/0000-0001-9496-6217"))
+           )
 Description: This package helps researchers build all possible causal models from variables and efficiently compare them. The package is built on top of the "dagitty" and "ggdag" packages, which are already widely used in causal inferences. 
 License: MIT + file LICENSE
 Encoding: UTF-8
@@ -23,3 +25,4 @@ Depends:
 Suggests: 
     QCA (>= 3.21),
     tictoc (>= 1.2)
+RoxygenNote: 7.3.0

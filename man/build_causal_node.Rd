@@ -41,7 +41,7 @@ their original variable names. A summary of variable names, timing, and types is
 check this information in the node-timing matrix.
 }
 \description{
-\code{build_causal_node} returns either the causal matrix or the node-timing matrix used in theory comparison
+`build_causal_node` returns either the causal matrix or the node-timing matrix used in theory comparison
 }
 \details{
 This function is included in theoRy. Unless computing the causal matrix separately is require, users are encouraged to use

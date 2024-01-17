@@ -37,7 +37,7 @@ to the end of the matrices.}
 DAG plots of chosen DAG models from the ls_theory.
 }
 \description{
-\code{find_add_models} allows users to search for a particular model within the model universe. When not found,
+`find_add_models` allows users to search for a particular model within the model universe. When not found,
 users can choose to add it to the universe to compare it with existing models.
 }
 \examples{

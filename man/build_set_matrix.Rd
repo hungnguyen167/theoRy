@@ -14,9 +14,9 @@ build_set_matrix(
 \arguments{
 \item{causal_matrix}{the input causal matrix. Created from \code{\link{build_causal_matrix}}.}
 
-\item{outcome_var}{the type of compatibility used in comparison. Default to "test_compatible".}
+\item{outcome_var}{the variable in the compatibility matrix used to measure the outcome. Default to "test_compatible".}
 
-\item{outcome_positive}{the label for a positive outcome. Default to "compatible".}
+\item{outcome_positive}{the label in outcome_var that indicates a positive outcome. Default to "compatible".}
 
 \item{cmp_matrix}{the compatibility matrix. Created from \code{\link{add_compatible}}.}
 }
@@ -27,7 +27,7 @@ is whether the model is correctly adjusted when all X variables are adjusted. Th
 later.
 }
 \description{
-\code{build_set_matrix} creates a set matrix used in theory analysis
+`build_set_matrix` creates a set matrix used in theory analysis
 }
 \examples{
 set_matrix <- build_set_matrix(causal_matrix=causal_matrix, cmp_matrix=cmp_matrix)

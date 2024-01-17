@@ -28,7 +28,7 @@ a list with three objects: causal_matrix, formula_matrix, and node_timing matrix
 }
 \description{
 This function returns three main matrices required in theory comparison, namely the node-timing matrix (user inputs),
-the causal matrix, and the formula matrix. See \code{\link{build_causal_matrix}} and \code{\link{build_formula_matrix}}.
+the causal matrix, and the formula matrix. See \code{\link{build_causal_node}} and \code{\link{build_formula_matrix}}.
 }
 \examples{
 nodes <- c("y","xtest","ctr1","ctr2")

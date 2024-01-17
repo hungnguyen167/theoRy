@@ -12,6 +12,7 @@ This package helps researchers build all possible causal models from variables a
 Useful links:
 \itemize{
   \item \url{https://github.com/hungnguyen167/theoRy}
+  \item Report bugs at \url{https://github.com/hungnguyen167/theoRy/issues}
 }
 
 }

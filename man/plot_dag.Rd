@@ -22,7 +22,7 @@ DAG plots of chosen DAG models from the ls_theory.
 }
 \details{
 This requires the ls_theory object, created from \code{\link{run_theoRy}} to work. Plot functions are inhereted from
-the \code{\link[ggdag]} package.
+the `ggdag` package.
 }
 \examples{
 dag_plots <- plot_dag(ls_theory, choose_plots=c(1,2,3,4,5,6))

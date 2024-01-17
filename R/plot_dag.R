@@ -5,7 +5,7 @@
 #'
 #' @details
 #' This requires the ls_theory object, created from \code{\link{run_theoRy}} to work. Plot functions are inhereted from
-#' the \code{\link[ggdag]} package.
+#' the `ggdag` package.
 #'
 #'
 #'

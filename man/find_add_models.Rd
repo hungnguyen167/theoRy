@@ -17,13 +17,13 @@ find_add_models(
 \arguments{
 \item{ls_theory}{the input ls_theory object. Created from \code{\link{run_theoRy}}.}
 
-\item{causal_matrix}{the input causal_matrix. Created from \code{\link{build_causal_matrix}}. Used only
+\item{causal_matrix}{the input causal_matrix. Created from \code{\link{build_causal_node}}. Used only
 when ls_theory=NULL.}
 
-\item{node_timing}{the input node_timing Created from \code{\link{build_causal_matrix}}. Used only
+\item{node_timing}{the input node_timing Created from \code{\link{build_causal_node}}. Used only
 when ls_theory=NULL.}
 
-\item{user_mods}{the user's input model(s). Must be in lavaan format. See \code{\link[lavaan]}.}
+\item{user_mods}{the user's input model(s). Must be in R-like syntax.}
 
 \item{on_ls}{whether to use ls_theory or causal matrix. Default to TRUE (use ls_theory).}
 

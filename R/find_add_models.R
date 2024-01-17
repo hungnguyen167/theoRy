@@ -8,11 +8,11 @@
 #'
 #'
 #' @param ls_theory the input ls_theory object. Created from \code{\link{run_theoRy}}.
-#' @param causal_matrix the input causal_matrix. Created from \code{\link{build_causal_matrix}}. Used only
+#' @param causal_matrix the input causal_matrix. Created from \code{\link{build_causal_node}}. Used only
 #' when ls_theory=NULL.
-#' @param node_timing the input node_timing Created from \code{\link{build_causal_matrix}}. Used only
+#' @param node_timing the input node_timing Created from \code{\link{build_causal_node}}. Used only
 #' when ls_theory=NULL.
-#' @param user_mods the user's input model(s). Must be in lavaan format. See \code{\link[lavaan]}.
+#' @param user_mods the user's input model(s). Must be in R-like syntax.
 #' @param on_ls whether to use ls_theory or causal matrix. Default to TRUE (use ls_theory).
 #' @param add_nodes if the user-defined models have extra nodes/timing/types, should be provided as a list
 #' with three named elements: nodes, types, and timing.

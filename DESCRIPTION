@@ -4,16 +4,18 @@ Version: 0.1.0
 Authors@R: 
     c(
     person(given="Hung H. V.", family="Nguyen", email="hunghvnguyen@gmail.com", role = c("aut","cre"),
-           comment = c(ORCID = "https://orcid.org/0000-0001-9496-6217")),
+           comment = c(ORCID = "0000-0001-9496-6217")),
     person(given="Nate", family="Breznau", email="breznau.nate@gmail.com", role = "aut",
-           comment = c(ORCID = "https://orcid.org/0000-0003-4983-3137"))
+           comment = c(ORCID = "0000-0003-4983-3137"))
            )
+Maintainer: Hung H. V. Nguyen <hunghvnguyen@gmail.com>
 Description: This package helps researchers build all possible causal models from variables and efficiently compare them. The package is built on top of the "dagitty" and "ggdag" packages, which are already widely used in causal inferences. 
 License: MIT + file LICENSE
 Encoding: UTF-8
 URL: https://github.com/hungnguyen167/theoRy
-Depends: 
-    R (>= 4.2.2),
+BugReports: https://github.com/hungnguyen167/theoRy/issues
+Depends: R (>= 4.2.2)
+Imports: 
     data.table (>= 1.14.8),
     digest (>= 0.6.31),
     dplyr (>= 1.1.0),

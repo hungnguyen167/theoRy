@@ -5,16 +5,13 @@
 #'
 
 #'
-#' @param causal_matrix the input causal matrix. Created from \code{\link{build_causal_matrix}}.
+#' @param causal_matrix the input causal matrix. Created from \code{\link{build_causal_node}}.
 #' @param outcome_var the variable in the compatibility matrix used to measure the outcome. Default to "test_compatible".
 #' @param outcome_positive the label in outcome_var that indicates a positive outcome. Default to "compatible".
 #' @param cmp_matrix the compatibility matrix. Created from \code{\link{add_compatible}}.
 
 #'
-#' @returns A formula matrix with 5 columns. The formula column is in the lavaan format. See \code{\link[lavaan]}.
-#' The MAS column is the minimum adjustment sets to measure the direct effect from Xtest to Y. correct_test (yes or no)
-#' is whether the model is correctly adjusted when all X variables are adjusted. This is useful for \code{\link{add_compatible}}
-#' later.
+#' @returns A set matrix used for theory comparison.
 #' @examples
 #' set_matrix <- build_set_matrix(causal_matrix=causal_matrix, cmp_matrix=cmp_matrix)
 #'

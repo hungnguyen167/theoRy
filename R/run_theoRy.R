@@ -1,7 +1,7 @@
 #' A wrapper function to build necessary matrices for theory comparison
 #' @description
 #' This function returns three main matrices required in theory comparison, namely the node-timing matrix (user inputs),
-#' the causal matrix, and the formula matrix. See \code{\link{build_causal_matrix}} and \code{\link{build_formula_matrix}}.
+#' the causal matrix, and the formula matrix. See \code{\link{build_causal_node}} and \code{\link{build_formula_matrix}}.
 #'
 #' @param nodes the input nodes/variable names, a character vector/list.
 #' Should be of the same length and order with types and timing.

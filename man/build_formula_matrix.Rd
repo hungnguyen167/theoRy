@@ -7,10 +7,10 @@
 build_formula_matrix(causal_matrix)
 }
 \arguments{
-\item{causal_matrix}{the input causal matrix. Created from \code{\link{build_causal_matrix}}}
+\item{causal_matrix}{the input causal matrix. Created from theoRy:::build_causal_matrix}
 }
 \value{
-A formula matrix with 5 columns. The formula column is in the lavaan format. See \code{\link[lavaan]}.
+A formula matrix with 5 columns. The formula column is in R-like syntax.
 The MAS column is the minimum adjustment sets to measure the direct effect from Xtest to Y. correct_test (yes or no)
 is whether the model is correctly adjusted when all X variables are adjusted. This is useful for \code{\link{add_compatible}}
 later.

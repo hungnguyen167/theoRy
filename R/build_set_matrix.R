@@ -6,8 +6,8 @@
 
 #'
 #' @param causal_matrix the input causal matrix. Created from \code{\link{build_causal_matrix}}.
-#' @param outcome_var the type of compatibility used in comparison. Default to "test_compatible".
-#' @param outcome_positive the label for a positive outcome. Default to "compatible".
+#' @param outcome_var the variable in the compatibility matrix used to measure the outcome. Default to "test_compatible".
+#' @param outcome_positive the label in outcome_var that indicates a positive outcome. Default to "compatible".
 #' @param cmp_matrix the compatibility matrix. Created from \code{\link{add_compatible}}.
 
 #'
@@ -50,7 +50,7 @@ build_set_matrix <- function(causal_matrix,
 
     causal_matrix_t <- causal_matrix_t %>%
         subset(model != as.numeric(ref_mod[1,1])) %>%
-        tidyr::left_join(formula_matrix_t, by = "model")
+        dplyr::left_join(formula_matrix_t, by = "model")
 
     print(paste("Reference Model NUMBER = ", ref_mod[1,1], sep = ""))
     print(paste("Reference Model FORMULA is ", ref_mod[1,2], sep = ""))

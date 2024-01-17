@@ -25,7 +25,7 @@
 
 plot_dag <- function(ls_theory,
                      choose_plots = "all",
-                     save_path=NULL) {
+                     save_path="Results") {
 
     formula_matrix <- data.table::copy(ls_theory$formula_matrix)
     node_timing <- data.table::copy(ls_theory$node_timing)
@@ -98,7 +98,7 @@ plot_dag <- function(ls_theory,
 
                 model_name <- as.numeric(formula_matrix[i,"model"])
                 cat("Saving plot of model", model_name,"\n")
-                ragg::agg_png(filename = paste0(save_path, "model_", model_name, ".png"), width = 2400, height = 1200, res=360)
+                ragg::agg_png(filename = paste0("here::here('", save_path, "', '", "model_", model_name, ".png')"), width = 2400, height = 1200, res=360)
                 print(dag_plots[[i]])
                 invisible(dev.off())
             }

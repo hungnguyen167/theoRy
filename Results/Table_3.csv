@@ -1,0 +1,8 @@
+"V1","V2","V3"
+"Model Information","",""
+"Reference Model:","Y ~ X2 + Xtest, Xtest ~ X1 + X2 (Model 1)",""
+"Multiverse Criteria:","Models with X1 and X2, and models with X1, X2 and X4",""
+"All Models Compared","","Only Models w X4 Compared"
+"N Comparison Models =","1087","1024"
+"Test Compatible =","28%","28.1%"
+"Full Model Compatible =","4.6%","0%"

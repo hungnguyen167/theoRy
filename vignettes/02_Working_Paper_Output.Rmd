@@ -5,13 +5,17 @@ date: "`r Sys.Date()`"
 output: html_document
 ---
 
-## R Markdown
+## Setup
+
+Install from Github:
+
+devtools::install_github("https://github.com/hungnguyen167/theoRy")
 
 ```{r setup}
 
+library('theoRy')
 library('tictoc')
 library('QCA')
-library('theoRy') 
 
 ```
 
@@ -19,7 +23,7 @@ library('theoRy')
 
 ### Generate causal and formula matrix
 
-Generating a 6 variable model multiverse takes about 3.5 hours. It will likely fail under 36 GB of RAM. Therefore, we save the results for the user and they can call them in the next code chunk.
+Generating a 6 variable model multiverse takes about 3.5 hours. It will likely fail with less than 36 GB of RAM. Therefore, we save the results for the user and they can call them in the next code chunk.
 
 ```{r six_var_comp}
 nodes <- c("a","b","c","d","e","f")
@@ -33,9 +37,8 @@ user_mods <- c("a ~ b + e; b ~ e + d", # Model 1
                "a ~ b + e; b ~ d + c + e; c ~ e" # Model 6
                )
 
-tic()
+
 ls_theory <- theoRy(nodes = nodes, timing = timing, types=types, include_subsets = TRUE, user_mods=user_mods)
-toc()
 
 # Demonstration: If we wanted to add models and/or model numbers after
 
@@ -51,9 +54,9 @@ ls_theory <- find_add_models(ls_theory = ls_theory, on_ls = TRUE, user_mods = c(
 ### Load Matricies
 
 ```{r loadm}
-saveRDS(ls_theory, here::here("Results", "ls_theory.RDS"))
+#saveRDS(ls_theory, here::here("data", "ls_theory.RDS"))
 
-ls_theory <- readRDS(here:::here("Results", "ls_theory.RDS"))
+ls_theory <- readRDS(here:::here("data", "ls_theory.RDS"))
 ```
 
 ### Table 2
@@ -69,11 +72,11 @@ write.csv(Table_2, here::here("Results", "Table_2.csv"), row.names = F)
 ### Compare Results
 
 ```{r cmp}
-cmp_matrix <- add_compatible(ls_theory$formula_matrix, ref_mod = 1)
+#cmp_matrix <- add_compatible(ls_theory$formula_matrix, ref_mod = 1)
 
-saveRDS(cmp_matrix, here::here("Results", "cmp_matrix.RDS"))
+#saveRDS(cmp_matrix, here::here("data", "cmp_matrix.RDS"))
 
-cmp_matrix <- readRDS(here::here("Results", "cmp_matrix.RDS"))
+cmp_matrix <- readRDS(here::here("data", "cmp_matrix.RDS"))
 
 ```
 
@@ -82,7 +85,7 @@ cmp_matrix <- readRDS(here::here("Results", "cmp_matrix.RDS"))
 Only need to save models 1-6 for the paper
 
 ```{r gen_plots, warning = F}
-dag_plots <- plot_dag(ls_theory, choose_plots=c(1,2,3,4,5,6), save_path="Results/")
+dag_plots <- plot_dag(ls_theory, choose_plots=c(1,2,3,4,5,6), save_path="Results")
 
 for(plot in dag_plots){
     print(plot)
@@ -93,7 +96,7 @@ for(plot in dag_plots){
 
 ### Build Set Matrix
 
-Here we focus on test_compatible as the outcome (= 1)
+We build two set matricies with two different outcomes
 
 We use cmp_matrix to get this information
 
@@ -135,7 +138,7 @@ set_pof
 
 #### Minimize
 
-Looking only positive outcomes (outcome = 1/MAS = {X1}), this procedure tries to find minimal sets of variables that are present in all positive cases, regardless of if these sets are present in outcome = 0 cases.
+Looking at only positive outcomes (outcome = 1/MAS = {X1}), this procedure tries to find minimal sets of variables that are present in all positive cases, regardless of if these sets are present in outcome = 0 cases.
 
 ```{r minimize}
 
@@ -148,7 +151,7 @@ min_results <- minimize(set_matrix_c, details = TRUE, outcome = "outcome")
 
 *inclN* = inclusion = what percent of all models have outcome (Y = 1) and this component (X = 1)
 *covN* = necessity coverage = what percent of all models with this component (X = 1) have the outcome (Y = 1)
-*RoN* = relevence of necessity = is a necessary condition trivial
+*RoN* = relevence of necessity = how trivial is a necessary condition trivial = 0 or relevant = 1
 ```{r qca}
 s_subset <- superSubset(set_matrix_c, outcome = "outcome")
 
@@ -201,14 +204,16 @@ We flipped the outcome because we want to know which are not test_compatible
 *covN* = necessity coverage = what percent of all models with this component (X = 1) have the outcome (Y = 1)
 *RoN* = relevence of necessity = is a necessary condition trivial
 
+Here we find that of all models with X1, X2 and X4, `r round(mean(set_matrix_X1X2X4$outcome)*100,1)`% are not test compatible with M1. If all models were equally plausible, a fair majority would not be test compatible with M1. 
+
 ```{r subX1X2X4}
 s_subset_X1X2X4 <- superSubset(dplyr::select(set_matrix_X1X2X4, -c(model, Xtest_Y)), outcome = "outcome")
 
 s_subset_X1X2X4
 ```
-Of all models with X1, X2 and X4, `r round(mean(set_matrix_X1X2X4$outcome)*100,1)`% are not test compatible with M1. If all models were equally plausible, a fair majority would not be test compatible with M1. 
 
-### Subset X1X2X4 full model compatible
+
+#### Subset X1X2X4 full model compatible
 
 Again the inverse. So not full model compatible. 
 
@@ -221,7 +226,11 @@ s_subset_full_X1X2X4
 
 None are compatible. Thats because our model does not have X4. To simulate this we need to compare a version of M1 that has a solo X4 (no paths to it) and compare that at full_model_compatible.
 
-```{r next}
+We generate a new cmp_matrix for this. First we find the model number for the model with a solo X4 and give it number 7. 
 
+```{r next}
+ls_theory <- find_add_models(ls_theory = ls_theory, on_ls = TRUE, user_mods = c("a ~ b + e; b ~ e + d; f ~ f"), assert_mod_num = c(7))
+
+cmp_matrix_7 <- add_compatible(ls_theory$formula_matrix, ref_mod = 7)
 ```
 

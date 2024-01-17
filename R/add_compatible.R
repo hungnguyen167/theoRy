@@ -32,6 +32,12 @@
 add_compatible <- function(formula_matrix,
                            effect="direct",
                            ref_mod=NULL){
+
+    ## Set up function specific formula_matrix object
+    formula_matrix_t <- formula_matrix
+    data.table::setDT(formula_matrix_t)
+    formula_matrix_t <- data.table::copy(formula_matrix_t)
+
     ## Check routines
 
     if (is.null(effect)){
@@ -42,21 +48,17 @@ add_compatible <- function(formula_matrix,
 
     if (is.null(ref_mod)){
         ref_mod = 1
-        warning("User did not choose a reference model, default to the first model")
+        warning("User did not choose a reference model, defaulting to the first model")
     }
-    else {
-        ref_mod = which(formula_matrix_t[,model]==ref_mod)
-    }
+
     ref_correct <- formula_matrix_t[formula_matrix_t[,model]==ref_mod, "correct_test"]
     if(ref_correct == "no"){
-        warning("Reference model is not correctly adjusted. This is not recommended!")
+        warning("Reference model is an incorrectly adjusted model. This is not recommended!")
     }
 
 
 
     ## Add MAS
-    data.table::setDT(formula_matrix)
-    formula_matrix_t <- data.table::copy(formula_matrix)
     additional_args <- list(
         exposure="Xtest",
         outcome="Y"

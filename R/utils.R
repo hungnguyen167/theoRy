@@ -44,7 +44,7 @@ add_mas <- function(row, additional_args, adjusted=FALSE, unq_Xs=NULL, return_st
         unq_nodes <- unique(c(dagitty::edges(dag)$v, dagitty::edges(dag)$w))
         unq_Xs <- unq_nodes[!unq_nodes %in% c("Y","Xtest")]
         dagitty::adjustedNodes(dag) <- unq_Xs
-        mas <- adjustmentSets(dag, exposure = "Xtest", outcome = "Y", effect = "direct")
+        mas <- dagitty::adjustmentSets(dag, exposure = "Xtest", outcome = "Y", effect = "direct")
         if (length(mas)==0) {
             return("no")
         }

@@ -34,9 +34,7 @@ add_compatible <- function(formula_matrix,
                            ref_mod=NULL){
 
     ## Set up function specific formula_matrix object
-    formula_matrix_t <- formula_matrix
-    data.table::setDT(formula_matrix_t)
-    formula_matrix_t <- data.table::copy(formula_matrix_t)
+    formula_matrix_t <- data.table::copy(formula_matrix)
 
     ## Check routines
 

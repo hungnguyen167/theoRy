@@ -50,7 +50,7 @@ add_compatible <- function(formula_matrix,
     }
 
     ref_correct <- formula_matrix_t[formula_matrix_t[,model]==ref_mod, "correct_test"]
-    if(ref_correct == "no"){
+    if(unlist(ref_correct) == "no"){
         warning("Reference model is an incorrectly adjusted model. This is not recommended!")
     }
 
@@ -61,7 +61,7 @@ add_compatible <- function(formula_matrix,
         exposure="Xtest",
         outcome="Y"
     )
-    mas <- lapply(formula_matrix_t$formula, add_mas, additional_args)
+    mas <- formula_matrix_t$mas
 
     ## Extract reference and comparison MAS
     ref_adj <- mas[[ref_mod]]

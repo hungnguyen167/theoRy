@@ -31,7 +31,7 @@ unq_nodes_detect <- function(row, additional_args){
     fvector <- strsplit(as.character(row[1]), ",")[[1]]
     dag_args <- lapply(fvector, as.formula)
     dag <- do.call(ggdag::dagify, c(dag_args, additional_args))
-    unq_nodes <- paste(unique(c(dagitty::edges(dag)$v, dagitty::edges(dag)$w)), collapse="_")
+    unq_nodes <- paste(sort(unique(c(dagitty::edges(dag)$v, dagitty::edges(dag)$w))), collapse="_")
     return(unq_nodes)
 }
 

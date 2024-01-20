@@ -37,7 +37,7 @@ build_formula_matrix <- function(causal_matrix) {
         exposure="Xtest",
         outcome="Y"
     )
-    mas <- lapply(formula_matrix$formula, add_mas, additional_args, return_string=FALSE)
+    mas <- lapply(split(formula_matrix, by="model"), add_mas, additional_args, return_string=FALSE)
 
     formula_matrix$mas <- mas
 

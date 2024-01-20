@@ -24,7 +24,6 @@
 
 
 build_formula_matrix <- function(causal_matrix) {
-    data.table::setDT(causal_matrix)
     causal_matrix_t <- data.table::copy(causal_matrix)
 
     # Use lapply to apply the function to each group
@@ -34,7 +33,6 @@ build_formula_matrix <- function(causal_matrix) {
     reduced_matrix <- unique(causal_matrix_t[, .SD, .SDcols = c("model", "user_mod")])
     formula_matrix <- formula_matrix[reduced_matrix, on = "model", nomatch = 0]
 
-    message("Finished creating formulas. Now adding MAS.")
     additional_args <- list(
         exposure="Xtest",
         outcome="Y"
@@ -43,7 +41,7 @@ build_formula_matrix <- function(causal_matrix) {
 
     formula_matrix$mas <- mas
 
-    mas_adj <- lapply(formula_matrix$formula, add_mas, additional_args, adjusted=TRUE, unq_Xs=all_unique_Xs)
+    mas_adj <- lapply(split(formula_matrix, by="model"), add_mas, additional_args, adjusted=TRUE)
     formula_matrix$correct_test <- mas_adj
 
     return(formula_matrix)

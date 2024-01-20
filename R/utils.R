@@ -35,17 +35,17 @@ unq_nodes_detect <- function(row, additional_args){
     return(unq_nodes)
 }
 
-add_mas <- function(row, additional_args, adjusted=FALSE, unq_Xs=NULL, return_string=FALSE) {
-    fvector <- strsplit(as.character(row[1]), ",")[[1]]
+add_mas <- function(row, additional_args, adjusted=FALSE, return_string=FALSE) {
+    fvector <- strsplit(as.character(row$formula), ",")[[1]]
     dag_args <- lapply(fvector, as.formula)
     dag <- do.call(ggdag::dagify, c(dag_args, additional_args))
-
+    mas_org <- unlist(row$mas)
     if (adjusted==TRUE){
         unq_nodes <- unique(c(dagitty::edges(dag)$v, dagitty::edges(dag)$w))
         unq_Xs <- unq_nodes[!unq_nodes %in% c("Y","Xtest")]
         dagitty::adjustedNodes(dag) <- unq_Xs
         mas <- dagitty::adjustmentSets(dag, exposure = "Xtest", outcome = "Y", effect = "direct")
-        if (length(mas)==0) {
+        if (length(mas)==0 & mas_org != "none") {
             return("no")
         }
         else{

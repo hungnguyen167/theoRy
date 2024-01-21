@@ -23,7 +23,7 @@
 
 
 
-build_formula_matrix <- function(causal_matrix) {
+build_formula_matrix <- function(causal_matrix, node_timing=NULL) {
     causal_matrix_t <- data.table::copy(causal_matrix)
 
     # Use lapply to apply the function to each group

@@ -9,8 +9,8 @@
 #'
 #'
 #'
-#' @param causal_matrix the input causal matrix. Created from theoRy:::build_causal_matrix
-
+#' @param causal_matrix the input causal matrix. Created from theoRy:::build_causal_node
+#' @param node_timing the input node timing matrix. Created from theoRy:::build_causal_node
 #'
 #' @returns A formula matrix with 5 columns. The formula column is in R-like syntax.
 #' The MAS column is the minimum adjustment sets to measure the direct effect from Xtest to Y. correct_test (yes or no)

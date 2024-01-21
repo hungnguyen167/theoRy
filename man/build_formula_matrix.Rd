@@ -4,10 +4,12 @@
 \alias{build_formula_matrix}
 \title{Build formula matrix}
 \usage{
-build_formula_matrix(causal_matrix)
+build_formula_matrix(causal_matrix, node_timing = NULL)
 }
 \arguments{
-\item{causal_matrix}{the input causal matrix. Created from theoRy:::build_causal_matrix}
+\item{causal_matrix}{the input causal matrix. Created from theoRy:::build_causal_node}
+
+\item{node_timing}{the input node timing matrix. Created from theoRy:::build_causal_node}
 }
 \value{
 A formula matrix with 5 columns. The formula column is in R-like syntax.

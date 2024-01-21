@@ -43,7 +43,8 @@ add_mas <- function(row, additional_args, adjusted=FALSE, Xs_after_Y, return_str
         unq_nodes <- unique(c(dagitty::edges(dag)$v, dagitty::edges(dag)$w))
         unq_Xs <- unq_nodes[!unq_nodes %in% c("Y","Xtest")]
         dagitty::adjustedNodes(dag) <- unq_Xs
-        coll_Xtest_Y <- any(sapply(Xs_after_Y, function(x) dagitty::isCollider(dag, "Xtest",x,"Y")))
+        Xs_after_Y_ext <- Xs_after_Y[Xs_after_Y %in% unq_Xs]
+        coll_Xtest_Y <- any(sapply(Xs_after_Y_ext, function(x) dagitty::isCollider(dag, "Xtest",x,"Y")))
         if (isTRUE(coll_Xtest_Y)) {
             return("no")
         }

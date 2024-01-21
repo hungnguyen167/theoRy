@@ -17,7 +17,7 @@
 #' is whether the model is correctly adjusted when all X variables are adjusted. This is useful for \code{\link{add_compatible}}
 #' later.
 #' @examples
-#' formula_matrix <- build_formula_matrix(causal_matrix)
+#' formula_matrix <- build_formula_matrix(causal_matrix, node_timing)
 #'
 #' @export
 

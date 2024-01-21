@@ -25,6 +25,6 @@ This function is included in `run_theoRy`. Unless computing the formula matrix s
 `run_theoRy` instead.
 }
 \examples{
-formula_matrix <- build_formula_matrix(causal_matrix)
+formula_matrix <- build_formula_matrix(causal_matrix, node_timing)
 
 }

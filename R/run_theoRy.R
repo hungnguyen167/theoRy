@@ -30,7 +30,7 @@ run_theoRy <- function(nodes, types, timing,include_subsets=FALSE, user_mods=NUL
     causal_matrix <- build_causal_node(nodes, types, timing,include_subsets=include_subsets,
                                          user_mods=user_mods, return_node=FALSE)
     node_timing <- build_causal_node(nodes, types, timing,include_subsets=include_subsets, return_node=TRUE)
-    formula_matrix <- build_formula_matrix(causal_matrix)
+    formula_matrix <- build_formula_matrix(causal_matrix, node_timing=node_timing)
     ls_theory <- list(causal_matrix = causal_matrix, node_timing=node_timing, formula_matrix=formula_matrix)
     return(ls_theory)
 }

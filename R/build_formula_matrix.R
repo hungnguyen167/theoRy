@@ -37,11 +37,12 @@ build_formula_matrix <- function(causal_matrix) {
         exposure="Xtest",
         outcome="Y"
     )
-    mas <- lapply(split(formula_matrix, by="model"), add_mas, additional_args, return_string=FALSE)
+    mas <- lapply(split(formula_matrix, by="model"), add_mas, additional_args)
 
     formula_matrix$mas <- mas
-
-    mas_adj <- lapply(split(formula_matrix, by="model"), add_mas, additional_args, adjusted=TRUE)
+    timing_Y <- unname(unlist(node_timing[which(node_timing$node_name=="Y"),"timing"]))
+    Xs_after_Y <- node_timing %>% dplyr::filter(timing>=timing_Y) %>% dplyr::select(node_name) %>% unlist() %>% unname()
+    mas_adj <- lapply(split(formula_matrix, by="model"), add_mas, additional_args, adjusted=TRUE,Xs_after_Y=Xs_after_Y)
     formula_matrix$correct_test <- mas_adj
 
     return(formula_matrix)

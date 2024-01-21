@@ -168,7 +168,7 @@ find_add_models <- function(ls_theory=NULL,
 
                 }
                 if(isTRUE(on_ls)){
-                    formula_temp <- build_formula_matrix(b_t)
+                    formula_temp <- build_formula_matrix(b_t, node_timing)
                     formula_new[[i]] <- formula_temp
                 }
 

@@ -289,7 +289,9 @@ build_causal_node <- function(nodes,
         #unq_dts <- which(!duplicated(dt_strings))
         #causal_matrix <- causal_matrix[model %in% unq_dts]
 
-        causal_matrix[ , model:= .GRP, by=model]
+        causal_matrix[, model:= .GRP, by=model]
+        causal_matrix[, user_mod := 0]
+        causal_matrix[, prev_mod := model]
         if (!is.null(user_mods)){
             ls_base <- split(base_matrix,by="model")
             match_res <- list()
@@ -304,8 +306,6 @@ build_causal_node <- function(nodes,
                 match_res[[i]] <- match_res_temp
             }
 
-            causal_matrix[, user_mod := 0]
-            causal_matrix[, prev_mod := model]
             for (i in seq_along(match_res)){
                 if(length(match_res[[i]]$idx) ==0){
                     cat("Model: '", user_mods[i], "' not found in the causal matrix. \n")
@@ -359,7 +359,6 @@ build_causal_node <- function(nodes,
             }
 
         }
-
         data.table::setorder(causal_matrix, -user_mod, model)
         causal_matrix[, prev_mod := NULL]
         return(causal_matrix)

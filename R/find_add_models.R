@@ -58,8 +58,9 @@ find_add_models <- function(ls_theory=NULL,
         if(!"user_mod" %in% colnames(causal_matrix)){
             causal_matrix[,user_mod:=0]
         }
-        formula_matrix <- copy(ls_theory$formula_matrix)
-
+        formula_matrix <- data.table::copy(ls_theory$formula_matrix)
+        data.table::setDT(causal_matrix)
+        data.table::setDT(formula_matrix)
     }
     if(!is.null(add_nodes)){
         node_timing <- node_timing %>%
@@ -135,7 +136,7 @@ find_add_models <- function(ls_theory=NULL,
     for (i in seq_along(ls_base)){
         b_t <- data.table::copy(ls_base[[i]])
         b_t <- b_t[, .(from, to, direction)]
-        setorder(b_t, from, to, direction)
+        data.table::setorder(b_t, from, to, direction)
         match_ls_temp <- lapply(split(causal_matrix, by = "model"), match_base,
                                 b_t)
         user_mod_true <- as.numeric(names(match_ls_temp[match_ls_temp==1]))
@@ -187,7 +188,6 @@ find_add_models <- function(ls_theory=NULL,
             if(!is.null(assert_mod_num)){
                 if(match_res[[i]]$idx != assert_mod_num[[i]]){
                     cat("Swapped current model (", match_res[[i]]$idx,") to model number", assert_mod_num[[i]], " and vice versa. \n")
-                    causal_matrix[,prev_mod:=model]
                     causal_matrix[,model:= data.table::fifelse(model==match_res[[i]]$idx,assert_mod_num[[i]],
                                                   data.table::fifelse(model==assert_mod_num[[i]], match_res[[i]]$idx,
                                                           model))]
@@ -198,9 +198,10 @@ find_add_models <- function(ls_theory=NULL,
                             if (match_res[[j]]$idx == assert_mod_num[[i]]){
                                 match_res[[j]]$idx <- match_res[[i]]$idx
                             }
+                            match_res[[i]]$idx <- assert_mod_num[[i]]
                         }
                     }
-                    match_res[[i]]$idx <- assert_mod_num[[i]]
+
 
                 } else{
                         cat("Asserted position is equal to current position. Skipped.\n")
@@ -216,23 +217,24 @@ find_add_models <- function(ls_theory=NULL,
     if(isTRUE(on_ls)){
 
 
-        causal_copy <- copy(causal_matrix)
+        causal_copy <- data.table::copy(causal_matrix)
         causal_copy[, model_ref:=model]
-        causal_copy <- causal_copy[, .(model_ref, prev_mod)]
+        causal_copy <- causal_copy[, .(model_ref, prev_mod, user_mod)]
+        formula_matrix[,user_mod:=NULL]
         formula_matrix_m <- formula_matrix[causal_copy, on = .(model = prev_mod), nomatch = NA]
         formula_matrix_m <- unique(formula_matrix_m, by="formula")
         formula_matrix_m[, model:=model_ref]
         formula_matrix_m[, model_ref:=NULL]
         formula_matrix_m <- formula_matrix_m[!is.na(formula),]
         if(any(length(match_res[[i]])>0)){
-            formula_matrix_add <- rbindlist(formula_new)
+            formula_matrix_add <- data.table::rbindlist(formula_new)
             formula_matrix <- rbind(formula_matrix_m, formula_matrix_add)
         } else{
             formula_matrix <- formula_matrix_m
         }
 
-        setorder(formula_matrix,-user_mod, model)
-        setorder(causal_matrix,-user_mod, model)
+        data.table::setorder(formula_matrix,-user_mod, model)
+        data.table::setorder(causal_matrix,-user_mod, model)
         new_ls_theory <- list(causal_matrix=causal_matrix, node_timing=node_timing,
                               formula_matrix=formula_matrix)
         #causal_matrix[, prev_mod:= NULL]

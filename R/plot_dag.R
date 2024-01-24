@@ -29,6 +29,7 @@ plot_dag <- function(ls_theory,
 
     formula_matrix <- data.table::copy(ls_theory$formula_matrix)
     node_timing <- data.table::copy(ls_theory$node_timing)
+    data.table::setDT(formula_matrix)
     if(is.numeric(choose_plots)){
             plots <- as.numeric(formula_matrix$model[formula_matrix$model %in% choose_plots])
             cat("Plotting only models", paste(choose_plots, collapse=","),"\n")

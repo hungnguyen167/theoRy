@@ -25,7 +25,7 @@
 
 build_formula_matrix <- function(causal_matrix, node_timing=NULL) {
     causal_matrix_t <- data.table::copy(causal_matrix)
-
+    setDT(causal_matrix_t)
     # Use lapply to apply the function to each group
     formula_list <- lapply(split(causal_matrix_t, by = "model"), create_formula)
 

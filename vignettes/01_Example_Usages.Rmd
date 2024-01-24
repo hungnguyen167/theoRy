@@ -19,7 +19,7 @@ Our app is built so far as a set of functions. The file 00_Run_Theory.R loads al
 
 ```{r setup, warning = F}
 
-source(here::here("00_Run_Theory.R"))
+library(theoRy)
 
 ```
 
@@ -54,10 +54,54 @@ The function also outputs a summary of all variables, their labels and their tim
 
 ```{r causal_matrix}
 
-inputs <- list(nodes=c("a","b","c","d","e"), timing=c(0,-1,-2,-3,-3),
-              types=c("otc","test","ctr","ctr","ctr"))
+nodes <- c("Y","Xtest","X3","X1","X2")
+timing <- c(0,-2,1,-3,-3)
+types <- c("otc","test","ctr","ctr", "ctr")
+user_mods <- c("Y ~ Xtest + X2; Xtest ~ X1 + X2", # Model 1
+                "Y ~ Xtest + X1; Xtest ~ X1 + X2", # Model 2
+                "Y ~ Xtest + X1 + X2; Xtest ~ X1 + X2", # Model 3
+                "Y ~ Xtest + X2; Xtest ~ X1 + X2; X3 ~ Y + Xtest", # Model 4
+                "Y ~ Xtest + X2; Xtest ~ X2; X3 ~ X3" # Model 5
+                )
 
-causal_matrix <- build_causal_matrix(inputs)
+multiverse_1 <- run_theoRy(nodes = nodes, timing = timing, types=types, include_subsets = TRUE, user_mods=user_mods)
+
+
+nodes <- c("Y","Xtest","X3","X1","X2")
+timing <- c(0,-2,-1,-3,-3)
+types <- c("otc","test","ctr","ctr", "ctr")
+
+multiverse_2 <- run_theoRy(nodes = nodes, timing = timing, types=types, include_subsets = TRUE)
+
+
+
+
+# Add models 6 and 7
+test <- find_add_models(ls_theory = multiverse_2, on_ls = TRUE, 
+                user_mods = c("Y ~ Xtest + X2 + X3; Xtest ~ X1 + X2; X3 ~ X2",
+                              "Y ~ Xtest + X2; Xtest ~ X1 + X2; X3 ~ X3"), 
+                assert_mod_num = c(6,7))
+
+
+causal_matrix_merge <- rbind(
+    as.data.frame(multiverse_1$causal_matrix) %>%
+        mutate(multiverse = 1,
+               model=ifelse(model %in% c(6,7), model+length(unique(multiverse_1$causal_matrix$model)), model)),
+    as.data.frame(multiverse_2$causal_matrix) %>%
+        mutate(multiverse = 2,
+               model =ifelse(model %in% c(6,7), model,model+length(unique(multiverse_1$causal_matrix$model)))) %>%
+        select(-prev_mod)
+)
+
+formula_matrix_merge <- rbind(
+    as.data.frame(multiverse_1$formula_matrix) %>%
+        mutate(multiverse = 1,
+               model=ifelse(model %in% c(6,7), model+length(unique(multiverse_1$causal_matrix$model)), model)),
+    as.data.frame(multiverse_2$formula_matrix) %>%
+         mutate(multiverse = 2,
+               model =ifelse(model %in% c(6,7), model,model+length(unique(multiverse_1$causal_matrix$model))))
+) %>%
+    arrange(model, -user_mod)
 ```
 
 

@@ -90,7 +90,7 @@ build_causal_node <- function(nodes,
             node_name = dplyr::case_when(
                 type == "otc" ~ "Y",
                 type == "test" ~ "Xtest",
-                type == "ctr" ~ paste0("X", row_number())
+                type == "ctr" ~ paste0("X", dplyr::row_number())
             )
         ) %>%
         dplyr::ungroup()

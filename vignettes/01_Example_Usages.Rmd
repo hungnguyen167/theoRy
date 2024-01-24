@@ -77,7 +77,7 @@ multiverse_2 <- run_theoRy(nodes = nodes, timing = timing, types=types, include_
 
 
 # Add models 6 and 7
-test <- find_add_models(ls_theory = multiverse_2, on_ls = TRUE, 
+multiverse_2 <- find_add_models(ls_theory = multiverse_2, on_ls = TRUE, 
                 user_mods = c("Y ~ Xtest + X2 + X3; Xtest ~ X1 + X2; X3 ~ X2",
                               "Y ~ Xtest + X2; Xtest ~ X1 + X2; X3 ~ X3"), 
                 assert_mod_num = c(6,7))
@@ -91,7 +91,8 @@ causal_matrix_merge <- rbind(
         mutate(multiverse = 2,
                model =ifelse(model %in% c(6,7), model,model+length(unique(multiverse_1$causal_matrix$model)))) %>%
         select(-prev_mod)
-)
+) %>%
+  arrange(model, -user_mod)
 
 formula_matrix_merge <- rbind(
     as.data.frame(multiverse_1$formula_matrix) %>%
@@ -102,6 +103,8 @@ formula_matrix_merge <- rbind(
                model =ifelse(model %in% c(6,7), model,model+length(unique(multiverse_1$causal_matrix$model))))
 ) %>%
     arrange(model, -user_mod)
+
+cmp_matrix_m1 <- add_compatible(formula_matrix_merge, ref_mod=1)
 ```
 
 

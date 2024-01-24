@@ -1,5 +1,6 @@
 Package: theoRy
-Title: An R package for comparing many causal models
+Title: An R package for meta-analyzing theoretical uncertainty
+Date: 2024
 Version: 0.1.0
 Authors@R: 
     c(

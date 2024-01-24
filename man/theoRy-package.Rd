@@ -4,7 +4,7 @@
 \name{theoRy-package}
 \alias{theoRy}
 \alias{theoRy-package}
-\title{theoRy: An R package for comparing many causal models}
+\title{theoRy: An R package for meta-analyzing theoretical uncertainty}
 \description{
 This package helps researchers build all possible causal models from variables and efficiently compare them. The package is built on top of the "dagitty" and "ggdag" packages, which are already widely used in causal inferences.
 }

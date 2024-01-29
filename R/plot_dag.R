@@ -25,7 +25,7 @@
 
 plot_dag <- function(ls_theory,
                      choose_plots = "all",
-                     save_path="Results") {
+                     save_path=NULL) {
 
     formula_matrix <- data.table::copy(ls_theory$formula_matrix)
     node_timing <- data.table::copy(ls_theory$node_timing)

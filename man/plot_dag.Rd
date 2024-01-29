@@ -4,7 +4,7 @@
 \alias{plot_dag}
 \title{Plot DAG models}
 \usage{
-plot_dag(ls_theory, choose_plots = "all", save_path = "Results")
+plot_dag(ls_theory, choose_plots = "all", save_path = NULL)
 }
 \arguments{
 \item{ls_theory}{the input ls_theory object. Created from \code{\link{run_theoRy}}.}

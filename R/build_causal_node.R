@@ -214,28 +214,14 @@ build_causal_node <- function(nodes,
         # Define two types of options based on the direction
         if (include_subsets == TRUE){
             # Display a warning message
-            message("Option include_subsets is set to true.")
+            message("Warning: Option include_subsets is set to true.")
             message("The size of the matrix could get exponentially larger with more variables")
-            message("Do you want to proceed (yes) or set include_subsets to FALSE (no)?")
 
-            response <- tolower(readline(prompt = "Enter 'yes' or 'no': "))
+            two_opt <- pairs_tbl %>%
+                dplyr::filter(pairs != "Xtest_Y")
+            one_opt <- pairs_tbl %>%
+                dplyr::filter(pairs == "Xtest_Y")
 
-            if (response == "yes") {
-                cat("Continue with include_subsets=TRUE\n")
-                two_opt <- pairs_tbl %>%
-                    dplyr::filter(pairs != "Xtest_Y")
-                one_opt <- pairs_tbl %>%
-                    dplyr::filter(pairs == "Xtest_Y")
-
-            } else if (response == "no") {
-                cat("Set include_subsets to FALSE.\n")
-                two_opt <- pairs_tbl %>%
-                    dplyr::filter(!grepl("Xtest_Y|^(X\\d+)_\\1$", pairs))
-                one_opt <- pairs_tbl %>%
-                    dplyr::filter(grepl("Xtest_Y|^(X\\d+)_\\1$", pairs))
-            } else {
-                stop("Invalid response. Please enter 'yes' or 'no'.\n")
-            }
 
         } else{
             two_opt <- pairs_tbl %>%
@@ -326,7 +312,14 @@ build_causal_node <- function(nodes,
                         "Skipped"
                     }
                     else{
-                        message("Invalid response. Skipped")
+                        message("Unknown response. New model added.")
+                        b_t <- data.table::copy(ls_base[[i]])
+                        b_t[, user_mod:=1]
+                        b_t[, `:=`(model = i, prev_mod=i)]
+                        causal_matrix[, model:= data.table::fifelse(model >= i,
+                                                                    model+1,
+                                                                    model)]
+                        causal_matrix <- rbind(causal_matrix, b_t)
                     }
 
                 }

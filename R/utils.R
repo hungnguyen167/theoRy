@@ -152,7 +152,7 @@ build_plot_info <- function(ls_info) {
                     y_coords[[i]] <- y_coords[[i-1]] - buffer_y
                 }
                 else{
-                    y_coords[[i]] <- y_coords[[last_idx]] + 0.25
+                    y_coords[[i]] <- y_coords[[last_idx]] + 0.75
                     last_idx <- i
                 }
             }

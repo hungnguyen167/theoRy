@@ -1,241 +1,147 @@
 ---
 title: "package \\'theoRy\\'"
-output: html_notebook
+output: pdf_document
+
 ---
 
-type package, etc...........
 
-see for example: https://cran.r-project.org/web/packages/dagitty/dagitty.pdf
-
-
-
-
-Nate Breznau <br>
-Hung H.V. Nguyen
 
 ## Setup
 
-Our app is built so far as a set of functions. The file 00_Run_Theory.R loads all of these functions into the environment.
+To install the package from Github, please use either the remotes (preferable) or devtools
 
 ```{r setup, warning = F}
-
+# install.packages("remotes") ## if remotes does not exist
+# remotes::install_github("https://github.com/hungnguyen167/theoRy")
 library(theoRy)
-
+library(tidyverse)
+library(data.table)
+library(gt)
 ```
 
-## Build Causal Matrix
+## Build Causal Matrix (`build_causal_node` and `find_add_models`)
 
-A theoRy causal matrix includes all possible causal configurations of the variables supplied as input. Currently this is limited to 5 total variables. The user places the variables ordinally in time. Then the algorithm creates every possible causal model, such that every path is either causal or not causal, and simultaneously occuring variables are either not related or have a residual correlation. 
+A causal matrix includes all possible causal configurations of the variables supplied as inputs. When defining the inputs, the user places the variables ordinally in time. Then the algorithm creates every possible causal model, such that every path is either causal or not causal, and simultaneously occurring variables are either not related or are correlated (direction unknown).
 
-### *The inputs object*:
+### The input arguments:
 
-The object 'inputs' takes the form of a named list. 
+There are three important input arguments:
 
-In the 'inputs list:
+1. <i>nodes</i> is a list or character vector, where each element is a variable in the model universe. The variables can take any names, but will be transformed into Y, Xtest, and Xn based on their types and timing. 
 
-1. Nodes can be given any alpha-numeric naming convention, but for plotting and comparison will be transformed into X1-Xn based on the timing.
+2. <i>types</i> is a list or character vector, where each element is the type of the variables in the model universe. Must be of the same length with the nodes list. This argument takes three values: otc (outcome), test (exposure/test), and ctr (control).
 
-2. Timing requires entering integers from 0 backwards. Zero should be given to the outcome (otc) variable and all other independent variables need to be chronologically ordered. Not real time, but ordinal timing of events. It is possible for variables to occur simultaneously, even if this is just observationally)
+3. <i>timing</i> is a list or integer vector (larger is after), where each element is the timing of the variables in the model universe. Must be of the same length with the nodes list. 
 
-3. Types include "test", "otc", or "ctr". 
-    a. "ctr" is a control or adjustment variable that is not the test variable in question
-    b. "test" is the test variable in question, treatment for example.
-    c. "otc" is the outcome, dependent variable.
 
-### *The Causal Matrix output*
+
+### Example
 
 The output of the causal matrix has one row per node dyad, and is grouped by model. 
 
-`{r ![causal_matrix example](here::here("Media", "Causal_Matrix_Example.png"))}`
-
-The function also outputs a summary of all variables, their labels and their timing for the user.
-
-### Example Code
 
 ```{r causal_matrix}
 
-nodes <- c("Y","Xtest","X3","X1","X2")
-timing <- c(0,-2,1,-3,-3)
-types <- c("otc","test","ctr","ctr", "ctr")
-user_mods <- c("Y ~ Xtest + X2; Xtest ~ X1 + X2", # Model 1
-                "Y ~ Xtest + X1; Xtest ~ X1 + X2", # Model 2
-                "Y ~ Xtest + X1 + X2; Xtest ~ X1 + X2", # Model 3
-                "Y ~ Xtest + X2; Xtest ~ X1 + X2; X3 ~ Y + Xtest", # Model 4
-                "Y ~ Xtest + X2; Xtest ~ X2; X3 ~ X3" # Model 5
-                )
-
-multiverse_1 <- run_theoRy(nodes = nodes, timing = timing, types=types, include_subsets = TRUE, user_mods=user_mods)
+nodes <- c("Y","Xtest","X1","X2")
+timing <- c(0,-1,-3,-2)
+types <- c("otc","test","ctr","ctr")
 
 
-nodes <- c("Y","Xtest","X3","X1","X2")
-timing <- c(0,-2,-1,-3,-3)
-types <- c("otc","test","ctr","ctr", "ctr")
+causal_matrix <- build_causal_node(nodes = nodes, timing = timing, types=types) 
 
-multiverse_2 <- run_theoRy(nodes = nodes, timing = timing, types=types, include_subsets = TRUE)
+causal_matrix %>% filter(model==1) %>% gt()
 
 
 
+```
+ 
+Notice how there's a column called "user_mod". This means you can enter your biased model(s). If the model is not already in the universe for some reason, you have the option to add. If the model is found, it will be moved to the top.
 
-# Add models 6 and 7
-multiverse_2 <- find_add_models(ls_theory = multiverse_2, on_ls = TRUE, 
-                user_mods = c("Y ~ Xtest + X2 + X3; Xtest ~ X1 + X2; X3 ~ X2",
-                              "Y ~ Xtest + X2; Xtest ~ X1 + X2; X3 ~ X3"), 
-                assert_mod_num = c(6,7))
+```{r user_mod}
+user_mods <- c(
+    "Y ~ X1 + Xtest; X1 ~ X2",
+    "Y ~ Xtest; X2 ~ X1"
+)
+causal_matrix <- build_causal_node(nodes = nodes, timing = timing, types=types,
+                                   user_mods = user_mods)
+causal_matrix %>% filter(model %in% c(1,2)) %>% gt()
+```
+Another important feature is to include models where Xs exist but do not have any causal relationships with any other variables. This can be controlled with the include_subsets argument.
 
 
-causal_matrix_merge <- rbind(
-    as.data.frame(multiverse_1$causal_matrix) %>%
-        mutate(multiverse = 1,
-               model=ifelse(model %in% c(6,7), model+length(unique(multiverse_1$causal_matrix$model)), model)),
-    as.data.frame(multiverse_2$causal_matrix) %>%
-        mutate(multiverse = 2,
-               model =ifelse(model %in% c(6,7), model,model+length(unique(multiverse_1$causal_matrix$model)))) %>%
-        select(-prev_mod)
-) %>%
-  arrange(model, -user_mod)
+```{r include_subsets}
+user_mods <- c(
+    "Y ~ Xtest; X1 ~ X1"
+)
+causal_matrix <- build_causal_node(nodes = nodes, timing = timing, types=types,
+                                   include_subsets = TRUE,
+                                   user_mods = user_mods)
 
-formula_matrix_merge <- rbind(
-    as.data.frame(multiverse_1$formula_matrix) %>%
-        mutate(multiverse = 1,
-               model=ifelse(model %in% c(6,7), model+length(unique(multiverse_1$causal_matrix$model)), model)),
-    as.data.frame(multiverse_2$formula_matrix) %>%
-         mutate(multiverse = 2,
-               model =ifelse(model %in% c(6,7), model,model+length(unique(multiverse_1$causal_matrix$model))))
-) %>%
-    arrange(model, -user_mod)
-
-cmp_matrix_m1 <- add_compatible(formula_matrix_merge, ref_mod=1)
+causal_matrix %>% filter(model==1) %>% gt()
 ```
 
 
-## Build Formula Matrix
 
-The formula matrix contains lavaan style formulas to express the causal models. This matrix has one model per row.
+## Build Formula Matrix (`build_formula_matrix`)
 
-lavaan style formulas take on the style of the following example, which is the first model (Model 1) in the example formula_matrix:
+The formula matrix contains lavaan style formulas to express the causal models. This matrix has one model per row. For more information see [lavaan](https://cran.r-project.org/web/packages/lavaan/lavaan.pdf) documentation.
 
-Y ~ X1 + X2 + X3 + Xtest + Y 
-X3 ~ X1 + X2 + X3 
-Xtest ~ X1 + X2 + X3 + Xtest 
-X1 ~ X1
-X2 ~ X2
-X2 ~~ X1
-
-Where each variable that has a causal path coming into it has its own equation signified by ~. For more information see [lavaan](https://cran.r-project.org/web/packages/lavaan/lavaan.pdf) documentation.
-
-[To develop further] The lavaan formulas in our usage contain redundancies, for example the DVs are present on the right-hand sides of the equation.
-
-The formula matrix also identifies any minimal adjustment sets (MAS). Add citation here.
+The formula matrix also identifies any minimum adjustment sets (column `mas`) and whether the model is correctly adjusted when all X-variables are adjusted (column `correct_test`). The formula matrix needs two arguments: causal_matrix and node_timing, which can be built using the `build_causal_node` function from above using the argument `return_node=TRUE`
 
 ```{r formula_matrix}
+causal_matrix <- build_causal_node(nodes,types, timing)
+node_timing <- build_causal_node(nodes,types, timing, return_node = TRUE)
+formula_matrix <- build_formula_matrix(causal_matrix, node_timing)
 
-formula_matrix <- build_formula_matrix(causal_matrix)
-
+formula_matrix %>% filter(model %in% c(1,2)) %>% gt()
 ```
 
-## Keep minimal
+## run_theoRy: the wrapper function
 
-This function may be retired. 
+To produce all of the above objects, instead of running through each function, you can (and are recommended) to use the run_theoRy function, which is a wrapper function that will produce the causal_matrix, node_timing, and formula_matrix from the same inputs.
 
-Remove Xs which do not belong to the MAS from each model and remove duplicated models deriving from this action
-
-```{r keep_minimal}
-reduced_causal_matrix <- keep_minimal(formula_matrix, causal_matrix)
-reduced_formula_matrix <- build_formula_matrix(reduced_causal_matrix)
-
+```{r ls_theory}
+ls_theory <- run_theoRy(nodes, types, timing)
+ls_theory
 ```
 
-## Build Dag Matrix
+## Plot DAGs
 
-This function converts lavaan style formulas into daggity objects. The daggity package has its own format for storing objects. This format may include information about where to plot the nodes. For example Model 1:
+With this ls_theory object, you can easily plot multiple DAG plots based on model numbers. This function automatically places the variables according to the variables' timing. The outcomes are `ggplot` objects so you can manipulate the plots the same as you manipulate other ggplot objects.
 
-dag {
-X1 [pos="-1.250,1.000"]
-X2 [pos="-1.250,-0.500"]
-X3 [pos="-0.500,-1.000"]
-Xtest [exposure,pos="0.250,0.000"]
-Y [outcome,pos="1.000,0.000"]
-X1 -> X1
-X1 -> X3
-X1 -> Xtest
-X1 -> Y
-X1 <-> X2
-X2 -> X2
-X2 -> X3
-X2 -> Xtest
-X2 -> Y
-X3 -> X3
-X3 -> Xtest
-X3 -> Y
-Xtest -> Xtest
-Xtest -> Y
-Y -> Y
+```{r plot_dag}
+
+dag_plots <- plot_dag(ls_theory, choose_plots=c(1:2))
+
+dag_plots[[2]] <- dag_plots[[2]] +
+    theme_classic()
+
+for (plot in dag_plots){
+    print(plot)
 }
-
-These objects are ideal for dagitty functions and for plotting.
-
-This function also stores the minimum X value for later plotting purposes in Results/minX.RDS.
-
-*add_nodes* an option to add nodes in case the user added formulas, this is helpful for expert usage only, like in our working paper
-
-*new_node_vector1* add one vector for each added node
-
-defaults (should be changed obviously, just examples and helpful for our working paper)
-
-new_node_vector1 = c(NA, -0.5, "ctr", "X3")
-new_node_vector2 = c(NA, 0.5, "ctr", "X4")
-new_node_vector3 = c(NA, -1.5, "ctr", "X5")
-
-```{r build_dag_matrix}
-
-dag_matrix <- build_dag_matrix(formula_matrix)
-
 ```
 
-## Plot DAG Matrix
+## Add compatible
 
-This function takes the dagitty objects in dag_matrix and plots them with a title and MAS. All plots are stored in a list using recordPlot(). This allows the user to quickly recall any plot.
+In the working paper coming with this package, we discuss the concepts of test compatible and full-model compatible. To retrieve this information from the model universe, you can use the `add_compatible` function. This is practically choosing a reference model and see how compatible your preferred model is compared to the entire causal model universe. 
 
-The *save_plots* option when switched to TRUE, will save every plot as a .png file in the Results folder.
+```{r add_compatible}
+cmp_matrix <- add_compatible(formula_matrix, ref_mod = 1)
 
-The *title* option is TRUE by default and displays the "Model #" where # refers to the row in the dag_matrix
 
-The *title_pos* option should be a number from 0 (furthest left in the graph) to the highest value, which depends on how wide the plot is (usually not higher than 2) with a default of 0.5
-
-## With defaults
-
-These optional commands are available:
-
-1. *save_plots*. default = FALSE. When TRUE, a .png of each plot will be saved in the "Results" folder with the matching model number.
-
-2. *choose_plots*. default = NA. When a vector is specified, only those models given in the vector will be plotted. Model numbers correspond to the numbers in the formula_matrix.
-
-3. *choose_save_plots*. default = NA. When a vector is specified and save_plots = TRUE, only those models given in the vector will be saved as .png. Model numbers correspond to the numbers in the formula_matrix.
-
-4. *choose_plots_mas*. default = NA. Accepts only one MAS set. This must include quotes and spaces and have the set variables. Must be identical to how MAS appears in the field formula_matrix$mas. For example "{ X1 }".
-
-5. *formula_matrix_name*. default = formula_matrix. Change to specify a differently named formula_matrix object. 
-
-6. *title*. default = TRUE. This option specifies if the plots should have a title or not. Titles are in the form of 'Model X', where X is the model number in formula_matrix.
-
-7. *title_pos*. default = 0.5. This is an option that specifies where the title appears above the plot. Zero is the furthest left, and number increasing from zero move the title to the right. 
-
-8. *plot_titles*. default formula_matrix_name$model, but can be replaced with a vector of model numbers or names.
-
-### Plotting with all defaults specified.
-
-```{r plot_dag_matrix}
-dag_plots <- plot_dag_matrix(dag_matrix, save_plots = F)
+cmp_matrix %>% filter(model %in% c(1:5)) %>%  
+    select(formula, model, test_compatible, full_model_compatible) %>%
+    gt()
 ```
 
-### Plotting with MAS
 
-Here only plots with the MAS { X1 } will be shown.
 
-```{r choose_X1}
-dag_plots <- plot_dag_matrix(dag_matrix,  choose_plots_mas = "{ X1 }")
-```
 
+## Other utility functions
+
+There are other utility functions that might be useful for adding/finding models (`find_add_models`) or build a set matrix used in QCA (`build_set_matrix`). You can consult the documentation for further details.
+
+## Future plans
 
 ## Colophon
 

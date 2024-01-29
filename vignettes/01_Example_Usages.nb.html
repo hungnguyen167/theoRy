@@ -1752,37 +1752,33 @@ display: none;
 
 
 <!-- rnb-text-begin -->
-<p>type package, etc………..</p>
-<p>see for example: <a href="https://cran.r-project.org/web/packages/dagitty/dagitty.pdf" class="uri">https://cran.r-project.org/web/packages/dagitty/dagitty.pdf</a></p>
-<p>Nate Breznau <br> Hung H.V. Nguyen</p>
 <div id="setup" class="section level2">
 <h2>Setup</h2>
-<p>Our app is built so far as a set of functions. The file
-00_Run_Theory.R loads all of these functions into the environment.</p>
+<p>To install the package from Github, please use either the remotes
+(preferable) or devtools</p>
 <!-- rnb-text-end -->
 <!-- rnb-chunk-begin -->
-<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuXG5saWJyYXJ5KHRoZW9SeSlcbmBgYCJ9 -->
-<pre class="r"><code>
-library(theoRy)</code></pre>
+<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuIyBpbnN0YWxsLnBhY2thZ2VzKFwicmVtb3Rlc1wiKSAjIyBpZiByZW1vdGVzIGRvZXMgbm90IGV4aXN0XG4jIHJlbW90ZXM6Omluc3RhbGxfZ2l0aHViKFwiaHR0cHM6Ly9naXRodWIuY29tL2h1bmduZ3V5ZW4xNjcvdGhlb1J5XCIpXG5saWJyYXJ5KHRoZW9SeSlcbmxpYnJhcnkodGlkeXZlcnNlKVxubGlicmFyeShkYXRhLnRhYmxlKVxuXG5gYGAifQ== -->
+<pre class="r"><code># install.packages(&quot;remotes&quot;) ## if remotes does not exist
+# remotes::install_github(&quot;https://github.com/hungnguyen167/theoRy&quot;)
+library(theoRy)
+library(tidyverse)
+library(data.table)
+</code></pre>
 <!-- rnb-source-end -->
-<!-- rnb-output-begin eyJkYXRhIjoiUmVnaXN0ZXJlZCBTMyBtZXRob2Qgb3ZlcndyaXR0ZW4gYnkgJ2RhdGEudGFibGUnOlxuICBtZXRob2QgICAgICAgICAgIGZyb21cbiAgcHJpbnQuZGF0YS50YWJsZSAgICAgXG4ifQ== -->
-<pre><code>Registered S3 method overwritten by &#39;data.table&#39;:
-  method           from
-  print.data.table     </code></pre>
-<!-- rnb-output-end -->
 <!-- rnb-chunk-end -->
 <!-- rnb-text-begin -->
 </div>
 <div id="build-causal-matrix" class="section level2">
 <h2>Build Causal Matrix</h2>
 <p>A theoRy causal matrix includes all possible causal configurations of
-the variables supplied as input. Currently this is limited to 5 total
-variables. The user places the variables ordinally in time. Then the
-algorithm creates every possible causal model, such that every path is
-either causal or not causal, and simultaneously occuring variables are
-either not related or have a residual correlation.</p>
-<div id="the-inputs-object" class="section level3">
-<h3><em>The inputs object</em>:</h3>
+the variables supplied as inputs. When defining the inputs, the user
+places the variables ordinally in time. Then the algorithm creates every
+possible causal model, such that every path is either causal or not
+causal, and simultaneously occurring variables are either not related or
+are correlated (direction unknown).</p>
+<div id="the-input-arguments" class="section level3">
+<h3><em>The input arguments</em>:</h3>
 <p>The object ‘inputs’ takes the form of a named list.</p>
 <p>In the ’inputs list:</p>
 <ol style="list-style-type: decimal">
@@ -1815,8 +1811,9 @@ and their timing for the user.</p>
 <h3>Example Code</h3>
 <!-- rnb-text-end -->
 <!-- rnb-chunk-begin -->
-<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuY2F1c2FsX21hdHJpeF9tZXJnZSA8LSByYmluZChcbiAgICBhcy5kYXRhLmZyYW1lKG11bHRpdmVyc2VfMSRjYXVzYWxfbWF0cml4KSAlPiVcbiAgICAgICAgbXV0YXRlKG11bHRpdmVyc2UgPSAxLFxuICAgICAgICAgICAgICAgbW9kZWw9aWZlbHNlKG1vZGVsICVpbiUgYyg2LDcpLCBtb2RlbCtsZW5ndGgodW5pcXVlKG11bHRpdmVyc2VfMSRjYXVzYWxfbWF0cml4JG1vZGVsKSksIG1vZGVsKSksXG4gICAgYXMuZGF0YS5mcmFtZShtdWx0aXZlcnNlXzIkY2F1c2FsX21hdHJpeCkgJT4lXG4gICAgICAgIG11dGF0ZShtdWx0aXZlcnNlID0gMixcbiAgICAgICAgICAgICAgIG1vZGVsID1pZmVsc2UobW9kZWwgJWluJSBjKDYsNyksIG1vZGVsLG1vZGVsK2xlbmd0aCh1bmlxdWUobXVsdGl2ZXJzZV8xJGNhdXNhbF9tYXRyaXgkbW9kZWwpKSkpICU+JVxuICAgICAgICBzZWxlY3QoLXByZXZfbW9kKVxuKSAlPiVcbiAgYXJyYW5nZShtb2RlbCwgLXVzZXJfbW9kKVxuXG5gYGAifQ== -->
-<pre class="r"><code>causal_matrix_merge &lt;- rbind(
+<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuYGBgclxuY2F1c2FsX21hdHJpeF9tZXJnZSA8LSByYmluZChcbiAgICBhcy5kYXRhLmZyYW1lKG11bHRpdmVyc2VfMSRjYXVzYWxfbWF0cml4KSAlPiVcbiAgICAgICAgbXV0YXRlKG11bHRpdmVyc2UgPSAxLFxuICAgICAgICAgICAgICAgbW9kZWw9aWZlbHNlKG1vZGVsICVpbiUgYyg2LDcpLCBtb2RlbCtsZW5ndGgodW5pcXVlKG11bHRpdmVyc2VfMSRjYXVzYWxfbWF0cml4JG1vZGVsKSksIG1vZGVsKSksXG4gICAgYXMuZGF0YS5mcmFtZShtdWx0aXZlcnNlXzIkY2F1c2FsX21hdHJpeCkgJT4lXG4gICAgICAgIG11dGF0ZShtdWx0aXZlcnNlID0gMixcbiAgICAgICAgICAgICAgIG1vZGVsID1pZmVsc2UobW9kZWwgJWluJSBjKDYsNyksIG1vZGVsLG1vZGVsK2xlbmd0aCh1bmlxdWUobXVsdGl2ZXJzZV8xJGNhdXNhbF9tYXRyaXgkbW9kZWwpKSkpICU+JVxuICAgICAgICBzZWxlY3QoLXByZXZfbW9kKVxuKSAlPiVcbiAgYXJyYW5nZShtb2RlbCwgLXVzZXJfbW9kKVxuXG5gYGBcbmBgYCJ9 -->
+<pre class="r"><code>```r
+causal_matrix_merge &lt;- rbind(
     as.data.frame(multiverse_1$causal_matrix) %&gt;%
         mutate(multiverse = 1,
                model=ifelse(model %in% c(6,7), model+length(unique(multiverse_1$causal_matrix$model)), model)),
@@ -1827,177 +1824,286 @@ and their timing for the user.</p>
 ) %&gt;%
   arrange(model, -user_mod)
 </code></pre>
-<!-- rnb-source-end -->
-<!-- rnb-output-begin eyJkYXRhIjoiRXJyb3IgaW4gcmJpbmQoYXMuZGF0YS5mcmFtZShtdWx0aXZlcnNlXzEkY2F1c2FsX21hdHJpeCkgJT4lIG11dGF0ZShtdWx0aXZlcnNlID0gMSwgIDogXG4gIGNvdWxkIG5vdCBmaW5kIGZ1bmN0aW9uIFwiJT4lXCJcbiJ9 -->
-<pre><code>Error in rbind(as.data.frame(multiverse_1$causal_matrix) %&gt;% mutate(multiverse = 1,  : 
-  could not find function &quot;%&gt;%&quot;</code></pre>
-<!-- rnb-output-end -->
-<!-- rnb-chunk-end -->
-<!-- rnb-text-begin -->
-</div>
-</div>
-<div id="build-formula-matrix" class="section level2">
-<h2>Build Formula Matrix</h2>
-<p>The formula matrix contains lavaan style formulas to express the
-causal models. This matrix has one model per row.</p>
-<p>lavaan style formulas take on the style of the following example,
-which is the first model (Model 1) in the example formula_matrix:</p>
-<p>Y ~ X1 + X2 + X3 + Xtest + Y X3 ~ X1 + X2 + X3 Xtest ~ X1 + X2 + X3 +
-Xtest X1 ~ X1 X2 ~ X2 X2 ~~ X1</p>
-<p>Where each variable that has a causal path coming into it has its own
-equation signified by ~. For more information see <a href="https://cran.r-project.org/web/packages/lavaan/lavaan.pdf">lavaan</a>
-documentation.</p>
-<p>[To develop further] The lavaan formulas in our usage contain
-redundancies, for example the DVs are present on the right-hand sides of
-the equation.</p>
-<p>The formula matrix also identifies any minimal adjustment sets (MAS).
-Add citation here.</p>
-<!-- rnb-text-end -->
-<!-- rnb-chunk-begin -->
-<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuXG5mb3JtdWxhX21hdHJpeCA8LSBidWlsZF9mb3JtdWxhX21hdHJpeChjYXVzYWxfbWF0cml4KVxuXG5gYGAifQ== -->
-<pre class="r"><code>
+<pre><code>
+&lt;!-- rnb-source-end --&gt;
+
+&lt;!-- rnb-output-begin eyJkYXRhIjoiRXJyb3IgaW4gcmJpbmQoYXMuZGF0YS5mcmFtZShtdWx0aXZlcnNlXzEkY2F1c2FsX21hdHJpeCkgJT4lIG11dGF0ZShtdWx0aXZlcnNlID0gMSwgIDogXG4gIGNvdWxkIG5vdCBmaW5kIGZ1bmN0aW9uIFxcJT4lXFxcbiJ9 --&gt;
+</code></pre>
+<p>Error in rbind(as.data.frame(multiverse_1$causal_matrix) %&gt;%
+mutate(multiverse = 1, : could not find function %&gt;%<br />
+</p>
+<pre><code>
+
+
+&lt;!-- rnb-output-end --&gt;
+
+&lt;!-- rnb-chunk-end --&gt;
+
+
+&lt;!-- rnb-text-begin --&gt;
+
+
+
+## Build Formula Matrix
+
+The formula matrix contains lavaan style formulas to express the causal models. This matrix has one model per row.
+
+lavaan style formulas take on the style of the following example, which is the first model (Model 1) in the example formula_matrix:
+
+Y ~ X1 + X2 + X3 + Xtest + Y 
+X3 ~ X1 + X2 + X3 
+Xtest ~ X1 + X2 + X3 + Xtest 
+X1 ~ X1
+X2 ~ X2
+X2 ~~ X1
+
+Where each variable that has a causal path coming into it has its own equation signified by ~. For more information see [lavaan](https://cran.r-project.org/web/packages/lavaan/lavaan.pdf) documentation.
+
+[To develop further] The lavaan formulas in our usage contain redundancies, for example the DVs are present on the right-hand sides of the equation.
+
+The formula matrix also identifies any minimal adjustment sets (MAS). Add citation here.
+
+
+&lt;!-- rnb-text-end --&gt;
+
+
+&lt;!-- rnb-chunk-begin --&gt;
+
+
+&lt;!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuYGBgclxuXG5mb3JtdWxhX21hdHJpeCA8LSBidWlsZF9mb3JtdWxhX21hdHJpeChjYXVzYWxfbWF0cml4KVxuXG5gYGBcbmBgYCJ9 --&gt;
+
+```r
+```r
+
 formula_matrix &lt;- build_formula_matrix(causal_matrix)
 </code></pre>
-<!-- rnb-source-end -->
-<!-- rnb-chunk-end -->
-<!-- rnb-text-begin -->
-</div>
-<div id="keep-minimal" class="section level2">
-<h2>Keep minimal</h2>
-<p>This function may be retired.</p>
-<p>Remove Xs which do not belong to the MAS from each model and remove
-duplicated models deriving from this action</p>
-<!-- rnb-text-end -->
-<!-- rnb-chunk-begin -->
-<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxucmVkdWNlZF9jYXVzYWxfbWF0cml4IDwtIGtlZXBfbWluaW1hbChmb3JtdWxhX21hdHJpeCwgY2F1c2FsX21hdHJpeClcbnJlZHVjZWRfZm9ybXVsYV9tYXRyaXggPC0gYnVpbGRfZm9ybXVsYV9tYXRyaXgocmVkdWNlZF9jYXVzYWxfbWF0cml4KVxuXG5gYGAifQ== -->
-<pre class="r"><code>reduced_causal_matrix &lt;- keep_minimal(formula_matrix, causal_matrix)
+<pre><code>
+&lt;!-- rnb-source-end --&gt;
+
+&lt;!-- rnb-chunk-end --&gt;
+
+
+&lt;!-- rnb-text-begin --&gt;
+
+
+## Keep minimal
+
+This function may be retired. 
+
+Remove Xs which do not belong to the MAS from each model and remove duplicated models deriving from this action
+
+
+&lt;!-- rnb-text-end --&gt;
+
+
+&lt;!-- rnb-chunk-begin --&gt;
+
+
+&lt;!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuYGBgclxucmVkdWNlZF9jYXVzYWxfbWF0cml4IDwtIGtlZXBfbWluaW1hbChmb3JtdWxhX21hdHJpeCwgY2F1c2FsX21hdHJpeClcbnJlZHVjZWRfZm9ybXVsYV9tYXRyaXggPC0gYnVpbGRfZm9ybXVsYV9tYXRyaXgocmVkdWNlZF9jYXVzYWxfbWF0cml4KVxuXG5gYGBcbmBgYCJ9 --&gt;
+
+```r
+```r
+reduced_causal_matrix &lt;- keep_minimal(formula_matrix, causal_matrix)
 reduced_formula_matrix &lt;- build_formula_matrix(reduced_causal_matrix)
 </code></pre>
-<!-- rnb-source-end -->
-<!-- rnb-chunk-end -->
-<!-- rnb-text-begin -->
-</div>
-<div id="build-dag-matrix" class="section level2">
-<h2>Build Dag Matrix</h2>
-<p>This function converts lavaan style formulas into daggity objects.
-The daggity package has its own format for storing objects. This format
-may include information about where to plot the nodes. For example Model
-1:</p>
-<p>dag { X1 [pos=“-1.250,1.000”] X2 [pos=“-1.250,-0.500”] X3
-[pos=“-0.500,-1.000”] Xtest [exposure,pos=“0.250,0.000”] Y
-[outcome,pos=“1.000,0.000”] X1 -&gt; X1 X1 -&gt; X3 X1 -&gt; Xtest X1
--&gt; Y X1 &lt;-&gt; X2 X2 -&gt; X2 X2 -&gt; X3 X2 -&gt; Xtest X2 -&gt;
-Y X3 -&gt; X3 X3 -&gt; Xtest X3 -&gt; Y Xtest -&gt; Xtest Xtest -&gt; Y
-Y -&gt; Y }</p>
-<p>These objects are ideal for dagitty functions and for plotting.</p>
-<p>This function also stores the minimum X value for later plotting
-purposes in Results/minX.RDS.</p>
-<p><em>add_nodes</em> an option to add nodes in case the user added
-formulas, this is helpful for expert usage only, like in our working
-paper</p>
-<p><em>new_node_vector1</em> add one vector for each added node</p>
-<p>defaults (should be changed obviously, just examples and helpful for
-our working paper)</p>
-<p>new_node_vector1 = c(NA, -0.5, “ctr”, “X3”) new_node_vector2 = c(NA,
-0.5, “ctr”, “X4”) new_node_vector3 = c(NA, -1.5, “ctr”, “X5”)</p>
-<!-- rnb-text-end -->
-<!-- rnb-chunk-begin -->
-<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuXG5kYWdfbWF0cml4IDwtIGJ1aWxkX2RhZ19tYXRyaXgoZm9ybXVsYV9tYXRyaXgpXG5cbmBgYCJ9 -->
-<pre class="r"><code>
+<pre><code>
+&lt;!-- rnb-source-end --&gt;
+
+&lt;!-- rnb-chunk-end --&gt;
+
+
+&lt;!-- rnb-text-begin --&gt;
+
+
+## Build Dag Matrix
+
+This function converts lavaan style formulas into daggity objects. The daggity package has its own format for storing objects. This format may include information about where to plot the nodes. For example Model 1:
+
+dag {
+X1 [pos=&quot;-1.250,1.000&quot;]
+X2 [pos=&quot;-1.250,-0.500&quot;]
+X3 [pos=&quot;-0.500,-1.000&quot;]
+Xtest [exposure,pos=&quot;0.250,0.000&quot;]
+Y [outcome,pos=&quot;1.000,0.000&quot;]
+X1 -&gt; X1
+X1 -&gt; X3
+X1 -&gt; Xtest
+X1 -&gt; Y
+X1 &lt;-&gt; X2
+X2 -&gt; X2
+X2 -&gt; X3
+X2 -&gt; Xtest
+X2 -&gt; Y
+X3 -&gt; X3
+X3 -&gt; Xtest
+X3 -&gt; Y
+Xtest -&gt; Xtest
+Xtest -&gt; Y
+Y -&gt; Y
+}
+
+These objects are ideal for dagitty functions and for plotting.
+
+This function also stores the minimum X value for later plotting purposes in Results/minX.RDS.
+
+*add_nodes* an option to add nodes in case the user added formulas, this is helpful for expert usage only, like in our working paper
+
+*new_node_vector1* add one vector for each added node
+
+defaults (should be changed obviously, just examples and helpful for our working paper)
+
+new_node_vector1 = c(NA, -0.5, &quot;ctr&quot;, &quot;X3&quot;)
+new_node_vector2 = c(NA, 0.5, &quot;ctr&quot;, &quot;X4&quot;)
+new_node_vector3 = c(NA, -1.5, &quot;ctr&quot;, &quot;X5&quot;)
+
+
+&lt;!-- rnb-text-end --&gt;
+
+
+&lt;!-- rnb-chunk-begin --&gt;
+
+
+&lt;!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuYGBgclxuXG5kYWdfbWF0cml4IDwtIGJ1aWxkX2RhZ19tYXRyaXgoZm9ybXVsYV9tYXRyaXgpXG5cbmBgYFxuYGBgIn0= --&gt;
+
+```r
+```r
+
 dag_matrix &lt;- build_dag_matrix(formula_matrix)
 </code></pre>
-<!-- rnb-source-end -->
-<!-- rnb-chunk-end -->
-<!-- rnb-text-begin -->
-</div>
-<div id="plot-dag-matrix" class="section level2">
-<h2>Plot DAG Matrix</h2>
-<p>This function takes the dagitty objects in dag_matrix and plots them
-with a title and MAS. All plots are stored in a list using recordPlot().
-This allows the user to quickly recall any plot.</p>
-<p>The <em>save_plots</em> option when switched to TRUE, will save every
-plot as a .png file in the Results folder.</p>
-<p>The <em>title</em> option is TRUE by default and displays the “Model
-#” where # refers to the row in the dag_matrix</p>
-<p>The <em>title_pos</em> option should be a number from 0 (furthest
-left in the graph) to the highest value, which depends on how wide the
-plot is (usually not higher than 2) with a default of 0.5</p>
-</div>
-<div id="with-defaults" class="section level2">
-<h2>With defaults</h2>
-<p>These optional commands are available:</p>
-<ol style="list-style-type: decimal">
-<li><p><em>save_plots</em>. default = FALSE. When TRUE, a .png of each
-plot will be saved in the “Results” folder with the matching model
-number.</p></li>
-<li><p><em>choose_plots</em>. default = NA. When a vector is specified,
-only those models given in the vector will be plotted. Model numbers
-correspond to the numbers in the formula_matrix.</p></li>
-<li><p><em>choose_save_plots</em>. default = NA. When a vector is
-specified and save_plots = TRUE, only those models given in the vector
-will be saved as .png. Model numbers correspond to the numbers in the
-formula_matrix.</p></li>
-<li><p><em>choose_plots_mas</em>. default = NA. Accepts only one MAS
-set. This must include quotes and spaces and have the set variables.
-Must be identical to how MAS appears in the field formula_matrix$mas.
-For example “{ X1 }”.</p></li>
-<li><p><em>formula_matrix_name</em>. default = formula_matrix. Change to
-specify a differently named formula_matrix object.</p></li>
-<li><p><em>title</em>. default = TRUE. This option specifies if the
-plots should have a title or not. Titles are in the form of ‘Model X’,
-where X is the model number in formula_matrix.</p></li>
-<li><p><em>title_pos</em>. default = 0.5. This is an option that
-specifies where the title appears above the plot. Zero is the furthest
-left, and number increasing from zero move the title to the
-right.</p></li>
-<li><p><em>plot_titles</em>. default formula_matrix_name$model, but can
-be replaced with a vector of model numbers or names.</p></li>
-</ol>
-<div id="plotting-with-all-defaults-specified." class="section level3">
-<h3>Plotting with all defaults specified.</h3>
-<!-- rnb-text-end -->
-<!-- rnb-chunk-begin -->
-<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuZGFnX3Bsb3RzIDwtIHBsb3RfZGFnX21hdHJpeChkYWdfbWF0cml4LCBzYXZlX3Bsb3RzID0gRilcbmBgYCJ9 -->
-<pre class="r"><code>dag_plots &lt;- plot_dag_matrix(dag_matrix, save_plots = F)</code></pre>
-<!-- rnb-source-end -->
-<!-- rnb-chunk-end -->
-<!-- rnb-text-begin -->
-</div>
-<div id="plotting-with-mas" class="section level3">
-<h3>Plotting with MAS</h3>
-<p>Here only plots with the MAS { X1 } will be shown.</p>
-<!-- rnb-text-end -->
-<!-- rnb-chunk-begin -->
-<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuZGFnX3Bsb3RzIDwtIHBsb3RfZGFnX21hdHJpeChkYWdfbWF0cml4LCAgY2hvb3NlX3Bsb3RzX21hcyA9IFwieyBYMSB9XCIpXG5gYGAifQ== -->
-<pre class="r"><code>dag_plots &lt;- plot_dag_matrix(dag_matrix,  choose_plots_mas = &quot;{ X1 }&quot;)</code></pre>
-<!-- rnb-source-end -->
-<!-- rnb-chunk-end -->
-<!-- rnb-text-begin -->
-</div>
-</div>
-<div id="colophon" class="section level2">
-<h2>Colophon</h2>
-<!-- rnb-text-end -->
-<!-- rnb-chunk-begin -->
-<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuc2Vzc2lvbkluZm8oKVxuYGBgIn0= -->
-<pre class="r"><code>sessionInfo()</code></pre>
-<!-- rnb-source-end -->
-<!-- rnb-chunk-end -->
-<!-- rnb-text-begin -->
-</div>
-<div id="references" class="section level2">
-<h2>References</h2>
-<!-- rnb-text-end -->
-<!-- rnb-chunk-begin -->
-<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxucGFja2FnZXMgJT4lXG4gIG1hcChjaXRhdGlvbikgJT4lXG4gIHByaW50KHN0eWxlID0gXCJ0ZXh0XCIpXG5gYGAifQ== -->
-<pre class="r"><code>packages %&gt;%
+<pre><code>
+&lt;!-- rnb-source-end --&gt;
+
+&lt;!-- rnb-chunk-end --&gt;
+
+
+&lt;!-- rnb-text-begin --&gt;
+
+
+## Plot DAG Matrix
+
+This function takes the dagitty objects in dag_matrix and plots them with a title and MAS. All plots are stored in a list using recordPlot(). This allows the user to quickly recall any plot.
+
+The *save_plots* option when switched to TRUE, will save every plot as a .png file in the Results folder.
+
+The *title* option is TRUE by default and displays the &quot;Model #&quot; where # refers to the row in the dag_matrix
+
+The *title_pos* option should be a number from 0 (furthest left in the graph) to the highest value, which depends on how wide the plot is (usually not higher than 2) with a default of 0.5
+
+## With defaults
+
+These optional commands are available:
+
+1. *save_plots*. default = FALSE. When TRUE, a .png of each plot will be saved in the &quot;Results&quot; folder with the matching model number.
+
+2. *choose_plots*. default = NA. When a vector is specified, only those models given in the vector will be plotted. Model numbers correspond to the numbers in the formula_matrix.
+
+3. *choose_save_plots*. default = NA. When a vector is specified and save_plots = TRUE, only those models given in the vector will be saved as .png. Model numbers correspond to the numbers in the formula_matrix.
+
+4. *choose_plots_mas*. default = NA. Accepts only one MAS set. This must include quotes and spaces and have the set variables. Must be identical to how MAS appears in the field formula_matrix$mas. For example &quot;{ X1 }&quot;.
+
+5. *formula_matrix_name*. default = formula_matrix. Change to specify a differently named formula_matrix object. 
+
+6. *title*. default = TRUE. This option specifies if the plots should have a title or not. Titles are in the form of &#39;Model X&#39;, where X is the model number in formula_matrix.
+
+7. *title_pos*. default = 0.5. This is an option that specifies where the title appears above the plot. Zero is the furthest left, and number increasing from zero move the title to the right. 
+
+8. *plot_titles*. default formula_matrix_name$model, but can be replaced with a vector of model numbers or names.
+
+### Plotting with all defaults specified.
+
+
+&lt;!-- rnb-text-end --&gt;
+
+
+&lt;!-- rnb-chunk-begin --&gt;
+
+
+&lt;!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuYGBgclxuZGFnX3Bsb3RzIDwtIHBsb3RfZGFnX21hdHJpeChkYWdfbWF0cml4LCBzYXZlX3Bsb3RzID0gRilcbmBgYFxuYGBgIn0= --&gt;
+
+```r
+```r
+dag_plots &lt;- plot_dag_matrix(dag_matrix, save_plots = F)</code></pre>
+<pre><code>
+&lt;!-- rnb-source-end --&gt;
+
+&lt;!-- rnb-chunk-end --&gt;
+
+
+&lt;!-- rnb-text-begin --&gt;
+
+
+### Plotting with MAS
+
+Here only plots with the MAS { X1 } will be shown.
+
+
+&lt;!-- rnb-text-end --&gt;
+
+
+&lt;!-- rnb-chunk-begin --&gt;
+
+
+&lt;!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuYGBgclxuZGFnX3Bsb3RzIDwtIHBsb3RfZGFnX21hdHJpeChkYWdfbWF0cml4LCAgY2hvb3NlX3Bsb3RzX21hcyA9IFxceyBYMSB9XFwpXG5gYGBcbmBgYCJ9 --&gt;
+
+```r
+```r
+dag_plots &lt;- plot_dag_matrix(dag_matrix,  choose_plots_mas = \{ X1 }\)</code></pre>
+<pre><code>
+&lt;!-- rnb-source-end --&gt;
+
+&lt;!-- rnb-chunk-end --&gt;
+
+
+&lt;!-- rnb-text-begin --&gt;
+
+
+
+## Colophon
+
+
+&lt;!-- rnb-text-end --&gt;
+
+
+&lt;!-- rnb-chunk-begin --&gt;
+
+
+&lt;!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuYGBgclxuc2Vzc2lvbkluZm8oKVxuYGBgXG5gYGAifQ== --&gt;
+
+```r
+```r
+sessionInfo()</code></pre>
+<pre><code>
+&lt;!-- rnb-source-end --&gt;
+
+&lt;!-- rnb-chunk-end --&gt;
+
+
+&lt;!-- rnb-text-begin --&gt;
+
+
+## References
+
+
+&lt;!-- rnb-text-end --&gt;
+
+
+&lt;!-- rnb-chunk-begin --&gt;
+
+
+&lt;!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuYGBgclxucGFja2FnZXMgJT4lXG4gIG1hcChjaXRhdGlvbikgJT4lXG4gIHByaW50KHN0eWxlID0gXFx0ZXh0XFwpXG5gYGBcbmBgYCJ9 --&gt;
+
+```r
+```r
+packages %&gt;%
   map(citation) %&gt;%
-  print(style = &quot;text&quot;)</code></pre>
+  print(style = \text\)</code></pre>
+<p>```</p>
 <!-- rnb-source-end -->
 <!-- rnb-chunk-end -->
+</div>
 </div>
 
-<div id="rmd-source-code">LS0tCnRpdGxlOiAicGFja2FnZSBcXCd0aGVvUnlcXCciCm91dHB1dDogaHRtbF9ub3RlYm9vawotLS0KCnR5cGUgcGFja2FnZSwgZXRjLi4uLi4uLi4uLi4KCnNlZSBmb3IgZXhhbXBsZTogaHR0cHM6Ly9jcmFuLnItcHJvamVjdC5vcmcvd2ViL3BhY2thZ2VzL2RhZ2l0dHkvZGFnaXR0eS5wZGYKCgoKCk5hdGUgQnJlem5hdSA8YnI+Ckh1bmcgSC5WLiBOZ3V5ZW4KCiMjIFNldHVwCgpPdXIgYXBwIGlzIGJ1aWx0IHNvIGZhciBhcyBhIHNldCBvZiBmdW5jdGlvbnMuIFRoZSBmaWxlIDAwX1J1bl9UaGVvcnkuUiBsb2FkcyBhbGwgb2YgdGhlc2UgZnVuY3Rpb25zIGludG8gdGhlIGVudmlyb25tZW50LgoKYGBge3Igc2V0dXAsIHdhcm5pbmcgPSBGfQoKbGlicmFyeSh0aGVvUnkpCgpgYGAKCiMjIEJ1aWxkIENhdXNhbCBNYXRyaXgKCkEgdGhlb1J5IGNhdXNhbCBtYXRyaXggaW5jbHVkZXMgYWxsIHBvc3NpYmxlIGNhdXNhbCBjb25maWd1cmF0aW9ucyBvZiB0aGUgdmFyaWFibGVzIHN1cHBsaWVkIGFzIGlucHV0LiBDdXJyZW50bHkgdGhpcyBpcyBsaW1pdGVkIHRvIDUgdG90YWwgdmFyaWFibGVzLiBUaGUgdXNlciBwbGFjZXMgdGhlIHZhcmlhYmxlcyBvcmRpbmFsbHkgaW4gdGltZS4gVGhlbiB0aGUgYWxnb3JpdGhtIGNyZWF0ZXMgZXZlcnkgcG9zc2libGUgY2F1c2FsIG1vZGVsLCBzdWNoIHRoYXQgZXZlcnkgcGF0aCBpcyBlaXRoZXIgY2F1c2FsIG9yIG5vdCBjYXVzYWwsIGFuZCBzaW11bHRhbmVvdXNseSBvY2N1cmluZyB2YXJpYWJsZXMgYXJlIGVpdGhlciBub3QgcmVsYXRlZCBvciBoYXZlIGEgcmVzaWR1YWwgY29ycmVsYXRpb24uIAoKIyMjICpUaGUgaW5wdXRzIG9iamVjdCo6CgpUaGUgb2JqZWN0ICdpbnB1dHMnIHRha2VzIHRoZSBmb3JtIG9mIGEgbmFtZWQgbGlzdC4gCgpJbiB0aGUgJ2lucHV0cyBsaXN0OgoKMS4gTm9kZXMgY2FuIGJlIGdpdmVuIGFueSBhbHBoYS1udW1lcmljIG5hbWluZyBjb252ZW50aW9uLCBidXQgZm9yIHBsb3R0aW5nIGFuZCBjb21wYXJpc29uIHdpbGwgYmUgdHJhbnNmb3JtZWQgaW50byBYMS1YbiBiYXNlZCBvbiB0aGUgdGltaW5nLgoKMi4gVGltaW5nIHJlcXVpcmVzIGVudGVyaW5nIGludGVnZXJzIGZyb20gMCBiYWNrd2FyZHMuIFplcm8gc2hvdWxkIGJlIGdpdmVuIHRvIHRoZSBvdXRjb21lIChvdGMpIHZhcmlhYmxlIGFuZCBhbGwgb3RoZXIgaW5kZXBlbmRlbnQgdmFyaWFibGVzIG5lZWQgdG8gYmUgY2hyb25vbG9naWNhbGx5IG9yZGVyZWQuIE5vdCByZWFsIHRpbWUsIGJ1dCBvcmRpbmFsIHRpbWluZyBvZiBldmVudHMuIEl0IGlzIHBvc3NpYmxlIGZvciB2YXJpYWJsZXMgdG8gb2NjdXIgc2ltdWx0YW5lb3VzbHksIGV2ZW4gaWYgdGhpcyBpcyBqdXN0IG9ic2VydmF0aW9uYWxseSkKCjMuIFR5cGVzIGluY2x1ZGUgInRlc3QiLCAib3RjIiwgb3IgImN0ciIuIAogICAgYS4gImN0ciIgaXMgYSBjb250cm9sIG9yIGFkanVzdG1lbnQgdmFyaWFibGUgdGhhdCBpcyBub3QgdGhlIHRlc3QgdmFyaWFibGUgaW4gcXVlc3Rpb24KICAgIGIuICJ0ZXN0IiBpcyB0aGUgdGVzdCB2YXJpYWJsZSBpbiBxdWVzdGlvbiwgdHJlYXRtZW50IGZvciBleGFtcGxlLgogICAgYy4gIm90YyIgaXMgdGhlIG91dGNvbWUsIGRlcGVuZGVudCB2YXJpYWJsZS4KCiMjIyAqVGhlIENhdXNhbCBNYXRyaXggb3V0cHV0KgoKVGhlIG91dHB1dCBvZiB0aGUgY2F1c2FsIG1hdHJpeCBoYXMgb25lIHJvdyBwZXIgbm9kZSBkeWFkLCBhbmQgaXMgZ3JvdXBlZCBieSBtb2RlbC4gCgpge3IgIVtjYXVzYWxfbWF0cml4IGV4YW1wbGVdKGhlcmU6OmhlcmUoIk1lZGlhIiwgIkNhdXNhbF9NYXRyaXhfRXhhbXBsZS5wbmciKSl9YAoKVGhlIGZ1bmN0aW9uIGFsc28gb3V0cHV0cyBhIHN1bW1hcnkgb2YgYWxsIHZhcmlhYmxlcywgdGhlaXIgbGFiZWxzIGFuZCB0aGVpciB0aW1pbmcgZm9yIHRoZSB1c2VyLgoKIyMjIEV4YW1wbGUgQ29kZQoKYGBge3IgY2F1c2FsX21hdHJpeH0KCm5vZGVzIDwtIGMoIlkiLCJYdGVzdCIsIlgzIiwiWDEiLCJYMiIpCnRpbWluZyA8LSBjKDAsLTIsMSwtMywtMykKdHlwZXMgPC0gYygib3RjIiwidGVzdCIsImN0ciIsImN0ciIsICJjdHIiKQp1c2VyX21vZHMgPC0gYygiWSB+IFh0ZXN0ICsgWDI7IFh0ZXN0IH4gWDEgKyBYMiIsICMgTW9kZWwgMQogICAgICAgICAgICAgICAgIlkgfiBYdGVzdCArIFgxOyBYdGVzdCB+IFgxICsgWDIiLCAjIE1vZGVsIDIKICAgICAgICAgICAgICAgICJZIH4gWHRlc3QgKyBYMSArIFgyOyBYdGVzdCB+IFgxICsgWDIiLCAjIE1vZGVsIDMKICAgICAgICAgICAgICAgICJZIH4gWHRlc3QgKyBYMjsgWHRlc3QgfiBYMSArIFgyOyBYMyB+IFkgKyBYdGVzdCIsICMgTW9kZWwgNAogICAgICAgICAgICAgICAgIlkgfiBYdGVzdCArIFgyOyBYdGVzdCB+IFgyOyBYMyB+IFgzIiAjIE1vZGVsIDUKICAgICAgICAgICAgICAgICkKCm11bHRpdmVyc2VfMSA8LSBydW5fdGhlb1J5KG5vZGVzID0gbm9kZXMsIHRpbWluZyA9IHRpbWluZywgdHlwZXM9dHlwZXMsIGluY2x1ZGVfc3Vic2V0cyA9IFRSVUUsIHVzZXJfbW9kcz11c2VyX21vZHMpCgoKbm9kZXMgPC0gYygiWSIsIlh0ZXN0IiwiWDMiLCJYMSIsIlgyIikKdGltaW5nIDwtIGMoMCwtMiwtMSwtMywtMykKdHlwZXMgPC0gYygib3RjIiwidGVzdCIsImN0ciIsImN0ciIsICJjdHIiKQoKbXVsdGl2ZXJzZV8yIDwtIHJ1bl90aGVvUnkobm9kZXMgPSBub2RlcywgdGltaW5nID0gdGltaW5nLCB0eXBlcz10eXBlcywgaW5jbHVkZV9zdWJzZXRzID0gVFJVRSkKCgoKCiMgQWRkIG1vZGVscyA2IGFuZCA3Cm11bHRpdmVyc2VfMiA8LSBmaW5kX2FkZF9tb2RlbHMobHNfdGhlb3J5ID0gbXVsdGl2ZXJzZV8yLCBvbl9scyA9IFRSVUUsIAogICAgICAgICAgICAgICAgdXNlcl9tb2RzID0gYygiWSB+IFh0ZXN0ICsgWDIgKyBYMzsgWHRlc3QgfiBYMSArIFgyOyBYMyB+IFgyIiwKICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIlkgfiBYdGVzdCArIFgyOyBYdGVzdCB+IFgxICsgWDI7IFgzIH4gWDMiKSwgCiAgICAgICAgICAgICAgICBhc3NlcnRfbW9kX251bSA9IGMoNiw3KSkKCgpjYXVzYWxfbWF0cml4X21lcmdlIDwtIHJiaW5kKAogICAgYXMuZGF0YS5mcmFtZShtdWx0aXZlcnNlXzEkY2F1c2FsX21hdHJpeCkgJT4lCiAgICAgICAgbXV0YXRlKG11bHRpdmVyc2UgPSAxLAogICAgICAgICAgICAgICBtb2RlbD1pZmVsc2UobW9kZWwgJWluJSBjKDYsNyksIG1vZGVsK2xlbmd0aCh1bmlxdWUobXVsdGl2ZXJzZV8xJGNhdXNhbF9tYXRyaXgkbW9kZWwpKSwgbW9kZWwpKSwKICAgIGFzLmRhdGEuZnJhbWUobXVsdGl2ZXJzZV8yJGNhdXNhbF9tYXRyaXgpICU+JQogICAgICAgIG11dGF0ZShtdWx0aXZlcnNlID0gMiwKICAgICAgICAgICAgICAgbW9kZWwgPWlmZWxzZShtb2RlbCAlaW4lIGMoNiw3KSwgbW9kZWwsbW9kZWwrbGVuZ3RoKHVuaXF1ZShtdWx0aXZlcnNlXzEkY2F1c2FsX21hdHJpeCRtb2RlbCkpKSkgJT4lCiAgICAgICAgc2VsZWN0KC1wcmV2X21vZCkKKSAlPiUKICBhcnJhbmdlKG1vZGVsLCAtdXNlcl9tb2QpCgpmb3JtdWxhX21hdHJpeF9tZXJnZSA8LSByYmluZCgKICAgIGFzLmRhdGEuZnJhbWUobXVsdGl2ZXJzZV8xJGZvcm11bGFfbWF0cml4KSAlPiUKICAgICAgICBtdXRhdGUobXVsdGl2ZXJzZSA9IDEsCiAgICAgICAgICAgICAgIG1vZGVsPWlmZWxzZShtb2RlbCAlaW4lIGMoNiw3KSwgbW9kZWwrbGVuZ3RoKHVuaXF1ZShtdWx0aXZlcnNlXzEkY2F1c2FsX21hdHJpeCRtb2RlbCkpLCBtb2RlbCkpLAogICAgYXMuZGF0YS5mcmFtZShtdWx0aXZlcnNlXzIkZm9ybXVsYV9tYXRyaXgpICU+JQogICAgICAgICBtdXRhdGUobXVsdGl2ZXJzZSA9IDIsCiAgICAgICAgICAgICAgIG1vZGVsID1pZmVsc2UobW9kZWwgJWluJSBjKDYsNyksIG1vZGVsLG1vZGVsK2xlbmd0aCh1bmlxdWUobXVsdGl2ZXJzZV8xJGNhdXNhbF9tYXRyaXgkbW9kZWwpKSkpCikgJT4lCiAgICBhcnJhbmdlKG1vZGVsLCAtdXNlcl9tb2QpCgpjbXBfbWF0cml4X20xIDwtIGFkZF9jb21wYXRpYmxlKGZvcm11bGFfbWF0cml4X21lcmdlLCByZWZfbW9kPTEpCmBgYAoKCiMjIEJ1aWxkIEZvcm11bGEgTWF0cml4CgpUaGUgZm9ybXVsYSBtYXRyaXggY29udGFpbnMgbGF2YWFuIHN0eWxlIGZvcm11bGFzIHRvIGV4cHJlc3MgdGhlIGNhdXNhbCBtb2RlbHMuIFRoaXMgbWF0cml4IGhhcyBvbmUgbW9kZWwgcGVyIHJvdy4KCmxhdmFhbiBzdHlsZSBmb3JtdWxhcyB0YWtlIG9uIHRoZSBzdHlsZSBvZiB0aGUgZm9sbG93aW5nIGV4YW1wbGUsIHdoaWNoIGlzIHRoZSBmaXJzdCBtb2RlbCAoTW9kZWwgMSkgaW4gdGhlIGV4YW1wbGUgZm9ybXVsYV9tYXRyaXg6CgpZIH4gWDEgKyBYMiArIFgzICsgWHRlc3QgKyBZIApYMyB+IFgxICsgWDIgKyBYMyAKWHRlc3QgfiBYMSArIFgyICsgWDMgKyBYdGVzdCAKWDEgfiBYMQpYMiB+IFgyClgyIH5+IFgxCgpXaGVyZSBlYWNoIHZhcmlhYmxlIHRoYXQgaGFzIGEgY2F1c2FsIHBhdGggY29taW5nIGludG8gaXQgaGFzIGl0cyBvd24gZXF1YXRpb24gc2lnbmlmaWVkIGJ5IH4uIEZvciBtb3JlIGluZm9ybWF0aW9uIHNlZSBbbGF2YWFuXShodHRwczovL2NyYW4uci1wcm9qZWN0Lm9yZy93ZWIvcGFja2FnZXMvbGF2YWFuL2xhdmFhbi5wZGYpIGRvY3VtZW50YXRpb24uCgpbVG8gZGV2ZWxvcCBmdXJ0aGVyXSBUaGUgbGF2YWFuIGZvcm11bGFzIGluIG91ciB1c2FnZSBjb250YWluIHJlZHVuZGFuY2llcywgZm9yIGV4YW1wbGUgdGhlIERWcyBhcmUgcHJlc2VudCBvbiB0aGUgcmlnaHQtaGFuZCBzaWRlcyBvZiB0aGUgZXF1YXRpb24uCgpUaGUgZm9ybXVsYSBtYXRyaXggYWxzbyBpZGVudGlmaWVzIGFueSBtaW5pbWFsIGFkanVzdG1lbnQgc2V0cyAoTUFTKS4gQWRkIGNpdGF0aW9uIGhlcmUuCgpgYGB7ciBmb3JtdWxhX21hdHJpeH0KCmZvcm11bGFfbWF0cml4IDwtIGJ1aWxkX2Zvcm11bGFfbWF0cml4KGNhdXNhbF9tYXRyaXgpCgpgYGAKCiMjIEtlZXAgbWluaW1hbAoKVGhpcyBmdW5jdGlvbiBtYXkgYmUgcmV0aXJlZC4gCgpSZW1vdmUgWHMgd2hpY2ggZG8gbm90IGJlbG9uZyB0byB0aGUgTUFTIGZyb20gZWFjaCBtb2RlbCBhbmQgcmVtb3ZlIGR1cGxpY2F0ZWQgbW9kZWxzIGRlcml2aW5nIGZyb20gdGhpcyBhY3Rpb24KCmBgYHtyIGtlZXBfbWluaW1hbH0KcmVkdWNlZF9jYXVzYWxfbWF0cml4IDwtIGtlZXBfbWluaW1hbChmb3JtdWxhX21hdHJpeCwgY2F1c2FsX21hdHJpeCkKcmVkdWNlZF9mb3JtdWxhX21hdHJpeCA8LSBidWlsZF9mb3JtdWxhX21hdHJpeChyZWR1Y2VkX2NhdXNhbF9tYXRyaXgpCgpgYGAKCiMjIEJ1aWxkIERhZyBNYXRyaXgKClRoaXMgZnVuY3Rpb24gY29udmVydHMgbGF2YWFuIHN0eWxlIGZvcm11bGFzIGludG8gZGFnZ2l0eSBvYmplY3RzLiBUaGUgZGFnZ2l0eSBwYWNrYWdlIGhhcyBpdHMgb3duIGZvcm1hdCBmb3Igc3RvcmluZyBvYmplY3RzLiBUaGlzIGZvcm1hdCBtYXkgaW5jbHVkZSBpbmZvcm1hdGlvbiBhYm91dCB3aGVyZSB0byBwbG90IHRoZSBub2Rlcy4gRm9yIGV4YW1wbGUgTW9kZWwgMToKCmRhZyB7ClgxIFtwb3M9Ii0xLjI1MCwxLjAwMCJdClgyIFtwb3M9Ii0xLjI1MCwtMC41MDAiXQpYMyBbcG9zPSItMC41MDAsLTEuMDAwIl0KWHRlc3QgW2V4cG9zdXJlLHBvcz0iMC4yNTAsMC4wMDAiXQpZIFtvdXRjb21lLHBvcz0iMS4wMDAsMC4wMDAiXQpYMSAtPiBYMQpYMSAtPiBYMwpYMSAtPiBYdGVzdApYMSAtPiBZClgxIDwtPiBYMgpYMiAtPiBYMgpYMiAtPiBYMwpYMiAtPiBYdGVzdApYMiAtPiBZClgzIC0+IFgzClgzIC0+IFh0ZXN0ClgzIC0+IFkKWHRlc3QgLT4gWHRlc3QKWHRlc3QgLT4gWQpZIC0+IFkKfQoKVGhlc2Ugb2JqZWN0cyBhcmUgaWRlYWwgZm9yIGRhZ2l0dHkgZnVuY3Rpb25zIGFuZCBmb3IgcGxvdHRpbmcuCgpUaGlzIGZ1bmN0aW9uIGFsc28gc3RvcmVzIHRoZSBtaW5pbXVtIFggdmFsdWUgZm9yIGxhdGVyIHBsb3R0aW5nIHB1cnBvc2VzIGluIFJlc3VsdHMvbWluWC5SRFMuCgoqYWRkX25vZGVzKiBhbiBvcHRpb24gdG8gYWRkIG5vZGVzIGluIGNhc2UgdGhlIHVzZXIgYWRkZWQgZm9ybXVsYXMsIHRoaXMgaXMgaGVscGZ1bCBmb3IgZXhwZXJ0IHVzYWdlIG9ubHksIGxpa2UgaW4gb3VyIHdvcmtpbmcgcGFwZXIKCipuZXdfbm9kZV92ZWN0b3IxKiBhZGQgb25lIHZlY3RvciBmb3IgZWFjaCBhZGRlZCBub2RlCgpkZWZhdWx0cyAoc2hvdWxkIGJlIGNoYW5nZWQgb2J2aW91c2x5LCBqdXN0IGV4YW1wbGVzIGFuZCBoZWxwZnVsIGZvciBvdXIgd29ya2luZyBwYXBlcikKCm5ld19ub2RlX3ZlY3RvcjEgPSBjKE5BLCAtMC41LCAiY3RyIiwgIlgzIikKbmV3X25vZGVfdmVjdG9yMiA9IGMoTkEsIDAuNSwgImN0ciIsICJYNCIpCm5ld19ub2RlX3ZlY3RvcjMgPSBjKE5BLCAtMS41LCAiY3RyIiwgIlg1IikKCmBgYHtyIGJ1aWxkX2RhZ19tYXRyaXh9CgpkYWdfbWF0cml4IDwtIGJ1aWxkX2RhZ19tYXRyaXgoZm9ybXVsYV9tYXRyaXgpCgpgYGAKCiMjIFBsb3QgREFHIE1hdHJpeAoKVGhpcyBmdW5jdGlvbiB0YWtlcyB0aGUgZGFnaXR0eSBvYmplY3RzIGluIGRhZ19tYXRyaXggYW5kIHBsb3RzIHRoZW0gd2l0aCBhIHRpdGxlIGFuZCBNQVMuIEFsbCBwbG90cyBhcmUgc3RvcmVkIGluIGEgbGlzdCB1c2luZyByZWNvcmRQbG90KCkuIFRoaXMgYWxsb3dzIHRoZSB1c2VyIHRvIHF1aWNrbHkgcmVjYWxsIGFueSBwbG90LgoKVGhlICpzYXZlX3Bsb3RzKiBvcHRpb24gd2hlbiBzd2l0Y2hlZCB0byBUUlVFLCB3aWxsIHNhdmUgZXZlcnkgcGxvdCBhcyBhIC5wbmcgZmlsZSBpbiB0aGUgUmVzdWx0cyBmb2xkZXIuCgpUaGUgKnRpdGxlKiBvcHRpb24gaXMgVFJVRSBieSBkZWZhdWx0IGFuZCBkaXNwbGF5cyB0aGUgIk1vZGVsICMiIHdoZXJlICMgcmVmZXJzIHRvIHRoZSByb3cgaW4gdGhlIGRhZ19tYXRyaXgKClRoZSAqdGl0bGVfcG9zKiBvcHRpb24gc2hvdWxkIGJlIGEgbnVtYmVyIGZyb20gMCAoZnVydGhlc3QgbGVmdCBpbiB0aGUgZ3JhcGgpIHRvIHRoZSBoaWdoZXN0IHZhbHVlLCB3aGljaCBkZXBlbmRzIG9uIGhvdyB3aWRlIHRoZSBwbG90IGlzICh1c3VhbGx5IG5vdCBoaWdoZXIgdGhhbiAyKSB3aXRoIGEgZGVmYXVsdCBvZiAwLjUKCiMjIFdpdGggZGVmYXVsdHMKClRoZXNlIG9wdGlvbmFsIGNvbW1hbmRzIGFyZSBhdmFpbGFibGU6CgoxLiAqc2F2ZV9wbG90cyouIGRlZmF1bHQgPSBGQUxTRS4gV2hlbiBUUlVFLCBhIC5wbmcgb2YgZWFjaCBwbG90IHdpbGwgYmUgc2F2ZWQgaW4gdGhlICJSZXN1bHRzIiBmb2xkZXIgd2l0aCB0aGUgbWF0Y2hpbmcgbW9kZWwgbnVtYmVyLgoKMi4gKmNob29zZV9wbG90cyouIGRlZmF1bHQgPSBOQS4gV2hlbiBhIHZlY3RvciBpcyBzcGVjaWZpZWQsIG9ubHkgdGhvc2UgbW9kZWxzIGdpdmVuIGluIHRoZSB2ZWN0b3Igd2lsbCBiZSBwbG90dGVkLiBNb2RlbCBudW1iZXJzIGNvcnJlc3BvbmQgdG8gdGhlIG51bWJlcnMgaW4gdGhlIGZvcm11bGFfbWF0cml4LgoKMy4gKmNob29zZV9zYXZlX3Bsb3RzKi4gZGVmYXVsdCA9IE5BLiBXaGVuIGEgdmVjdG9yIGlzIHNwZWNpZmllZCBhbmQgc2F2ZV9wbG90cyA9IFRSVUUsIG9ubHkgdGhvc2UgbW9kZWxzIGdpdmVuIGluIHRoZSB2ZWN0b3Igd2lsbCBiZSBzYXZlZCBhcyAucG5nLiBNb2RlbCBudW1iZXJzIGNvcnJlc3BvbmQgdG8gdGhlIG51bWJlcnMgaW4gdGhlIGZvcm11bGFfbWF0cml4LgoKNC4gKmNob29zZV9wbG90c19tYXMqLiBkZWZhdWx0ID0gTkEuIEFjY2VwdHMgb25seSBvbmUgTUFTIHNldC4gVGhpcyBtdXN0IGluY2x1ZGUgcXVvdGVzIGFuZCBzcGFjZXMgYW5kIGhhdmUgdGhlIHNldCB2YXJpYWJsZXMuIE11c3QgYmUgaWRlbnRpY2FsIHRvIGhvdyBNQVMgYXBwZWFycyBpbiB0aGUgZmllbGQgZm9ybXVsYV9tYXRyaXgkbWFzLiBGb3IgZXhhbXBsZSAieyBYMSB9Ii4KCjUuICpmb3JtdWxhX21hdHJpeF9uYW1lKi4gZGVmYXVsdCA9IGZvcm11bGFfbWF0cml4LiBDaGFuZ2UgdG8gc3BlY2lmeSBhIGRpZmZlcmVudGx5IG5hbWVkIGZvcm11bGFfbWF0cml4IG9iamVjdC4gCgo2LiAqdGl0bGUqLiBkZWZhdWx0ID0gVFJVRS4gVGhpcyBvcHRpb24gc3BlY2lmaWVzIGlmIHRoZSBwbG90cyBzaG91bGQgaGF2ZSBhIHRpdGxlIG9yIG5vdC4gVGl0bGVzIGFyZSBpbiB0aGUgZm9ybSBvZiAnTW9kZWwgWCcsIHdoZXJlIFggaXMgdGhlIG1vZGVsIG51bWJlciBpbiBmb3JtdWxhX21hdHJpeC4KCjcuICp0aXRsZV9wb3MqLiBkZWZhdWx0ID0gMC41LiBUaGlzIGlzIGFuIG9wdGlvbiB0aGF0IHNwZWNpZmllcyB3aGVyZSB0aGUgdGl0bGUgYXBwZWFycyBhYm92ZSB0aGUgcGxvdC4gWmVybyBpcyB0aGUgZnVydGhlc3QgbGVmdCwgYW5kIG51bWJlciBpbmNyZWFzaW5nIGZyb20gemVybyBtb3ZlIHRoZSB0aXRsZSB0byB0aGUgcmlnaHQuIAoKOC4gKnBsb3RfdGl0bGVzKi4gZGVmYXVsdCBmb3JtdWxhX21hdHJpeF9uYW1lJG1vZGVsLCBidXQgY2FuIGJlIHJlcGxhY2VkIHdpdGggYSB2ZWN0b3Igb2YgbW9kZWwgbnVtYmVycyBvciBuYW1lcy4KCiMjIyBQbG90dGluZyB3aXRoIGFsbCBkZWZhdWx0cyBzcGVjaWZpZWQuCgpgYGB7ciBwbG90X2RhZ19tYXRyaXh9CmRhZ19wbG90cyA8LSBwbG90X2RhZ19tYXRyaXgoZGFnX21hdHJpeCwgc2F2ZV9wbG90cyA9IEYpCmBgYAoKIyMjIFBsb3R0aW5nIHdpdGggTUFTCgpIZXJlIG9ubHkgcGxvdHMgd2l0aCB0aGUgTUFTIHsgWDEgfSB3aWxsIGJlIHNob3duLgoKYGBge3IgY2hvb3NlX1gxfQpkYWdfcGxvdHMgPC0gcGxvdF9kYWdfbWF0cml4KGRhZ19tYXRyaXgsICBjaG9vc2VfcGxvdHNfbWFzID0gInsgWDEgfSIpCmBgYAoKCiMjIENvbG9waG9uCgpgYGB7ciBjcGhvbn0Kc2Vzc2lvbkluZm8oKQpgYGAKCiMjIFJlZmVyZW5jZXMKCmBgYHtyIGNpdGV9CnBhY2thZ2VzICU+JQogIG1hcChjaXRhdGlvbikgJT4lCiAgcHJpbnQoc3R5bGUgPSAidGV4dCIpCmBgYAo=</div>
+<div id="rmd-source-code">LS0tCnRpdGxlOiAicGFja2FnZSBcXCd0aGVvUnlcXCciCm91dHB1dDogaHRtbF9ub3RlYm9vawotLS0KCgoKIyMgU2V0dXAKClRvIGluc3RhbGwgdGhlIHBhY2thZ2UgZnJvbSBHaXRodWIsIHBsZWFzZSB1c2UgZWl0aGVyIHRoZSByZW1vdGVzIChwcmVmZXJhYmxlKSBvciBkZXZ0b29scwoKYGBge3Igc2V0dXAsIHdhcm5pbmcgPSBGfQojIGluc3RhbGwucGFja2FnZXMoInJlbW90ZXMiKSAjIyBpZiByZW1vdGVzIGRvZXMgbm90IGV4aXN0CiMgcmVtb3Rlczo6aW5zdGFsbF9naXRodWIoImh0dHBzOi8vZ2l0aHViLmNvbS9odW5nbmd1eWVuMTY3L3RoZW9SeSIpCmxpYnJhcnkodGhlb1J5KQpsaWJyYXJ5KHRpZHl2ZXJzZSkKbGlicmFyeShkYXRhLnRhYmxlKQoKYGBgCgojIyBCdWlsZCBDYXVzYWwgTWF0cml4CgpBIHRoZW9SeSBjYXVzYWwgbWF0cml4IGluY2x1ZGVzIGFsbCBwb3NzaWJsZSBjYXVzYWwgY29uZmlndXJhdGlvbnMgb2YgdGhlIHZhcmlhYmxlcyBzdXBwbGllZCBhcyBpbnB1dHMuIFdoZW4gZGVmaW5pbmcgdGhlIGlucHV0cywgdGhlIHVzZXIgcGxhY2VzIHRoZSB2YXJpYWJsZXMgb3JkaW5hbGx5IGluIHRpbWUuIFRoZW4gdGhlIGFsZ29yaXRobSBjcmVhdGVzIGV2ZXJ5IHBvc3NpYmxlIGNhdXNhbCBtb2RlbCwgc3VjaCB0aGF0IGV2ZXJ5IHBhdGggaXMgZWl0aGVyIGNhdXNhbCBvciBub3QgY2F1c2FsLCBhbmQgc2ltdWx0YW5lb3VzbHkgb2NjdXJyaW5nIHZhcmlhYmxlcyBhcmUgZWl0aGVyIG5vdCByZWxhdGVkIG9yIGFyZSBjb3JyZWxhdGVkIChkaXJlY3Rpb24gdW5rbm93bikuCgojIyMgKlRoZSBpbnB1dCBhcmd1bWVudHMqOgoKVGhlIG9iamVjdCAnaW5wdXRzJyB0YWtlcyB0aGUgZm9ybSBvZiBhIG5hbWVkIGxpc3QuIAoKSW4gdGhlICdpbnB1dHMgbGlzdDoKCjEuIE5vZGVzIGNhbiBiZSBnaXZlbiBhbnkgYWxwaGEtbnVtZXJpYyBuYW1pbmcgY29udmVudGlvbiwgYnV0IGZvciBwbG90dGluZyBhbmQgY29tcGFyaXNvbiB3aWxsIGJlIHRyYW5zZm9ybWVkIGludG8gWDEtWG4gYmFzZWQgb24gdGhlIHRpbWluZy4KCjIuIFRpbWluZyByZXF1aXJlcyBlbnRlcmluZyBpbnRlZ2VycyBmcm9tIDAgYmFja3dhcmRzLiBaZXJvIHNob3VsZCBiZSBnaXZlbiB0byB0aGUgb3V0Y29tZSAob3RjKSB2YXJpYWJsZSBhbmQgYWxsIG90aGVyIGluZGVwZW5kZW50IHZhcmlhYmxlcyBuZWVkIHRvIGJlIGNocm9ub2xvZ2ljYWxseSBvcmRlcmVkLiBOb3QgcmVhbCB0aW1lLCBidXQgb3JkaW5hbCB0aW1pbmcgb2YgZXZlbnRzLiBJdCBpcyBwb3NzaWJsZSBmb3IgdmFyaWFibGVzIHRvIG9jY3VyIHNpbXVsdGFuZW91c2x5LCBldmVuIGlmIHRoaXMgaXMganVzdCBvYnNlcnZhdGlvbmFsbHkpCgozLiBUeXBlcyBpbmNsdWRlICJ0ZXN0IiwgIm90YyIsIG9yICJjdHIiLiAKICAgIGEuICJjdHIiIGlzIGEgY29udHJvbCBvciBhZGp1c3RtZW50IHZhcmlhYmxlIHRoYXQgaXMgbm90IHRoZSB0ZXN0IHZhcmlhYmxlIGluIHF1ZXN0aW9uCiAgICBiLiAidGVzdCIgaXMgdGhlIHRlc3QgdmFyaWFibGUgaW4gcXVlc3Rpb24sIHRyZWF0bWVudCBmb3IgZXhhbXBsZS4KICAgIGMuICJvdGMiIGlzIHRoZSBvdXRjb21lLCBkZXBlbmRlbnQgdmFyaWFibGUuCgojIyMgKlRoZSBDYXVzYWwgTWF0cml4IG91dHB1dCoKClRoZSBvdXRwdXQgb2YgdGhlIGNhdXNhbCBtYXRyaXggaGFzIG9uZSByb3cgcGVyIG5vZGUgZHlhZCwgYW5kIGlzIGdyb3VwZWQgYnkgbW9kZWwuIAoKYHtyICFbY2F1c2FsX21hdHJpeCBleGFtcGxlXShoZXJlOjpoZXJlKCJNZWRpYSIsICJDYXVzYWxfTWF0cml4X0V4YW1wbGUucG5nIikpfWAKClRoZSBmdW5jdGlvbiBhbHNvIG91dHB1dHMgYSBzdW1tYXJ5IG9mIGFsbCB2YXJpYWJsZXMsIHRoZWlyIGxhYmVscyBhbmQgdGhlaXIgdGltaW5nIGZvciB0aGUgdXNlci4KCiMjIyBFeGFtcGxlIENvZGUKCmBgYHtyIGNhdXNhbF9tYXRyaXh9Cgpub2RlcyA8LSBjKCJZIiwiWHRlc3QiLCJYMyIsIlgxIiwiWDIiKQp0aW1pbmcgPC0gYygwLC0yLDEsLTMsLTMpCnR5cGVzIDwtIGMoIm90YyIsInRlc3QiLCJjdHIiLCJjdHIiLCAiY3RyIikKdXNlcl9tb2RzIDwtIGMoIlkgfiBYdGVzdCArIFgyOyBYdGVzdCB+IFgxICsgWDIiLCAjIE1vZGVsIDEKICAgICAgICAgICAgICAgICJZIH4gWHRlc3QgKyBYMTsgWHRlc3QgfiBYMSArIFgyIiwgIyBNb2RlbCAyCiAgICAgICAgICAgICAgICAiWSB+IFh0ZXN0ICsgWDEgKyBYMjsgWHRlc3QgfiBYMSArIFgyIiwgIyBNb2RlbCAzCiAgICAgICAgICAgICAgICAiWSB+IFh0ZXN0ICsgWDI7IFh0ZXN0IH4gWDEgKyBYMjsgWDMgfiBZICsgWHRlc3QiLCAjIE1vZGVsIDQKICAgICAgICAgICAgICAgICJZIH4gWHRlc3QgKyBYMjsgWHRlc3QgfiBYMjsgWDMgfiBYMyIgIyBNb2RlbCA1CiAgICAgICAgICAgICAgICApCgptdWx0aXZlcnNlXzEgPC0gcnVuX3RoZW9SeShub2RlcyA9IG5vZGVzLCB0aW1pbmcgPSB0aW1pbmcsIHR5cGVzPXR5cGVzLCBpbmNsdWRlX3N1YnNldHMgPSBUUlVFLCB1c2VyX21vZHM9dXNlcl9tb2RzKQoKCm5vZGVzIDwtIGMoIlkiLCJYdGVzdCIsIlgzIiwiWDEiLCJYMiIpCnRpbWluZyA8LSBjKDAsLTIsLTEsLTMsLTMpCnR5cGVzIDwtIGMoIm90YyIsInRlc3QiLCJjdHIiLCJjdHIiLCAiY3RyIikKCm11bHRpdmVyc2VfMiA8LSBydW5fdGhlb1J5KG5vZGVzID0gbm9kZXMsIHRpbWluZyA9IHRpbWluZywgdHlwZXM9dHlwZXMsIGluY2x1ZGVfc3Vic2V0cyA9IFRSVUUpCgoKCgojIEFkZCBtb2RlbHMgNiBhbmQgNwptdWx0aXZlcnNlXzIgPC0gZmluZF9hZGRfbW9kZWxzKGxzX3RoZW9yeSA9IG11bHRpdmVyc2VfMiwgb25fbHMgPSBUUlVFLCAKICAgICAgICAgICAgICAgIHVzZXJfbW9kcyA9IGMoIlkgfiBYdGVzdCArIFgyICsgWDM7IFh0ZXN0IH4gWDEgKyBYMjsgWDMgfiBYMiIsCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICJZIH4gWHRlc3QgKyBYMjsgWHRlc3QgfiBYMSArIFgyOyBYMyB+IFgzIiksIAogICAgICAgICAgICAgICAgYXNzZXJ0X21vZF9udW0gPSBjKDYsNykpCgoKY2F1c2FsX21hdHJpeF9tZXJnZSA8LSByYmluZCgKICAgIGFzLmRhdGEuZnJhbWUobXVsdGl2ZXJzZV8xJGNhdXNhbF9tYXRyaXgpICU+JQogICAgICAgIG11dGF0ZShtdWx0aXZlcnNlID0gMSwKICAgICAgICAgICAgICAgbW9kZWw9aWZlbHNlKG1vZGVsICVpbiUgYyg2LDcpLCBtb2RlbCtsZW5ndGgodW5pcXVlKG11bHRpdmVyc2VfMSRjYXVzYWxfbWF0cml4JG1vZGVsKSksIG1vZGVsKSksCiAgICBhcy5kYXRhLmZyYW1lKG11bHRpdmVyc2VfMiRjYXVzYWxfbWF0cml4KSAlPiUKICAgICAgICBtdXRhdGUobXVsdGl2ZXJzZSA9IDIsCiAgICAgICAgICAgICAgIG1vZGVsID1pZmVsc2UobW9kZWwgJWluJSBjKDYsNyksIG1vZGVsLG1vZGVsK2xlbmd0aCh1bmlxdWUobXVsdGl2ZXJzZV8xJGNhdXNhbF9tYXRyaXgkbW9kZWwpKSkpICU+JQogICAgICAgIHNlbGVjdCgtcHJldl9tb2QpCikgJT4lCiAgYXJyYW5nZShtb2RlbCwgLXVzZXJfbW9kKQoKZm9ybXVsYV9tYXRyaXhfbWVyZ2UgPC0gcmJpbmQoCiAgICBhcy5kYXRhLmZyYW1lKG11bHRpdmVyc2VfMSRmb3JtdWxhX21hdHJpeCkgJT4lCiAgICAgICAgbXV0YXRlKG11bHRpdmVyc2UgPSAxLAogICAgICAgICAgICAgICBtb2RlbD1pZmVsc2UobW9kZWwgJWluJSBjKDYsNyksIG1vZGVsK2xlbmd0aCh1bmlxdWUobXVsdGl2ZXJzZV8xJGNhdXNhbF9tYXRyaXgkbW9kZWwpKSwgbW9kZWwpKSwKICAgIGFzLmRhdGEuZnJhbWUobXVsdGl2ZXJzZV8yJGZvcm11bGFfbWF0cml4KSAlPiUKICAgICAgICAgbXV0YXRlKG11bHRpdmVyc2UgPSAyLAogICAgICAgICAgICAgICBtb2RlbCA9aWZlbHNlKG1vZGVsICVpbiUgYyg2LDcpLCBtb2RlbCxtb2RlbCtsZW5ndGgodW5pcXVlKG11bHRpdmVyc2VfMSRjYXVzYWxfbWF0cml4JG1vZGVsKSkpKQopICU+JQogICAgYXJyYW5nZShtb2RlbCwgLXVzZXJfbW9kKQoKY21wX21hdHJpeF9tMSA8LSBhZGRfY29tcGF0aWJsZShmb3JtdWxhX21hdHJpeF9tZXJnZSwgcmVmX21vZD0xKQpgYGAKCgojIyBCdWlsZCBGb3JtdWxhIE1hdHJpeAoKVGhlIGZvcm11bGEgbWF0cml4IGNvbnRhaW5zIGxhdmFhbiBzdHlsZSBmb3JtdWxhcyB0byBleHByZXNzIHRoZSBjYXVzYWwgbW9kZWxzLiBUaGlzIG1hdHJpeCBoYXMgb25lIG1vZGVsIHBlciByb3cuCgpsYXZhYW4gc3R5bGUgZm9ybXVsYXMgdGFrZSBvbiB0aGUgc3R5bGUgb2YgdGhlIGZvbGxvd2luZyBleGFtcGxlLCB3aGljaCBpcyB0aGUgZmlyc3QgbW9kZWwgKE1vZGVsIDEpIGluIHRoZSBleGFtcGxlIGZvcm11bGFfbWF0cml4OgoKWSB+IFgxICsgWDIgKyBYMyArIFh0ZXN0ICsgWSAKWDMgfiBYMSArIFgyICsgWDMgClh0ZXN0IH4gWDEgKyBYMiArIFgzICsgWHRlc3QgClgxIH4gWDEKWDIgfiBYMgpYMiB+fiBYMQoKV2hlcmUgZWFjaCB2YXJpYWJsZSB0aGF0IGhhcyBhIGNhdXNhbCBwYXRoIGNvbWluZyBpbnRvIGl0IGhhcyBpdHMgb3duIGVxdWF0aW9uIHNpZ25pZmllZCBieSB+LiBGb3IgbW9yZSBpbmZvcm1hdGlvbiBzZWUgW2xhdmFhbl0oaHR0cHM6Ly9jcmFuLnItcHJvamVjdC5vcmcvd2ViL3BhY2thZ2VzL2xhdmFhbi9sYXZhYW4ucGRmKSBkb2N1bWVudGF0aW9uLgoKW1RvIGRldmVsb3AgZnVydGhlcl0gVGhlIGxhdmFhbiBmb3JtdWxhcyBpbiBvdXIgdXNhZ2UgY29udGFpbiByZWR1bmRhbmNpZXMsIGZvciBleGFtcGxlIHRoZSBEVnMgYXJlIHByZXNlbnQgb24gdGhlIHJpZ2h0LWhhbmQgc2lkZXMgb2YgdGhlIGVxdWF0aW9uLgoKVGhlIGZvcm11bGEgbWF0cml4IGFsc28gaWRlbnRpZmllcyBhbnkgbWluaW1hbCBhZGp1c3RtZW50IHNldHMgKE1BUykuIEFkZCBjaXRhdGlvbiBoZXJlLgoKYGBge3IgZm9ybXVsYV9tYXRyaXh9Cgpmb3JtdWxhX21hdHJpeCA8LSBidWlsZF9mb3JtdWxhX21hdHJpeChjYXVzYWxfbWF0cml4KQoKYGBgCgojIyBLZWVwIG1pbmltYWwKClRoaXMgZnVuY3Rpb24gbWF5IGJlIHJldGlyZWQuIAoKUmVtb3ZlIFhzIHdoaWNoIGRvIG5vdCBiZWxvbmcgdG8gdGhlIE1BUyBmcm9tIGVhY2ggbW9kZWwgYW5kIHJlbW92ZSBkdXBsaWNhdGVkIG1vZGVscyBkZXJpdmluZyBmcm9tIHRoaXMgYWN0aW9uCgpgYGB7ciBrZWVwX21pbmltYWx9CnJlZHVjZWRfY2F1c2FsX21hdHJpeCA8LSBrZWVwX21pbmltYWwoZm9ybXVsYV9tYXRyaXgsIGNhdXNhbF9tYXRyaXgpCnJlZHVjZWRfZm9ybXVsYV9tYXRyaXggPC0gYnVpbGRfZm9ybXVsYV9tYXRyaXgocmVkdWNlZF9jYXVzYWxfbWF0cml4KQoKYGBgCgojIyBCdWlsZCBEYWcgTWF0cml4CgpUaGlzIGZ1bmN0aW9uIGNvbnZlcnRzIGxhdmFhbiBzdHlsZSBmb3JtdWxhcyBpbnRvIGRhZ2dpdHkgb2JqZWN0cy4gVGhlIGRhZ2dpdHkgcGFja2FnZSBoYXMgaXRzIG93biBmb3JtYXQgZm9yIHN0b3Jpbmcgb2JqZWN0cy4gVGhpcyBmb3JtYXQgbWF5IGluY2x1ZGUgaW5mb3JtYXRpb24gYWJvdXQgd2hlcmUgdG8gcGxvdCB0aGUgbm9kZXMuIEZvciBleGFtcGxlIE1vZGVsIDE6CgpkYWcgewpYMSBbcG9zPSItMS4yNTAsMS4wMDAiXQpYMiBbcG9zPSItMS4yNTAsLTAuNTAwIl0KWDMgW3Bvcz0iLTAuNTAwLC0xLjAwMCJdClh0ZXN0IFtleHBvc3VyZSxwb3M9IjAuMjUwLDAuMDAwIl0KWSBbb3V0Y29tZSxwb3M9IjEuMDAwLDAuMDAwIl0KWDEgLT4gWDEKWDEgLT4gWDMKWDEgLT4gWHRlc3QKWDEgLT4gWQpYMSA8LT4gWDIKWDIgLT4gWDIKWDIgLT4gWDMKWDIgLT4gWHRlc3QKWDIgLT4gWQpYMyAtPiBYMwpYMyAtPiBYdGVzdApYMyAtPiBZClh0ZXN0IC0+IFh0ZXN0Clh0ZXN0IC0+IFkKWSAtPiBZCn0KClRoZXNlIG9iamVjdHMgYXJlIGlkZWFsIGZvciBkYWdpdHR5IGZ1bmN0aW9ucyBhbmQgZm9yIHBsb3R0aW5nLgoKVGhpcyBmdW5jdGlvbiBhbHNvIHN0b3JlcyB0aGUgbWluaW11bSBYIHZhbHVlIGZvciBsYXRlciBwbG90dGluZyBwdXJwb3NlcyBpbiBSZXN1bHRzL21pblguUkRTLgoKKmFkZF9ub2RlcyogYW4gb3B0aW9uIHRvIGFkZCBub2RlcyBpbiBjYXNlIHRoZSB1c2VyIGFkZGVkIGZvcm11bGFzLCB0aGlzIGlzIGhlbHBmdWwgZm9yIGV4cGVydCB1c2FnZSBvbmx5LCBsaWtlIGluIG91ciB3b3JraW5nIHBhcGVyCgoqbmV3X25vZGVfdmVjdG9yMSogYWRkIG9uZSB2ZWN0b3IgZm9yIGVhY2ggYWRkZWQgbm9kZQoKZGVmYXVsdHMgKHNob3VsZCBiZSBjaGFuZ2VkIG9idmlvdXNseSwganVzdCBleGFtcGxlcyBhbmQgaGVscGZ1bCBmb3Igb3VyIHdvcmtpbmcgcGFwZXIpCgpuZXdfbm9kZV92ZWN0b3IxID0gYyhOQSwgLTAuNSwgImN0ciIsICJYMyIpCm5ld19ub2RlX3ZlY3RvcjIgPSBjKE5BLCAwLjUsICJjdHIiLCAiWDQiKQpuZXdfbm9kZV92ZWN0b3IzID0gYyhOQSwgLTEuNSwgImN0ciIsICJYNSIpCgpgYGB7ciBidWlsZF9kYWdfbWF0cml4fQoKZGFnX21hdHJpeCA8LSBidWlsZF9kYWdfbWF0cml4KGZvcm11bGFfbWF0cml4KQoKYGBgCgojIyBQbG90IERBRyBNYXRyaXgKClRoaXMgZnVuY3Rpb24gdGFrZXMgdGhlIGRhZ2l0dHkgb2JqZWN0cyBpbiBkYWdfbWF0cml4IGFuZCBwbG90cyB0aGVtIHdpdGggYSB0aXRsZSBhbmQgTUFTLiBBbGwgcGxvdHMgYXJlIHN0b3JlZCBpbiBhIGxpc3QgdXNpbmcgcmVjb3JkUGxvdCgpLiBUaGlzIGFsbG93cyB0aGUgdXNlciB0byBxdWlja2x5IHJlY2FsbCBhbnkgcGxvdC4KClRoZSAqc2F2ZV9wbG90cyogb3B0aW9uIHdoZW4gc3dpdGNoZWQgdG8gVFJVRSwgd2lsbCBzYXZlIGV2ZXJ5IHBsb3QgYXMgYSAucG5nIGZpbGUgaW4gdGhlIFJlc3VsdHMgZm9sZGVyLgoKVGhlICp0aXRsZSogb3B0aW9uIGlzIFRSVUUgYnkgZGVmYXVsdCBhbmQgZGlzcGxheXMgdGhlICJNb2RlbCAjIiB3aGVyZSAjIHJlZmVycyB0byB0aGUgcm93IGluIHRoZSBkYWdfbWF0cml4CgpUaGUgKnRpdGxlX3Bvcyogb3B0aW9uIHNob3VsZCBiZSBhIG51bWJlciBmcm9tIDAgKGZ1cnRoZXN0IGxlZnQgaW4gdGhlIGdyYXBoKSB0byB0aGUgaGlnaGVzdCB2YWx1ZSwgd2hpY2ggZGVwZW5kcyBvbiBob3cgd2lkZSB0aGUgcGxvdCBpcyAodXN1YWxseSBub3QgaGlnaGVyIHRoYW4gMikgd2l0aCBhIGRlZmF1bHQgb2YgMC41CgojIyBXaXRoIGRlZmF1bHRzCgpUaGVzZSBvcHRpb25hbCBjb21tYW5kcyBhcmUgYXZhaWxhYmxlOgoKMS4gKnNhdmVfcGxvdHMqLiBkZWZhdWx0ID0gRkFMU0UuIFdoZW4gVFJVRSwgYSAucG5nIG9mIGVhY2ggcGxvdCB3aWxsIGJlIHNhdmVkIGluIHRoZSAiUmVzdWx0cyIgZm9sZGVyIHdpdGggdGhlIG1hdGNoaW5nIG1vZGVsIG51bWJlci4KCjIuICpjaG9vc2VfcGxvdHMqLiBkZWZhdWx0ID0gTkEuIFdoZW4gYSB2ZWN0b3IgaXMgc3BlY2lmaWVkLCBvbmx5IHRob3NlIG1vZGVscyBnaXZlbiBpbiB0aGUgdmVjdG9yIHdpbGwgYmUgcGxvdHRlZC4gTW9kZWwgbnVtYmVycyBjb3JyZXNwb25kIHRvIHRoZSBudW1iZXJzIGluIHRoZSBmb3JtdWxhX21hdHJpeC4KCjMuICpjaG9vc2Vfc2F2ZV9wbG90cyouIGRlZmF1bHQgPSBOQS4gV2hlbiBhIHZlY3RvciBpcyBzcGVjaWZpZWQgYW5kIHNhdmVfcGxvdHMgPSBUUlVFLCBvbmx5IHRob3NlIG1vZGVscyBnaXZlbiBpbiB0aGUgdmVjdG9yIHdpbGwgYmUgc2F2ZWQgYXMgLnBuZy4gTW9kZWwgbnVtYmVycyBjb3JyZXNwb25kIHRvIHRoZSBudW1iZXJzIGluIHRoZSBmb3JtdWxhX21hdHJpeC4KCjQuICpjaG9vc2VfcGxvdHNfbWFzKi4gZGVmYXVsdCA9IE5BLiBBY2NlcHRzIG9ubHkgb25lIE1BUyBzZXQuIFRoaXMgbXVzdCBpbmNsdWRlIHF1b3RlcyBhbmQgc3BhY2VzIGFuZCBoYXZlIHRoZSBzZXQgdmFyaWFibGVzLiBNdXN0IGJlIGlkZW50aWNhbCB0byBob3cgTUFTIGFwcGVhcnMgaW4gdGhlIGZpZWxkIGZvcm11bGFfbWF0cml4JG1hcy4gRm9yIGV4YW1wbGUgInsgWDEgfSIuCgo1LiAqZm9ybXVsYV9tYXRyaXhfbmFtZSouIGRlZmF1bHQgPSBmb3JtdWxhX21hdHJpeC4gQ2hhbmdlIHRvIHNwZWNpZnkgYSBkaWZmZXJlbnRseSBuYW1lZCBmb3JtdWxhX21hdHJpeCBvYmplY3QuIAoKNi4gKnRpdGxlKi4gZGVmYXVsdCA9IFRSVUUuIFRoaXMgb3B0aW9uIHNwZWNpZmllcyBpZiB0aGUgcGxvdHMgc2hvdWxkIGhhdmUgYSB0aXRsZSBvciBub3QuIFRpdGxlcyBhcmUgaW4gdGhlIGZvcm0gb2YgJ01vZGVsIFgnLCB3aGVyZSBYIGlzIHRoZSBtb2RlbCBudW1iZXIgaW4gZm9ybXVsYV9tYXRyaXguCgo3LiAqdGl0bGVfcG9zKi4gZGVmYXVsdCA9IDAuNS4gVGhpcyBpcyBhbiBvcHRpb24gdGhhdCBzcGVjaWZpZXMgd2hlcmUgdGhlIHRpdGxlIGFwcGVhcnMgYWJvdmUgdGhlIHBsb3QuIFplcm8gaXMgdGhlIGZ1cnRoZXN0IGxlZnQsIGFuZCBudW1iZXIgaW5jcmVhc2luZyBmcm9tIHplcm8gbW92ZSB0aGUgdGl0bGUgdG8gdGhlIHJpZ2h0LiAKCjguICpwbG90X3RpdGxlcyouIGRlZmF1bHQgZm9ybXVsYV9tYXRyaXhfbmFtZSRtb2RlbCwgYnV0IGNhbiBiZSByZXBsYWNlZCB3aXRoIGEgdmVjdG9yIG9mIG1vZGVsIG51bWJlcnMgb3IgbmFtZXMuCgojIyMgUGxvdHRpbmcgd2l0aCBhbGwgZGVmYXVsdHMgc3BlY2lmaWVkLgoKYGBge3IgcGxvdF9kYWdfbWF0cml4fQpkYWdfcGxvdHMgPC0gcGxvdF9kYWdfbWF0cml4KGRhZ19tYXRyaXgsIHNhdmVfcGxvdHMgPSBGKQpgYGAKCiMjIyBQbG90dGluZyB3aXRoIE1BUwoKSGVyZSBvbmx5IHBsb3RzIHdpdGggdGhlIE1BUyB7IFgxIH0gd2lsbCBiZSBzaG93bi4KCmBgYHtyIGNob29zZV9YMX0KZGFnX3Bsb3RzIDwtIHBsb3RfZGFnX21hdHJpeChkYWdfbWF0cml4LCAgY2hvb3NlX3Bsb3RzX21hcyA9ICJ7IFgxIH0iKQpgYGAKCgojIyBDb2xvcGhvbgoKYGBge3IgY3Bob259CnNlc3Npb25JbmZvKCkKYGBgCgojIyBSZWZlcmVuY2VzCgpgYGB7ciBjaXRlfQpwYWNrYWdlcyAlPiUKICBtYXAoY2l0YXRpb24pICU+JQogIHByaW50KHN0eWxlID0gInRleHQiKQpgYGAK</div>
 
 
 

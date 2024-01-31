@@ -1,9 +1,11 @@
 ---
 title: "theoRy: An R package for meta-analyzing theoretical uncertainty"
-output: 
-  pdf_document: 
+output:
+  pdf_document:
     fig_width: 4.5
     fig_height: 3
+  html_document:
+    df_print: paged
 classoption: landscape
 ---
 <style type="text/css">
@@ -128,7 +130,10 @@ dag_plots <- plot_dag(ls_theory, choose_plots=c(1:2), save_path="plots/")
 dag_plots[[1]]
 
 ```
+
 \newpage
+
+
 The outputs are `ggplot` objects so you can manipulate the plots the same as you manipulate other ggplot objects.
 ```{r plot_dag_2}
 
@@ -160,3 +165,8 @@ There are other utility functions that might be useful for adding/finding models
 
 ## Future plans
 
+1.  Improve speed
+2.  Add more utility functions
+3.  Extend to the data processing multiverse
+4.  Fit theory with data, then visualise the multiverse
+5.  Train a machine learning algorithm to learn how to build the multiverse from any random combination of inputs

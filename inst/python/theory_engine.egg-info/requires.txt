@@ -1,0 +1,10 @@
+torch>=2.0
+fastapi>=0.104
+uvicorn>=0.24
+rpy2>=3.5
+pyarrow>=14
+scipy>=1.11
+pandas>=2.1
+pydantic>=2.5
+pytest>=7.4
+httpx>=0.25

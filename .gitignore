@@ -5,3 +5,6 @@
 _bmad/
 .github/
 .roo/
+_bmad-output/
+docs/internal
+tests

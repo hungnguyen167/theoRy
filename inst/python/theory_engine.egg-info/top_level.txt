@@ -4,3 +4,4 @@ dyadic
 registry
 simulation
 state
+symbolic

@@ -3,9 +3,15 @@ from __future__ import annotations
 import logging
 from collections import OrderedDict
 
-from dyadic.causal import CausalError
+from dyadic.profiles import CausalProfileBuilder
 from registry.schema import ComponentRegistry
 from state.tensor import StateTensor
+from state.semantics import (
+    compare_structural_claims,
+    edge_applicable,
+    edge_endpoint_components,
+    node_component_map,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -34,8 +40,10 @@ class DyadicEngine:
         *,
         mode: str = "basic",
         causal_wrapper=None,
+        identification_wrapper=None,
         exposure: str | None = None,
         outcome: str | None = None,
+        _causal_profiles: dict | None = None,
     ) -> dict:
         """Compare two models as a directed dyad (ego -> alter)."""
         if mode not in self._VALID_MODES:
@@ -44,48 +52,39 @@ class DyadicEngine:
         self._validate_acyclic(ego_id, state, registry)
         self._validate_acyclic(alter_id, state, registry)
 
-        component_ids = state.component_ids
-        excluded_edges = self._temporally_invalid_edges(
-            ego_id, state, registry
-        ) | self._temporally_invalid_edges(alter_id, state, registry)
+        counts = compare_structural_claims(state, registry, ego_id, alter_id)
 
-        shared_known = 0
-        union_known = 0
-        conflicts: list[str] = []
-        repair_cost = 0
-
-        for cid in component_ids:
-            if cid in excluded_edges:
-                continue
-
-            a_status = state.get_status(ego_id, cid)
-            b_status = state.get_status(alter_id, cid)
-
-            a_known = a_status == "causal"
-            b_known = b_status == "causal"
-
-            if a_known and b_known:
-                shared_known += 1
-                union_known += 1
-            elif a_known or b_known:
-                union_known += 1
-
-            if (a_status == "causal" and b_status == "non-causal") or (
-                a_status == "non-causal" and b_status == "causal"
-            ):
-                conflicts.append(cid)
-
-            if a_status != b_status:
-                repair_cost += 1
-
-        if union_known == 0:
+        if counts.union_claims == 0:
             similarity_rate = 1.0
         else:
-            similarity_rate = shared_known / union_known
+            similarity_rate = counts.shared_claims / counts.union_claims
 
         timing_compatible = self._check_timing_compatibility(
             ego_id, alter_id, state, registry
         )
+
+        conflicts: list[str] = []
+        if counts.edge_conflicts > 0:
+            edge_endpoints = edge_endpoint_components(registry)
+            for edge_cid in edge_endpoints:
+                if not edge_applicable(state, ego_id, edge_cid, registry):
+                    continue
+                if not edge_applicable(state, alter_id, edge_cid, registry):
+                    continue
+                ego_status = state.get_status(ego_id, edge_cid)
+                alter_status = state.get_status(alter_id, edge_cid)
+                if (ego_status == "causal" and alter_status == "non-causal") or (
+                    ego_status == "non-causal" and alter_status == "causal"
+                ):
+                    conflicts.append(edge_cid)
+
+        # Also count node presence conflicts
+        node_map = node_component_map(registry)
+        for node_name, node_cid in node_map.items():
+            ego_present = self._node_is_present(state, ego_id, node_cid)
+            alter_present = self._node_is_present(state, alter_id, node_cid)
+            if ego_present != alter_present:
+                conflicts.append(node_cid)
 
         dyad_id = f"{ego_id}__{alter_id}"
 
@@ -97,21 +96,61 @@ class DyadicEngine:
         result["timing_compatible"] = timing_compatible
         result["existence_conflict"] = len(conflicts) > 0
         result["conflicting_components"] = conflicts
-        result["repair_cost"] = repair_cost
-        result["excluded_components"] = sorted(excluded_edges)
+        result["repair_cost"] = counts.repair_cost
+        result["excluded_components"] = sorted(
+            self._get_inapplicable_components(state, ego_id, alter_id, registry)
+        )
+
+        if counts.node_conflicts > 0:
+            result["node_conflicts"] = counts.node_conflicts
+        if counts.edge_conflicts > 0:
+            result["edge_conflicts"] = counts.edge_conflicts
+        if counts.inapplicable_components > 0:
+            result["inapplicable_components"] = counts.inapplicable_components
+        result["shared_resolved_claims"] = counts.shared_claims
+        result["union_resolved_claims"] = counts.union_claims
 
         if mode == "full":
             if causal_wrapper is None:
-                raise DyadicError(
-                    "causal_wrapper is required for mode='full'"
-                )
+                raise DyadicError("causal_wrapper is required for mode='full'")
             causal = self._compute_causal_metrics(
-                ego_id, alter_id, state, registry, causal_wrapper,
-                exposure=exposure, outcome=outcome,
+                ego_id,
+                alter_id,
+                state,
+                registry,
+                causal_wrapper,
+                exposure=exposure,
+                outcome=outcome,
+                identification_wrapper=identification_wrapper,
+                profiles=_causal_profiles,
             )
             result.update(causal)
 
         return dict(result)
+
+    def _node_is_present(
+        self, state: StateTensor, model_id: str, node_cid: str
+    ) -> bool:
+        if hasattr(state, "node_present"):
+            return state.node_present(model_id, node_cid)
+        status = state.get_status(model_id, node_cid)
+        return status in ("causal", "present")
+
+    def _get_inapplicable_components(
+        self,
+        state: StateTensor,
+        ego_id: str,
+        alter_id: str,
+        registry: ComponentRegistry,
+    ) -> set[str]:
+        inapplicable: set[str] = set()
+        edge_endpoints = edge_endpoint_components(registry)
+        for edge_cid in edge_endpoints:
+            ego_app = edge_applicable(state, ego_id, edge_cid, registry)
+            alter_app = edge_applicable(state, alter_id, edge_cid, registry)
+            if not ego_app or not alter_app:
+                inapplicable.add(edge_cid)
+        return inapplicable
 
     def compare_pairs(
         self,
@@ -121,6 +160,7 @@ class DyadicEngine:
         *,
         mode: str = "basic",
         causal_wrapper=None,
+        identification_wrapper=None,
         exposure: str | None = None,
         outcome: str | None = None,
     ) -> list[dict]:
@@ -128,6 +168,16 @@ class DyadicEngine:
         if model_ids is None:
             model_ids = state.model_ids
         model_ids = sorted(model_ids)
+
+        profiles = self._build_causal_profiles(
+            state,
+            registry,
+            mode=mode,
+            causal_wrapper=causal_wrapper,
+            identification_wrapper=identification_wrapper,
+            exposure=exposure,
+            outcome=outcome,
+        )
 
         results: list[dict] = []
         for i in range(len(model_ids)):
@@ -142,8 +192,10 @@ class DyadicEngine:
                         registry,
                         mode=mode,
                         causal_wrapper=causal_wrapper,
+                        identification_wrapper=identification_wrapper,
                         exposure=exposure,
                         outcome=outcome,
+                        _causal_profiles=profiles,
                     )
                 )
         return results
@@ -157,18 +209,25 @@ class DyadicEngine:
         *,
         mode: str = "basic",
         causal_wrapper=None,
+        identification_wrapper=None,
         exposure: str | None = None,
         outcome: str | None = None,
     ) -> list[dict]:
-        """Compute dyads only for pairs involving affected_models.
-        
-        Returns dyads where at least one model is in affected_models.
-        This is O(K*M) instead of O(M^2) where K=len(affected_models).
-        """
+        """Compute dyads only for pairs involving affected_models."""
         if all_models is None:
             all_models = state.model_ids
         all_models = sorted(all_models)
         affected_set = set(affected_models)
+
+        profiles = self._build_causal_profiles(
+            state,
+            registry,
+            mode=mode,
+            causal_wrapper=causal_wrapper,
+            identification_wrapper=identification_wrapper,
+            exposure=exposure,
+            outcome=outcome,
+        )
 
         results: list[dict] = []
         for ego in all_models:
@@ -185,8 +244,10 @@ class DyadicEngine:
                         registry,
                         mode=mode,
                         causal_wrapper=causal_wrapper,
+                        identification_wrapper=identification_wrapper,
                         exposure=exposure,
                         outcome=outcome,
+                        _causal_profiles=profiles,
                     )
                 )
         return results
@@ -199,12 +260,22 @@ class DyadicEngine:
         *,
         mode: str = "basic",
         causal_wrapper=None,
+        identification_wrapper=None,
         exposure: str | None = None,
         outcome: str | None = None,
     ) -> list[dict]:
         """Return ordered, non-self dyad records (convenience wrapper)."""
         if model_ids is None:
             model_ids = state.model_ids
+        profiles = self._build_causal_profiles(
+            state,
+            registry,
+            mode=mode,
+            causal_wrapper=causal_wrapper,
+            identification_wrapper=identification_wrapper,
+            exposure=exposure,
+            outcome=outcome,
+        )
         results: list[dict] = []
         for a in model_ids:
             for b in model_ids:
@@ -218,8 +289,10 @@ class DyadicEngine:
                         registry,
                         mode=mode,
                         causal_wrapper=causal_wrapper,
+                        identification_wrapper=identification_wrapper,
                         exposure=exposure,
                         outcome=outcome,
+                        _causal_profiles=profiles,
                     )
                 )
         return results
@@ -232,18 +305,35 @@ class DyadicEngine:
         *,
         mode: str = "basic",
         causal_wrapper=None,
+        identification_wrapper=None,
         exposure: str | None = None,
         outcome: str | None = None,
     ) -> list[list[dict]]:
-        """Return an M x M dyadic comparison matrix including self-dyads.
-        Kept for internal testing; not used by the API endpoint."""
+        """Return an M x M dyadic comparison matrix including self-dyads."""
         if model_ids is None:
             model_ids = state.model_ids
+        profiles = self._build_causal_profiles(
+            state,
+            registry,
+            mode=mode,
+            causal_wrapper=causal_wrapper,
+            identification_wrapper=identification_wrapper,
+            exposure=exposure,
+            outcome=outcome,
+        )
         return [
             [
                 self.compare(
-                    a, b, state, registry, mode=mode, causal_wrapper=causal_wrapper,
-                    exposure=exposure, outcome=outcome,
+                    a,
+                    b,
+                    state,
+                    registry,
+                    mode=mode,
+                    causal_wrapper=causal_wrapper,
+                    identification_wrapper=identification_wrapper,
+                    exposure=exposure,
+                    outcome=outcome,
+                    _causal_profiles=profiles,
                 )
                 for b in model_ids
             ]
@@ -270,26 +360,35 @@ class DyadicEngine:
         outcome: str | None = None,
     ) -> dict:
         df = registry.data
-        nodes = df[df["type"] == "node"]
+        nodes_df = df[df["type"] == "node"]
         node_names: list[str] = []
-        for _, row in nodes.iterrows():
-            node_names.append(row["source"])
+        observed_by_node: dict[str, bool] = {}
+        for _, row in nodes_df.iterrows():
+            cid = row["comp_id"]
+            if self._node_is_present(state, model_id, cid):
+                node_names.append(row["source"])
+                observed_by_node[row["source"]] = bool(row.get("observed", True))
         node_names = list(dict.fromkeys(node_names))
 
         if len(node_names) < 2:
             raise DyadicError(
-                f"Model {model_id} has fewer than 2 nodes; "
+                f"Model {model_id} has fewer than 2 present nodes; "
                 f"cannot build DAG spec for causal metrics"
             )
 
         edges: list[tuple[str, str]] = []
-        directed_edges = df[
-            (df["type"] == "edge") & (df["direction"] == "->")
-        ]
-        for _, row in directed_edges.iterrows():
+        bidirected_edges: list[tuple[str, str]] = []
+
+        for _, row in df[df["type"] == "edge"].iterrows():
             cid = row["comp_id"]
-            if state.get_status(model_id, cid) == "causal":
+            if not edge_applicable(state, model_id, cid, registry):
+                continue
+            if state.get_status(model_id, cid) != "causal":
+                continue
+            if row["direction"] == "->":
                 edges.append((row["source"], row["target"]))
+            elif row["direction"] == "<->":
+                bidirected_edges.append((row["source"], row["target"]))
 
         if (exposure is None) != (outcome is None):
             raise DyadicError(
@@ -297,15 +396,31 @@ class DyadicEngine:
             )
 
         if exposure is not None and outcome is not None:
+            exp_cid = self._node_component_id(exposure, registry)
+            out_cid = self._node_component_id(outcome, registry)
+
+            exp_present = self._node_is_present(state, model_id, exp_cid)
+            out_present = self._node_is_present(state, model_id, out_cid)
+
+            if not exp_present or not out_present:
+                return {
+                    "nodes": node_names,
+                    "edges": edges,
+                    "bidirected_edges": bidirected_edges,
+                    "exposure": exposure,
+                    "outcome": outcome,
+                    "query_nodes_missing": True,
+                }
+
             if exposure not in node_names:
                 raise DyadicError(
-                    f"Exposure {exposure!r} is not a valid node in the registry. "
-                    f"Valid nodes: {node_names}"
+                    f"Exposure {exposure!r} is not present in model {model_id}. "
+                    f"Present nodes: {node_names}"
                 )
             if outcome not in node_names:
                 raise DyadicError(
-                    f"Outcome {outcome!r} is not a valid node in the registry. "
-                    f"Valid nodes: {node_names}"
+                    f"Outcome {outcome!r} is not present in model {model_id}. "
+                    f"Present nodes: {node_names}"
                 )
             if exposure == outcome:
                 raise DyadicError(
@@ -315,12 +430,86 @@ class DyadicEngine:
         else:
             exposure, outcome = self._default_exposure_outcome(node_names)
 
+        node_names, edges, bidirected_edges = self._project_latent_nodes(
+            node_names, edges, bidirected_edges, observed_by_node
+        )
+        if exposure not in node_names or outcome not in node_names:
+            raise DyadicError(
+                "Causal query exposure and outcome must both be observed nodes; "
+                f"got exposure={exposure!r}, outcome={outcome!r}"
+            )
+
         return {
             "nodes": node_names,
             "edges": edges,
+            "bidirected_edges": bidirected_edges,
             "exposure": exposure,
             "outcome": outcome,
+            "query_nodes_missing": False,
         }
+
+    @staticmethod
+    def _project_latent_nodes(
+        nodes: list[str],
+        directed_edges: list[tuple[str, str]],
+        bidirected_edges: list[tuple[str, str]],
+        observed_by_node: dict[str, bool],
+    ) -> tuple[list[str], list[tuple[str, str]], list[tuple[str, str]]]:
+        """Latent-project a directed graph onto its observed nodes."""
+        observed = {node for node in nodes if observed_by_node.get(node, True)}
+        latent = set(nodes) - observed
+        if not latent:
+            return nodes, directed_edges, bidirected_edges
+        if any(
+            source in latent or target in latent
+            for source, target in bidirected_edges
+        ):
+            raise DyadicError(
+                "Latent projection supports directed paths through latent nodes, "
+                "not bidirected edges incident to latent nodes"
+            )
+
+        children: dict[str, set[str]] = {node: set() for node in nodes}
+        for source, target in directed_edges:
+            children.setdefault(source, set()).add(target)
+
+        def observed_descendants(source: str) -> set[str]:
+            descendants: set[str] = set()
+            pending = list(children.get(source, ()))
+            seen: set[str] = set()
+            while pending:
+                node = pending.pop()
+                if node in seen:
+                    continue
+                seen.add(node)
+                if node in observed:
+                    descendants.add(node)
+                elif node in latent:
+                    pending.extend(children.get(node, ()))
+            return descendants
+
+        projected_directed: set[tuple[str, str]] = set()
+        for source in observed:
+            for target in observed_descendants(source):
+                if source != target:
+                    projected_directed.add((source, target))
+
+        projected_bidirected = {
+            tuple(sorted((source, target)))
+            for source, target in bidirected_edges
+            if source in observed and target in observed and source != target
+        }
+        for common_cause in latent:
+            descendants = sorted(observed_descendants(common_cause))
+            for index, source in enumerate(descendants):
+                for target in descendants[index + 1 :]:
+                    projected_bidirected.add((source, target))
+
+        return (
+            [node for node in nodes if node in observed],
+            sorted(projected_directed),
+            sorted(projected_bidirected),
+        )
 
     def _compute_causal_metrics(
         self,
@@ -332,126 +521,55 @@ class DyadicEngine:
         *,
         exposure: str | None = None,
         outcome: str | None = None,
+        identification_wrapper=None,
+        profiles: dict | None = None,
     ) -> dict:
-        def compute_for(model_id: str):
-            exp = exposure or ""
-            out = outcome or ""
-            state_hash = state.hash_model(model_id)
-            cache_key = (model_id, exp, out, state_hash)
-            if cache_key in self._causal_cache:
-                return self._causal_cache[cache_key]
+        if exposure is None or outcome is None:
+            return {
+                "mas_ego": None,
+                "mas_alter": None,
+                "mas_compatible": None,
+                "identified_ego": None,
+                "identified_alter": None,
+                "identified_compatible": None,
+            }
 
-            dag_spec = self._dag_spec_for_model(
-                model_id, state, registry,
-                exposure=exposure, outcome=outcome,
+        if profiles is None:
+            profiles = self._build_causal_profiles(
+                state,
+                registry,
+                mode="full",
+                causal_wrapper=causal_wrapper,
+                identification_wrapper=identification_wrapper,
+                exposure=exposure,
+                outcome=outcome,
             )
-            try:
-                mas = causal_wrapper.compute_adjustment_sets(dag_spec)
-                identified = len(mas) > 0
-                result = (mas, identified, dag_spec)
-                self._causal_cache[cache_key] = result
-                return result
-            except CausalError as e:
-                message = str(e).lower()
-                if "cycle" in message or "cyclic" in message:
-                    logger.warning(
-                        "Model %s has cyclic DAG - causal metrics skipped", model_id
-                    )
-                    result = (None, None, None)
-                    self._causal_cache[cache_key] = result
-                    return result
-                raise
+        return CausalProfileBuilder.compare(profiles[model_a], profiles[model_b])
 
-        mas_a, full_model_a, dag_spec_a = compute_for(model_a)
-        mas_b, full_model_b, dag_spec_b = compute_for(model_b)
-
-        if mas_a is not None and mas_b is not None:
-            mas_result = causal_wrapper.compare_mas(mas_a, mas_b)
-            mas_compatible = mas_result["compatible"]
-        else:
-            mas_compatible = None
-
-        full_compatible = None
-        if full_model_a is not None and full_model_b is not None:
-            same_ident = bool(full_model_a) == bool(full_model_b)
-
-            active_a = self._active_nodes(dag_spec_a)
-            active_b = self._active_nodes(dag_spec_b)
-
-            if active_a == active_b:
-                active_compatible = True
-            else:
-                diff_a = active_a - active_b
-                diff_b = active_b - active_a
-
-                exp_a = dag_spec_a["exposure"]
-                out_a = dag_spec_a["outcome"]
-                exp_b = dag_spec_b["exposure"]
-                out_b = dag_spec_b["outcome"]
-
-                ignorable_a = (
-                    all(
-                        self._is_ignorable_difference(
-                            node, model_a, exp_a, out_a, registry, state,
-                        )
-                        for node in diff_a
-                    )
-                    if diff_a
-                    else True
-                )
-
-                ignorable_b = (
-                    all(
-                        self._is_ignorable_difference(
-                            node, model_b, exp_b, out_b, registry, state,
-                        )
-                        for node in diff_b
-                    )
-                    if diff_b
-                    else True
-                )
-
-                active_compatible = ignorable_a and ignorable_b
-
-            full_compatible = same_ident and active_compatible
-
-        return {
-            "mas_ego": mas_a,
-            "mas_alter": mas_b,
-            "mas_compatible": mas_compatible,
-            "full_model_ego": full_model_a,
-            "full_model_alter": full_model_b,
-            "full_compatible": full_compatible,
-        }
-
-    @staticmethod
-    def _active_nodes(dag_spec: dict) -> set[str]:
-        nodes: set[str] = set()
-        for src, tgt in dag_spec.get("edges", []):
-            nodes.add(src)
-            nodes.add(tgt)
-        return nodes
-
-    def _is_ignorable_difference(
+    def _build_causal_profiles(
         self,
-        node_name: str,
-        model_id: str,
-        exposure_name: str,
-        outcome_name: str,
-        registry: ComponentRegistry,
         state: StateTensor,
-    ) -> bool:
-        node_cid = self._node_component_id(node_name, registry)
-        exp_cid = self._node_component_id(exposure_name, registry)
-        out_cid = self._node_component_id(outcome_name, registry)
+        registry: ComponentRegistry,
+        *,
+        mode: str,
+        causal_wrapper,
+        identification_wrapper,
+        exposure: str | None,
+        outcome: str | None,
+    ) -> dict | None:
+        if mode != "full" or exposure is None or outcome is None:
+            return None
+        if causal_wrapper is None:
+            raise DyadicError("causal_wrapper is required for mode='full'")
 
-        node_t = state.get_timing(model_id, node_cid)
-        exp_t = state.get_timing(model_id, exp_cid)
-        out_t = state.get_timing(model_id, out_cid)
-
-        if node_t is None or exp_t is None or out_t is None:
-            return False
-        return exp_t < node_t < out_t
+        builder = CausalProfileBuilder(
+            state=state,
+            registry=registry,
+            dag_spec_builder=self._dag_spec_for_model,
+            causal_wrapper=causal_wrapper,
+            identification_wrapper=identification_wrapper,
+        )
+        return builder.build_all(state.model_ids, exposure, outcome)
 
     # ------------------------------------------------------------------
     # internal helpers
@@ -467,8 +585,7 @@ class DyadicEngine:
             df = registry.data
             node_comps = df[df["type"] == "node"]
             self._node_comp_cache[registry_id] = {
-                row["source"]: row["comp_id"]
-                for _, row in node_comps.iterrows()
+                row["source"]: row["comp_id"] for _, row in node_comps.iterrows()
             }
 
         cache = self._node_comp_cache[registry_id]
@@ -493,8 +610,10 @@ class DyadicEngine:
         invalid: set[str] = set()
         df = registry.data
 
-        for _, row in df[df["type"] == "edge"].iterrows():
+        for _, row in df[(df["type"] == "edge") & (df["direction"] == "->")].iterrows():
             cid = row["comp_id"]
+            if not edge_applicable(state, model_id, cid, registry):
+                continue
             if state.get_status(model_id, cid) != "causal":
                 continue
 
@@ -525,11 +644,15 @@ class DyadicEngine:
         graph: dict[str, list[str]] = {}
 
         for _, row in df[df["type"] == "node"].iterrows():
-            graph.setdefault(row["source"], [])
+            cid = row["comp_id"]
+            if self._node_is_present(state, model_id, cid):
+                graph.setdefault(row["source"], [])
 
         directed_edges = df[(df["type"] == "edge") & (df["direction"] == "->")]
         for _, row in directed_edges.iterrows():
             cid = row["comp_id"]
+            if not edge_applicable(state, model_id, cid, registry):
+                continue
             if state.get_status(model_id, cid) != "causal":
                 continue
             graph.setdefault(row["source"], []).append(row["target"])
@@ -579,9 +702,9 @@ class DyadicEngine:
             comp_type = comp_row["type"].values[0]
 
             if comp_type == "node":
-                a_status = state.get_status(model_a, cid)
-                b_status = state.get_status(model_b, cid)
-                if a_status == "causal" and b_status == "causal":
+                a_present = self._node_is_present(state, model_a, cid)
+                b_present = self._node_is_present(state, model_b, cid)
+                if a_present and b_present:
                     a_timing = state.get_timing(model_a, cid)
                     b_timing = state.get_timing(model_b, cid)
                     if (
@@ -592,28 +715,34 @@ class DyadicEngine:
                         return False
 
             elif comp_type == "edge":
-                a_status = state.get_status(model_a, cid)
-                b_status = state.get_status(model_b, cid)
-                if a_status == "causal" and b_status == "causal":
-                    source = comp_row["source"].values[0]
-                    target = comp_row["target"].values[0]
-                    source_cid = self._node_component_id(source, registry)
-                    target_cid = self._node_component_id(target, registry)
+                a_app = edge_applicable(state, model_a, cid, registry)
+                b_app = edge_applicable(state, model_b, cid, registry)
+                if a_app and b_app:
+                    a_status = state.get_status(model_a, cid)
+                    b_status = state.get_status(model_b, cid)
+                    if a_status == "causal" and b_status == "causal":
+                        direction = comp_row["direction"].values[0]
+                        if direction == "<->":
+                            continue
+                        source = comp_row["source"].values[0]
+                        target = comp_row["target"].values[0]
+                        source_cid = self._node_component_id(source, registry)
+                        target_cid = self._node_component_id(target, registry)
 
-                    a_source_t = state.get_timing(model_a, source_cid)
-                    a_target_t = state.get_timing(model_a, target_cid)
-                    b_source_t = state.get_timing(model_b, source_cid)
-                    b_target_t = state.get_timing(model_b, target_cid)
+                        a_source_t = state.get_timing(model_a, source_cid)
+                        a_target_t = state.get_timing(model_a, target_cid)
+                        b_source_t = state.get_timing(model_b, source_cid)
+                        b_target_t = state.get_timing(model_b, target_cid)
 
-                    if (
-                        a_source_t is not None
-                        and a_target_t is not None
-                        and a_source_t >= a_target_t
-                    ) or (
-                        b_source_t is not None
-                        and b_target_t is not None
-                        and b_source_t >= b_target_t
-                    ):
-                        return False
+                        if (
+                            a_source_t is not None
+                            and a_target_t is not None
+                            and a_source_t >= a_target_t
+                        ) or (
+                            b_source_t is not None
+                            and b_target_t is not None
+                            and b_source_t >= b_target_t
+                        ):
+                            return False
 
         return True

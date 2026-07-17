@@ -8,10 +8,14 @@
 #' @param states A list of state records or a data frame (from
 #'   \code{\link{expand_model_states}}) with columns \code{model_id},
 #'   \code{comp_id}, \code{status}, and optionally \code{timing}.
+#'   Under sparse semantics, node components use \code{"present"} status
+#'   and edge components use \code{"causal"}, \code{"unknown"}, or
+#'   \code{"non-causal"}.  Missing node records mean absent.
 #' @param mode Output mode: \code{"basic"} (structural only, default),
 #'   \code{"full"} (structural + causal metrics),
 #'   \code{"single-ref"} (dyads with the reference model as ego only),
-#'   \code{"two-stage"} (top-K detailed comparisons with heatmap summary).
+#'   \code{"two-stage"} (top-K detailed comparisons with heatmap summary),
+#'   \code{"symbolic"} (symbolic query class comparison).
 #' @param reference_id Required when \code{mode = "single-ref"}. The model ID
 #'   used as the ego model for pairwise comparisons.
 #' @param top_k Required when \code{mode = "two-stage"}. Number of top
@@ -34,37 +38,47 @@
 #'   \item{dyad_id}{Deterministic pair ID (\code{"M0001__M0002"})}
 #'   \item{ego_id}{ID of the ego model}
 #'   \item{alter_id}{ID of the alter model}
-#'   \item{similarity_rate}{Jaccard-like similarity score (rounded to 6 decimals)}
+#'   \item{similarity_rate}{Similarity based on shared resolved claims over
+#'     union of resolved claims. Node presence differences count once;
+#'     inapplicable edges are ignored.}
 #'   \item{timing_compatible}{Whether timing is compatible}
 #'   \item{existence_conflict}{Whether there are existence conflicts}
-#'   \item{repair_cost}{Number of differing components}
+#'   \item{repair_cost}{Number of structural differences}
 #'
 #'   Additional columns for \code{"full"}:
 #'   \item{mas_ego}{Minimal adjustment sets for the ego model (list-column)}
 #'   \item{mas_alter}{Minimal adjustment sets for the alter model (list-column)}
 #'   \item{mas_compatible}{Whether adjustment sets are compatible}
-#'   \item{full_model_ego}{Whether the ego model is identified}
-#'   \item{full_model_alter}{Whether the alter model is identified}
-#'   \item{full_compatible}{Whether models agree on identifiability status
-#'     and active-node differences are ignorable (all differing nodes have
-#'     timing strictly between exposure and outcome)}
+#'   \item{identified_ego}{Whether the ego model's exposure-outcome effect is
+#'     identified}
+#'   \item{identified_alter}{Whether the alter model's exposure-outcome effect
+#'     is identified}
+#'   \item{identified_compatible}{Whether the exposure-outcome effect is
+#'     identified in both models}
 #'
 #'   For \code{"two-stage"}: a list with components
 #'   \code{heatmap_summary} and \code{detailed_comparisons} (data frame).
 #'
 #'   The returned object includes a \code{theory_context} attribute
 #'   preserving registry, state, model IDs, and exposure/outcome metadata.
-#'   \code{\link{compute_delta_u}} with \code{scoring = "causal"} or
-#'   \code{"hybrid"} can recompute full dyads from this context when needed.
-#'   \code{mode = "full"} dyads additionally preserve \code{mas_compatible}
-#'   and \code{full_compatible} columns, which provide baseline causal
-#'   metrics for Delta-U.
+#'   \code{\link{compute_delta_u}} can recompute causal dyads from this context
+#'   when \code{compatibility_metric} is \code{"mas_compatible"} or
+#'   \code{"identified_compatible"}. \code{mode = "full"} dyads preserve
+#'   both causal compatibility columns for use as Delta-U baselines.
 #'
 #' @details Self-dyads are not computed.  Both \code{ego -> alter} and
 #'   \code{alter -> ego} are included as distinct rows.
 #'   For \code{M} models, the result has \code{M * (M - 1)} rows.
 #'   \code{mas_ego} and \code{mas_alter} are represented as list-columns
-#'   using \code{I(list(...))}.
+#'   using \code{I(list(...))}. An empty outer list means no adjustment sets
+#'   are available, while a list containing \code{character(0)} represents a
+#'   valid empty adjustment set.
+#'
+#'   Under sparse node semantics, a node-presence difference between two
+#'   models counts as one structural difference.  Edges incident to absent
+#'   nodes are inapplicable and are not compared.  Only edges applicable in
+#'   both models contribute to edge-level similarity.  Shared \code{"non-causal"}
+#'   resolutions reward agreement.
 #'
 #'   When \code{exposure} and \code{outcome} are omitted, the function
 #'   attempts to resolve them from the \code{states} data frame attributes
@@ -102,7 +116,7 @@
 #' @export
 build_dyad_matrix <- function(registry,
                                states,
-                               mode = c("basic", "full", "single-ref", "two-stage"),
+                               mode = c("basic", "full", "single-ref", "two-stage", "symbolic"),
                                reference_id = NULL,
                                top_k = NULL,
                                exposure = NULL,
@@ -149,6 +163,9 @@ build_dyad_matrix <- function(registry,
     )
     if (is.na(row$target)) entry$target <- NULL else entry$target <- row$target
     if (is.na(row$direction)) entry$direction <- NULL else entry$direction <- row$direction
+    if ("fixed_status" %in% names(row) && !is.null(row$fixed_status) && !is.na(row$fixed_status)) {
+      entry$fixed_status <- row$fixed_status
+    }
     entry
   })
 
@@ -208,7 +225,7 @@ build_dyad_matrix <- function(registry,
         ") differ from metadata attributes (", meta_exposure, "/", meta_outcome,
         "). Using explicit values.", call. = FALSE
       )
-    } else if (!is.null(meta_exposure) || !is.null(meta_outcome)) {
+    } else if (xor(is.null(meta_exposure), is.null(meta_outcome))) {
       warning("Input exposure/outcome metadata is incomplete. Using explicit values.",
               call. = FALSE)
     }
@@ -232,29 +249,45 @@ build_dyad_matrix <- function(registry,
   model_ids <- unique(vapply(state_list, function(x) x$model_id, character(1), USE.NAMES = FALSE))
   model_ids <- sort(model_ids)
 
-  payload <- list(
-    registry_data = registry_data,
-    state_data = state_list,
-    model_ids = model_ids,
-    mode = mode
-  )
+  if (identical(mode, "symbolic")) {
+    sym_payload <- list(
+      registry_data = registry_data,
+      exposure = exposure,
+      outcome = outcome,
+      mode = "sampled",
+      n_samples = 500L,
+      signature_policy = "paper_v1"
+    )
+    req <- httr2::request(url) |>
+      httr2::req_url_path("api/v1/symbolic/query-classes") |>
+      httr2::req_method("POST") |>
+      httr2::req_body_json(sym_payload) |>
+      httr2::req_error(is_error = function(resp) FALSE)
+  } else {
+    payload <- list(
+      registry_data = registry_data,
+      state_data = state_list,
+      model_ids = I(model_ids),
+      mode = mode
+    )
 
-  if (!is.null(reference_id)) {
-    payload$reference_id <- reference_id
-  }
-  if (!is.null(top_k)) {
-    payload$top_k <- as.integer(top_k)
-  }
-  if (!is.null(exposure) && !is.null(outcome)) {
-    payload$exposure <- exposure
-    payload$outcome <- outcome
-  }
+    if (!is.null(reference_id)) {
+      payload$reference_id <- reference_id
+    }
+    if (!is.null(top_k)) {
+      payload$top_k <- as.integer(top_k)
+    }
+    if (!is.null(exposure) && !is.null(outcome)) {
+      payload$exposure <- exposure
+      payload$outcome <- outcome
+    }
 
-  req <- httr2::request(url) |>
-    httr2::req_url_path("api/v1/dyad-matrix") |>
-    httr2::req_method("POST") |>
-    httr2::req_body_json(payload) |>
-    httr2::req_error(is_error = function(resp) FALSE)
+    req <- httr2::request(url) |>
+      httr2::req_url_path("api/v1/dyad-matrix") |>
+      httr2::req_method("POST") |>
+      httr2::req_body_json(payload) |>
+      httr2::req_error(is_error = function(resp) FALSE)
+  }
 
   resp <- tryCatch(
     httr2::req_perform(req),
@@ -282,6 +315,20 @@ build_dyad_matrix <- function(registry,
 
   if (!identical(body$status, "success") || is.null(body$data)) {
     stop("Invalid backend response: missing data.", call. = FALSE)
+  }
+
+  if (identical(mode, "symbolic")) {
+    result <- body$data
+    class(result) <- c("theory_symbolic_classes", "list")
+    attr(result, "theory_context") <- list(
+      registry_data = registry_data,
+      state_data = state_list,
+      model_ids = model_ids,
+      mode = mode,
+      exposure = exposure,
+      outcome = outcome
+    )
+    return(result)
   }
 
   if (identical(mode, "two-stage")) {
@@ -357,7 +404,7 @@ build_dyad_matrix <- function(registry,
 
   normalize_mas <- function(x) {
     if (is.null(x)) {
-      return(list())
+      return(NULL)
     }
     lapply(x, function(set) {
       if (is.null(set) || length(set) == 0) {
@@ -382,14 +429,14 @@ build_dyad_matrix <- function(registry,
     mas_compatible = vapply(dyads, function(d) {
       if (is.null(d$mas_compatible)) NA else d$mas_compatible
     }, logical(1), USE.NAMES = FALSE),
-    full_model_ego = vapply(dyads, function(d) {
-      if (is.null(d$full_model_ego)) NA else d$full_model_ego
+    identified_ego = vapply(dyads, function(d) {
+      if (is.null(d$identified_ego)) NA else d$identified_ego
     }, logical(1), USE.NAMES = FALSE),
-    full_model_alter = vapply(dyads, function(d) {
-      if (is.null(d$full_model_alter)) NA else d$full_model_alter
+    identified_alter = vapply(dyads, function(d) {
+      if (is.null(d$identified_alter)) NA else d$identified_alter
     }, logical(1), USE.NAMES = FALSE),
-    full_compatible = vapply(dyads, function(d) {
-      if (is.null(d$full_compatible)) NA else d$full_compatible
+    identified_compatible = vapply(dyads, function(d) {
+      if (is.null(d$identified_compatible)) NA else d$identified_compatible
     }, logical(1), USE.NAMES = FALSE),
     stringsAsFactors = FALSE
   )

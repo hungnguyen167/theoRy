@@ -11,9 +11,16 @@ from sklearn.cluster import DBSCAN
 
 logger = logging.getLogger(__name__)
 
+VALID_SCORE_FIELDS = (
+    "similarity_rate",
+    "mas_compatible",
+    "identified_compatible",
+)
+
 
 class ClusteringError(Exception):
     """Raised when clustering operations fail."""
+
     pass
 
 
@@ -53,8 +60,9 @@ class ClusteringEngine:
             raise ClusteringError("umap_n_neighbors must be at least 2")
         if not 0.0 <= umap_min_dist <= 1.0:
             raise ClusteringError("umap_min_dist must be between 0 and 1")
-        if not score_field:
-            raise ClusteringError("score_field must be a non-empty string")
+        if score_field not in VALID_SCORE_FIELDS:
+            allowed = ", ".join(VALID_SCORE_FIELDS)
+            raise ClusteringError(f"score_field must be one of: {allowed}")
 
         self._umap_components = umap_components
         self._umap_n_neighbors = umap_n_neighbors
@@ -85,50 +93,95 @@ class ClusteringEngine:
             shape (N, N-1).
         """
         if model_ids is None:
-            model_ids = sorted({
-                d["ego_id"] for d in dyads
-            } | {
-                d["alter_id"] for d in dyads
-            })
+            model_ids = sorted(
+                {d["ego_id"] for d in dyads} | {d["alter_id"] for d in dyads}
+            )
         else:
-            model_ids = sorted(model_ids)
+            model_ids = sorted(set(model_ids))
 
         n = len(model_ids)
         if n < 2:
             raise ClusteringError("At least 2 models required for clustering")
 
+        score_lookup = self._validated_score_lookup(dyads, model_ids)
         id_to_idx = {mid: i for i, mid in enumerate(model_ids)}
         profile_matrix = np.zeros((n, n - 1), dtype=np.float64)
 
-        for dyad in dyads:
-            ego = dyad["ego_id"]
-            alter = dyad["alter_id"]
-
-            if ego not in id_to_idx or alter not in id_to_idx:
-                continue
-
+        for ego in model_ids:
             ego_idx = id_to_idx[ego]
-            alter_idx = id_to_idx[alter]
-
-            col = alter_idx if alter_idx < ego_idx else alter_idx - 1
-            profile_matrix[ego_idx, col] = self._dyad_score(dyad)
+            for alter in model_ids:
+                if ego == alter:
+                    continue
+                alter_idx = id_to_idx[alter]
+                col = alter_idx if alter_idx < ego_idx else alter_idx - 1
+                profile_matrix[ego_idx, col] = score_lookup[(ego, alter)]
 
         return profile_matrix, model_ids
 
     def _dyad_score(self, dyad: dict[str, Any]) -> float:
         """Extract a numeric compatibility score from a dyad record."""
-        value = dyad.get(self._score_field, dyad.get("similarity_rate", 0.0))
+        score = self._parse_dyad_score(dyad)
+        if score is None:
+            raise ClusteringError(
+                f"Selected score field '{self._score_field}' is unavailable for 1 dyad"
+            )
+        return score
+
+    def _parse_dyad_score(self, dyad: dict[str, Any]) -> float | None:
+        """Return the selected score as a float, or None when unavailable."""
+        if self._score_field not in dyad:
+            return None
+        value = dyad[self._score_field]
         if value is None:
-            return 0.0
+            return None
         if isinstance(value, bool):
             return 1.0 if value else 0.0
         try:
             score = float(value)
         except (TypeError, ValueError):
-            return 0.0
-        if np.isnan(score):
-            return 0.0
+            return None
+        if not np.isfinite(score):
+            return None
         return score
+
+    def _validated_score_lookup(
+        self,
+        dyads: list[dict[str, Any]],
+        model_ids: list[str],
+    ) -> dict[tuple[str, str], float]:
+        """Validate selected scores and completeness for all directed pairs."""
+        model_id_set = set(model_ids)
+        lookup = {}
+        unavailable_count = 0
+
+        for dyad in dyads:
+            ego = dyad["ego_id"]
+            alter = dyad["alter_id"]
+            if ego == alter or ego not in model_id_set or alter not in model_id_set:
+                continue
+            score = self._parse_dyad_score(dyad)
+            if score is None:
+                unavailable_count += 1
+                continue
+            lookup[(ego, alter)] = score
+
+        if unavailable_count:
+            raise ClusteringError(
+                f"Selected score field '{self._score_field}' is unavailable "
+                f"for {unavailable_count} dyad(s)"
+            )
+
+        expected_pairs = {
+            (ego, alter) for ego in model_ids for alter in model_ids if ego != alter
+        }
+        missing_count = len(expected_pairs - lookup.keys())
+        if missing_count:
+            raise ClusteringError(
+                "Complete directed dyads are required; "
+                f"missing {missing_count} directed pair(s)"
+            )
+
+        return lookup
 
     def _build_aligned_profiles(
         self,
@@ -138,15 +191,12 @@ class ClusteringEngine:
         """Build N x N model-aligned profiles for distance-based clustering."""
         n = len(model_ids)
         id_to_idx = {mid: i for i, mid in enumerate(model_ids)}
+        score_lookup = self._validated_score_lookup(dyads, model_ids)
         profiles = np.zeros((n, n), dtype=np.float64)
         np.fill_diagonal(profiles, 1.0)
 
-        for dyad in dyads:
-            ego = dyad["ego_id"]
-            alter = dyad["alter_id"]
-            if ego not in id_to_idx or alter not in id_to_idx:
-                continue
-            profiles[id_to_idx[ego], id_to_idx[alter]] = self._dyad_score(dyad)
+        for (ego, alter), score in score_lookup.items():
+            profiles[id_to_idx[ego], id_to_idx[alter]] = score
 
         return profiles
 
@@ -162,9 +212,7 @@ class ClusteringEngine:
         n_samples = len(profiles)
 
         if n_samples <= self._umap_components + 1:
-            padded = np.zeros(
-                (n_samples, self._umap_components), dtype=np.float64
-            )
+            padded = np.zeros((n_samples, self._umap_components), dtype=np.float64)
             cols = min(profiles.shape[1], self._umap_components)
             padded[:, :cols] = profiles[:, :cols]
             return padded
@@ -220,10 +268,7 @@ class ClusteringEngine:
         if not unique_labels:
             return []
 
-        dyad_lookup = {}
-        for d in dyads:
-            key = (d["ego_id"], d["alter_id"])
-            dyad_lookup[key] = self._dyad_score(d)
+        dyad_lookup = self._validated_score_lookup(dyads, model_ids)
 
         summaries = []
         for lbl in unique_labels:
@@ -239,23 +284,61 @@ class ClusteringEngine:
                 for m2 in cluster_models:
                     if m1 == m2:
                         continue
-                    score = dyad_lookup.get((m1, m2), 0.0)
-                    scores.append(score)
+                    scores.append(dyad_lookup[(m1, m2)])
 
-            internal_compat = (
-                sum(scores) / len(scores) if scores else 0.0
-            )
+            internal_compat = sum(scores) / len(scores) if scores else 0.0
 
             cluster_id = f"Cluster_{lbl + 1:02d}"
 
-            summaries.append({
-                "cluster_id": cluster_id,
-                "model_count": len(cluster_models),
-                "internal_compatibility": round(internal_compat, 6),
-                "centroid": [round(c, 6) for c in centroid],
-            })
+            summaries.append(
+                {
+                    "cluster_id": cluster_id,
+                    "model_count": len(cluster_models),
+                    "internal_compatibility": round(internal_compat, 6),
+                    "centroid": [round(c, 6) for c in centroid],
+                }
+            )
 
         return summaries
+
+    def _profile_diagnostics(self, profiles: np.ndarray) -> dict[str, Any]:
+        """Summarize the selected metric before dimensionality reduction."""
+        unique_values = np.unique(profiles)
+        return {
+            "score_field": self._score_field,
+            "metric_unique_values": [float(value) for value in unique_values],
+            "all_pairs_compatible": bool(np.all(profiles == 1.0)),
+            "all_pairs_incompatible": bool(np.all(profiles == 0.0)),
+            "profile_variance": float(np.var(profiles)),
+            "degenerate_metric": len(unique_values) == 1,
+        }
+
+    def _no_cluster_result(
+        self,
+        model_ids: list[str],
+        embedding: np.ndarray,
+        diagnostics: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Build a no-cluster response with a well-formed embedding."""
+        embedding_data = {
+            "model_ids": model_ids,
+            "x": embedding[:, 0].tolist(),
+            "y": embedding[:, 1].tolist(),
+        }
+        if self._umap_components >= 3:
+            embedding_data["z"] = embedding[:, 2].tolist()
+
+        return {
+            "cluster_assignments": [
+                {"model_id": mid, "cluster_id": None} for mid in model_ids
+            ],
+            "cluster_summaries": [],
+            "embedding_2d": embedding_data,
+            "model_count": len(model_ids),
+            "cluster_count": 0,
+            "noise_count": len(model_ids),
+            **diagnostics,
+        }
 
     def detect_clusters(
         self,
@@ -274,30 +357,17 @@ class ClusteringEngine:
         """
         profiles, model_ids = self.build_profiles(dyads, model_ids)
         n = len(model_ids)
+        diagnostics = self._profile_diagnostics(profiles)
+
+        if diagnostics["degenerate_metric"]:
+            logger.info("Selected metric has no variance - no clusters detected")
+            embedding = np.zeros((n, self._umap_components), dtype=np.float64)
+            return self._no_cluster_result(model_ids, embedding, diagnostics)
 
         if n < self._min_samples:
-            logger.warning(
-                "Model count below min_samples - no clusters detected"
-            )
-            assignments = [
-                {"model_id": mid, "cluster_id": None} for mid in model_ids
-            ]
+            logger.warning("Model count below min_samples - no clusters detected")
             embedding = self._reduce_umap(profiles)
-            embedding_2d = {
-                "model_ids": model_ids,
-                "x": embedding[:, 0].tolist(),
-                "y": embedding[:, 1].tolist(),
-            }
-            if self._umap_components >= 3:
-                embedding_2d["z"] = embedding[:, 2].tolist()
-            return {
-                "cluster_assignments": assignments,
-                "cluster_summaries": [],
-                "embedding_2d": embedding_2d,
-                "model_count": n,
-                "cluster_count": 0,
-                "noise_count": n,
-            }
+            return self._no_cluster_result(model_ids, embedding, diagnostics)
 
         embedding_profiles = self._build_aligned_profiles(dyads, model_ids)
         embedding = self._reduce_umap(embedding_profiles)
@@ -318,9 +388,7 @@ class ClusteringEngine:
                 cluster_id = f"Cluster_{lbl + 1:02d}"
                 assignments.append({"model_id": mid, "cluster_id": cluster_id})
 
-        summaries = self._compute_cluster_summaries(
-            labels, embedding, model_ids, dyads
-        )
+        summaries = self._compute_cluster_summaries(labels, embedding, model_ids, dyads)
 
         noise_count = sum(1 for lbl in labels if lbl == -1)
         cluster_count = len(summaries)
@@ -332,4 +400,5 @@ class ClusteringEngine:
             "model_count": n,
             "cluster_count": cluster_count,
             "noise_count": noise_count,
+            **diagnostics,
         }

@@ -21,6 +21,15 @@ def _normalize_nulls(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+def _records_with_validated_core(records: list[dict], validated: list[ComponentSchema]):
+    rows = []
+    for record, core in zip(records, validated, strict=True):
+        row = dict(record)
+        row.update(core.model_dump())
+        rows.append(row)
+    return rows
+
+
 class RegistryLoader:
     """Load and validate component registries."""
 
@@ -40,7 +49,7 @@ class RegistryLoader:
             validated = [ComponentSchema(**r) for r in records]
         except ValidationError as e:
             raise RegistryError(f"Registry validation failed: {e}") from e
-        data = pd.DataFrame([v.model_dump() for v in validated])
+        data = pd.DataFrame(_records_with_validated_core(records, validated))
         data = _normalize_nulls(data)
         return ComponentRegistry(data)
 
@@ -52,6 +61,6 @@ class RegistryLoader:
             validated = [ComponentSchema(**r) for r in records]
         except ValidationError as e:
             raise RegistryError(f"Registry validation failed: {e}") from e
-        data = pd.DataFrame([v.model_dump() for v in validated])
+        data = pd.DataFrame(_records_with_validated_core(records, validated))
         data = _normalize_nulls(data)
         return ComponentRegistry(data)

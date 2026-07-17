@@ -19,13 +19,15 @@ build_component_registry(
 }
 \arguments{
 \item{nodes}{A character vector of variable names, or a data frame with
-columns \code{name}, \code{timing} (integer), and optionally \code{description}.}
+columns \code{name}, \code{timing} (integer), and optionally
+\code{description}.}
 
 \item{timing}{Integer vector of chronological positions, parallel to
 \code{nodes}.  Ignored when \code{nodes} is a data frame.}
 
 \item{descriptions}{Optional character vector of human-readable
-descriptions, parallel to \code{nodes}.}
+descriptions, parallel to \code{nodes}.  Ignored when \code{nodes} is
+a data frame.}
 
 \item{respect_timing}{When \code{TRUE} (default), only generate directed
 edges where \code{timing(source) < timing(target)}.}
@@ -37,27 +39,52 @@ bidirectional edge components for unordered node pairs.}
 columns \code{source}, \code{target}, \code{direction}, and
 \code{rule} (\code{"allow"}, \code{"forbid"}, \code{"require"}).}
 
-\item{exposure}{Optional exposure variable name to attach as registry metadata.
-Both or neither of \code{exposure} and \code{outcome} must be provided.}
+\item{exposure}{Optional name of the exposure (cause) variable. Must be
+a node name in \code{nodes} if provided.}
 
-\item{outcome}{Optional outcome variable name to attach as registry metadata.
-Both or neither of \code{exposure} and \code{outcome} must be provided.}
+\item{outcome}{Optional name of the outcome variable. Must be a node name
+in \code{nodes} if provided. Both or neither of \code{exposure} and
+\code{outcome} must be given.}
 
-\item{url}{Base URL of the theoRy Python backend.}
+\item{url}{Base URL of the theoRy Python backend.  Defaults to
+\code{getOption("theoRy.engine_url", "http://localhost:8000")}.}
 
 \item{output_path}{If supplied, write the generated registry to this
-Parquet file path.}
+Parquet file path in addition to returning it as a data frame.}
 }
 \value{
 A data frame with columns: \code{comp_id}, \code{type},
-\code{source}, \code{target}, \code{direction}, \code{description}. Optional
-\code{exposure} and \code{outcome} attributes are attached when provided.
+  \code{source}, \code{target}, \code{direction}, \code{description}.
+  Additionally, \code{fixed_status} column (\code{"causal"} or \code{NA})
+  marks components whose status is immutable across all models; currently
+  only set when \code{exposure} and \code{outcome} are provided with no
+  timing, in which case \code{exposure -> outcome} is fixed as causal.
+  The returned data frame also has optional \code{exposure} and
+  \code{outcome} attributes that are forwarded to downstream functions.
 }
 \description{
 Provides a compact list of variable names, optional timing values, and
 optional descriptions.  The Python backend generates the full component
 registry containing node components and all admissible directed (and
 optionally bidirectional) edge components under temporal constraints.
+}
+\details{
+The builder assigns deterministic \code{C{NNNN}} component IDs.
+Nodes are assigned first (sorted by name), followed by directed edges
+(sorted by source, target), then bidirectional edges if requested.
+
+When \code{exposure} and \code{outcome} are provided, they are attached
+as attributes on the returned data frame. These are used by
+\code{\link{build_dyad_matrix}} when its own \code{exposure}/\code{outcome}
+arguments are omitted.
+
+When all node timings are missing and both \code{exposure} and
+\code{outcome} are supplied, the registry enforces an implicit
+exposure-before-outcome ordering: the \code{exposure -> outcome} directed
+edge is created and marked with \code{fixed_status = "causal"} (immutable
+in every model), while the reverse \code{outcome -> exposure} and
+bidirectional \code{exposure <-> outcome} candidates are excluded. No
+synthetic timestamps are assigned to any node.
 }
 \examples{
 \dontrun{
@@ -69,4 +96,5 @@ reg <- build_component_registry(
 )
 head(reg)
 }
+
 }

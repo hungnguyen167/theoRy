@@ -6,68 +6,119 @@
 \usage{
 expand_model_states(
   registry,
-  mode = c("seeded", "exhaustive", "sampled"),
+  mode = c("sampled", "exhaustive"),
   seed_claims = NULL,
   node_timing = NULL,
   max_models = 10000L,
   n_models = NULL,
   seed = NULL,
-   edge_statuses = c("causal", "unknown", "non-causal"),
+  edge_statuses = c("causal", "unknown", "non-causal"),
+  node_policy = c("all-present", "vary"),
   exposure = NULL,
   outcome = NULL,
   url = getOption("theoRy.engine_url", "http://localhost:8000")
 )
 }
 \arguments{
-\item{registry}{A registry data frame or path to a Parquet file.}
+\item{registry}{A registry data frame (as returned by
+\code{build_component_registry()}), or a path to a Parquet file.}
 
-\item{mode}{Expansion mode: \code{"seeded"}, \code{"exhaustive"}, or \code{"sampled"}.}
+\item{mode}{Expansion mode: \code{"sampled"} (default, random sample)
+or \code{"exhaustive"} (all valid edge-status combinations).}
 
-\item{seed_claims}{A data frame or list of state claims with
-\code{model_id}, \code{comp_id}, \code{status}, and optionally
-\code{timing}. Required for \code{mode = "seeded"}.}
+\item{seed_claims}{Optional data frame or list of state claims with
+  \code{model_id}, \code{comp_id}, \code{status}, and optionally
+  \code{timing}.  When provided, the engine searches for each seeded
+  model in the generated multiverse.  Found models are promoted to the
+  top and flagged with \code{seeded = TRUE}.  Models not found in the
+  multiverse are appended at the top with \code{seeded = TRUE}.
+  Non-seeded models are renumbered \code{M0001}, \code{M0002}, \ldots
+  after the seeded block.
 
-\item{node_timing}{Optional named integer vector for temporal validation.}
+  Seed claims use sparse semantics: node statuses may be \code{"present"}
+  or \code{"absent"}; edge statuses may be \code{"causal"}, \code{"unknown"},
+  or \code{"non-causal"}.  Edge claims infer endpoint node presence.
+  Omitted nodes default to absent; omitted edges among present nodes
+  default to unknown.}
 
-\item{max_models}{Safety cap for exhaustive mode (default 10,000).}
+\item{node_timing}{Optional named integer vector mapping node names to
+chronological positions, e.g. \code{c(SolarRad = 1, Temp = 2)}.
+Used for temporal validation in exhaustive / sampled modes.}
+
+\item{max_models}{Safety cap for exhaustive mode (default 10,000).
+Expansion fails if the projected model count exceeds this.}
 
 \item{n_models}{Number of models to sample in \code{"sampled"} mode.}
 
 \item{seed}{Random seed for reproducible sampling.}
 
 \item{edge_statuses}{Character vector of edge statuses to enumerate
-or sample over in exhaustive and sampled modes.
-Defaults to \code{c("causal", "unknown", "non-causal")}.
-Pass \code{c("causal", "unknown")} for binary (old) behavior.}
+or sample over in exhaustive and sampled modes.  Defaults to
+\code{c("causal", "unknown", "non-causal")}.  Pass
+\code{c("causal", "unknown")} for binary (old) behavior.}
 
-\item{exposure}{Optional exposure variable name to attach as state metadata.
-If omitted, registry exposure metadata is inherited when available.}
+\item{node_policy}{Controls node-subset generation:
+\code{"all-present"} (default, backward-compatible) includes all
+registry nodes in every model; \code{"vary"} enumerates over
+non-empty node subsets, producing models with variable node scope.}
 
-\item{outcome}{Optional outcome variable name to attach as state metadata.
-If omitted, registry outcome metadata is inherited when available.}
+\item{exposure}{Optional name of the exposure variable. If omitted,
+registry exposure metadata is inherited when available.}
 
-\item{url}{Base URL of the theoRy Python backend.}
+\item{outcome}{Optional name of the outcome variable. If omitted,
+registry outcome metadata is inherited when available. Both or neither
+of \code{exposure} and \code{outcome} must be given. When supplied with
+\code{node_policy = "vary"}, generated models must include both nodes.}
+
+\item{url}{Base URL of the theoRy Python backend.
+Defaults to \code{getOption("theoRy.engine_url", "http://localhost:8000")}.}
 }
 \value{
 A data frame with columns: \code{model_id}, \code{comp_id},
-\code{status}, \code{timing}. Optional \code{exposure} and \code{outcome}
-attributes are attached when provided or inherited from the registry.
+  \code{status}, \code{timing}, \code{seeded} (logical).  Under sparse
+  semantics, node components use \code{"present"} status, and edge
+  components use \code{"causal"}, \code{"unknown"}, or \code{"non-causal"}.
+  Only present nodes and applicable edges are emitted.  The returned
+  data frame also carries a \code{seeded_model_ids} attribute (character
+  vector of model IDs flagged as seeded, empty when no seed claims are
+  provided) and optional \code{exposure}/\code{outcome} attributes
+  forwarded to downstream functions like \code{\link{build_dyad_matrix}}.
 }
 \description{
-Takes a component registry and generates model-state records using
-seeded, exhaustive, or sampled expansion.
+Takes a component registry (from \code{\link{build_component_registry}}
+or a Parquet file) and generates model-state records using exhaustive
+or sampled expansion.  Optional \code{seed_claims} inject user-specified
+theories into the multiverse.
 }
 \details{
 \describe{
-  \item{seeded}{Fill user-provided model claims; default unspecified
-     components to \code{"unknown"}.}
-   \item{exhaustive}{Enumerate all valid combinations of edge statuses
-     (by default \code{"causal"}, \code{"unknown"}, \code{"non-causal"})
-     under temporal and DAG constraints.
-     Only \code{"causal"} edges are subject to temporal/DAG validation.}
   \item{sampled}{Generate a random sample of valid model states from
-    the same edge-status space.}
+    the edge-status space.  \code{n_models} controls the sample size.}
+  \item{exhaustive}{Enumerate all valid combinations of edge statuses
+    (by default \code{"causal"}, \code{"unknown"}, \code{"non-causal"})
+    under temporal and DAG constraints.
+    Only \code{"causal"} edges are subject to temporal/DAG validation.}
 }
+
+Node components use presence semantics (\code{"present"} / absent) rather
+than causal-status semantics.  An edge is applicable only when both
+endpoint nodes are present in the model.  Inapplicable edges are not
+emitted as state records.
+
+Registry components with \code{fixed_status = "causal"} are emitted as
+causal in every generated model and in every normalized seeded model.
+Fixed edges are not enumerated as mutable candidates; their status is
+immutable.  A seed that explicitly sets a fixed edge to \code{unknown}
+or \code{non-causal} is rejected.  Omitted fixed edges in a seed are
+normalized to \code{causal}.
+
+When \code{seed_claims} is provided alongside either mode, the engine
+first generates the multiverse, then searches for each seed model by
+comparing sparse semantic vectors (present node set + applicable edge
+statuses).  Matched models are renamed to the seed's \code{model_id}
+and flagged \code{seeded = TRUE}.  Unmatched seed models are appended
+at the top.  All non-seeded models are renumbered sequentially after
+the seeded block.
 }
 \examples{
 \dontrun{
@@ -83,7 +134,20 @@ head(states)
 # Binary (old behavior): causal, unknown only
 states2 <- expand_model_states(reg, mode = "exhaustive",
   node_timing = c(X = 1, Y = 2, Z = 3),
-   edge_statuses = c("causal", "unknown"))
+  edge_statuses = c("causal", "unknown"))
 head(states2)
+
+# Sampled with a user theory injected as M0001
+# Edge claims infer that X, Y are present
+my_claims <- data.frame(
+  model_id = "M0001",
+  comp_id  = reg$comp_id[reg$type == "edge"],
+  status   = "causal"
+)
+states3 <- expand_model_states(reg, mode = "sampled",
+  n_models = 200, seed_claims = my_claims)
+attr(states3, "seeded_model_ids")  # "M0001"
+head(subset(states3, seeded))
 }
+
 }

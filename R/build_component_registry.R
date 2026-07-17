@@ -32,6 +32,10 @@
 #'
 #' @return A data frame with columns: \code{comp_id}, \code{type},
 #'   \code{source}, \code{target}, \code{direction}, \code{description}.
+#'   Additionally, \code{fixed_status} column (\code{"causal"} or \code{NA})
+#'   marks components whose status is immutable across all models; currently
+#'   only set when \code{exposure} and \code{outcome} are provided with no
+#'   timing, in which case \code{exposure -> outcome} is fixed as causal.
 #'   The returned data frame also has optional \code{exposure} and
 #'   \code{outcome} attributes that are forwarded to downstream functions.
 #'
@@ -44,6 +48,14 @@
 #' as attributes on the returned data frame. These are used by
 #' \code{\link{build_dyad_matrix}} when its own \code{exposure}/\code{outcome}
 #' arguments are omitted.
+#'
+#' When all node timings are missing and both \code{exposure} and
+#' \code{outcome} are supplied, the registry enforces an implicit
+#' exposure-before-outcome ordering: the \code{exposure -> outcome} directed
+#' edge is created and marked with \code{fixed_status = "causal"} (immutable
+#' in every model), while the reverse \code{outcome -> exposure} and
+#' bidirectional \code{exposure <-> outcome} candidates are excluded. No
+#' synthetic timestamps are assigned to any node.
 #'
 #' @examples
 #' \dontrun{
@@ -119,6 +131,11 @@ build_component_registry <- function(nodes,
     include_bidirectional = include_bidirectional
   )
 
+  if (!is.null(exposure) && !is.null(outcome)) {
+    payload$exposure <- exposure
+    payload$outcome <- outcome
+  }
+
   if (!is.null(constraints)) {
     if (is.data.frame(constraints)) {
       constraints <- lapply(seq_len(nrow(constraints)), function(i) {
@@ -162,7 +179,8 @@ build_component_registry <- function(nodes,
 
   df <- records_to_df(body$data$registry_data,
                        col_types = c(target = "character",
-                                     direction = "character"))
+                                     direction = "character",
+                                     fixed_status = "character"))
 
   # attach node timing metadata so downstream functions can use it
   if (!is.null(tmg)) {

@@ -3,13 +3,21 @@
 from __future__ import annotations
 
 import logging
+import math
 from typing import Any
 
 logger = logging.getLogger(__name__)
 
+VALID_SCORE_FIELDS = (
+    "similarity_rate",
+    "mas_compatible",
+    "identified_compatible",
+)
+
 
 class GhostError(Exception):
     """Raised when ghost detection operations fail."""
+
     pass
 
 
@@ -35,8 +43,9 @@ class GhostDetector:
             raise GhostError("internal_threshold must be between 0 and 1")
         if not 0.0 <= prior_threshold <= 1.0:
             raise GhostError("prior_threshold must be between 0 and 1")
-        if not score_field:
-            raise GhostError("score_field must be a non-empty string")
+        if score_field not in VALID_SCORE_FIELDS:
+            allowed = ", ".join(VALID_SCORE_FIELDS)
+            raise GhostError(f"score_field must be one of: {allowed}")
 
         self._internal_threshold = internal_threshold
         self._prior_threshold = prior_threshold
@@ -63,14 +72,9 @@ class GhostDetector:
             List of contrast result dicts with labels and metrics.
         """
         if prior_model_id not in model_ids:
-            raise GhostError(
-                f"Prior model {prior_model_id!r} not found in model IDs"
-            )
+            raise GhostError(f"Prior model {prior_model_id!r} not found in model IDs")
 
-        dyad_lookup = {}
-        for d in dyads:
-            key = (d["ego_id"], d["alter_id"])
-            dyad_lookup[key] = self._dyad_score(d)
+        dyad_lookup = self._validated_score_lookup(dyads, model_ids)
 
         results = []
         for summary in cluster_summaries:
@@ -83,16 +87,12 @@ class GhostDetector:
 
             scores = []
             for mid in cluster_models:
-                fwd = dyad_lookup.get((prior_model_id, mid))
-                rev = dyad_lookup.get((mid, prior_model_id))
-                if fwd is not None:
-                    scores.append(fwd)
-                if rev is not None:
-                    scores.append(rev)
+                if mid == prior_model_id:
+                    continue
+                scores.append(dyad_lookup[(prior_model_id, mid)])
+                scores.append(dyad_lookup[(mid, prior_model_id)])
 
-            prior_compatibility = round(
-                sum(scores) / len(scores) if scores else 0.0, 6
-            )
+            prior_compatibility = round(sum(scores) / len(scores) if scores else 0.0, 6)
             prior_distance = round(1.0 - prior_compatibility, 6)
             internal = summary["internal_compatibility"]
 
@@ -107,29 +107,87 @@ class GhostDetector:
                 cluster_models, dyad_lookup, top_k=3
             )
 
-            results.append({
-                "cluster_id": cluster_id,
-                "model_count": summary["model_count"],
-                "internal_compatibility": internal,
-                "prior_compatibility": prior_compatibility,
-                "prior_distance": prior_distance,
-                "label": label,
-                "representative_models": representative,
-            })
+            results.append(
+                {
+                    "cluster_id": cluster_id,
+                    "model_count": summary["model_count"],
+                    "internal_compatibility": internal,
+                    "prior_compatibility": prior_compatibility,
+                    "prior_distance": prior_distance,
+                    "label": label,
+                    "representative_models": representative,
+                }
+            )
 
         return results
 
     def _dyad_score(self, dyad: dict[str, Any]) -> float:
         """Extract a numeric compatibility score from a dyad record."""
-        value = dyad.get(self._score_field, dyad.get("similarity_rate", 0.0))
+        score = self._parse_dyad_score(dyad)
+        if score is None:
+            raise GhostError(
+                f"Selected score field '{self._score_field}' is unavailable for 1 dyad"
+            )
+        return score
+
+    def _parse_dyad_score(self, dyad: dict[str, Any]) -> float | None:
+        """Return the selected score as a float, or None when unavailable."""
+        if self._score_field not in dyad:
+            return None
+        value = dyad[self._score_field]
         if value is None:
-            return 0.0
+            return None
         if isinstance(value, bool):
             return 1.0 if value else 0.0
         try:
-            return float(value)
+            score = float(value)
         except (TypeError, ValueError):
-            return 0.0
+            return None
+        if not math.isfinite(score):
+            return None
+        return score
+
+    def _validated_score_lookup(
+        self,
+        dyads: list[dict[str, Any]],
+        model_ids: list[str],
+    ) -> dict[tuple[str, str], float]:
+        """Validate selected scores and completeness for all directed pairs."""
+        model_id_set = set(model_ids)
+        lookup = {}
+        unavailable_count = 0
+
+        for dyad in dyads:
+            ego = dyad["ego_id"]
+            alter = dyad["alter_id"]
+            if ego == alter or ego not in model_id_set or alter not in model_id_set:
+                continue
+            score = self._parse_dyad_score(dyad)
+            if score is None:
+                unavailable_count += 1
+                continue
+            lookup[(ego, alter)] = score
+
+        if unavailable_count:
+            raise GhostError(
+                f"Selected score field '{self._score_field}' is unavailable "
+                f"for {unavailable_count} dyad(s)"
+            )
+
+        expected_pairs = {
+            (ego, alter)
+            for ego in model_id_set
+            for alter in model_id_set
+            if ego != alter
+        }
+        missing_count = len(expected_pairs - lookup.keys())
+        if missing_count:
+            raise GhostError(
+                "Complete directed dyads are required; "
+                f"missing {missing_count} directed pair(s)"
+            )
+
+        return lookup
 
     def _representative_models(
         self,
@@ -183,9 +241,7 @@ class GhostDetector:
         total_ghost_models = sum(g["model_count"] for g in ghosts)
 
         if not ghosts:
-            logger.info(
-                "No ghost clusters detected - all zones align with user prior"
-            )
+            logger.info("No ghost clusters detected - all zones align with user prior")
 
         top_ghost = None
         if ghosts:

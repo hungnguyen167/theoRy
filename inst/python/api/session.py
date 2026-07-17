@@ -52,3 +52,29 @@ def clear_latest_dyad_context() -> None:
     """Clear cached dyad context for isolated tests or server reset."""
     global _latest_dyad_context
     _latest_dyad_context = None
+
+
+# --- Symbolic context ----------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class SymbolicContext:
+    universe: Any
+    constraints: Any | None = None
+
+
+_symbolic_context: SymbolicContext | None = None
+
+
+def update_latest_symbolic_context(*, universe, constraints=None) -> None:
+    global _symbolic_context
+    _symbolic_context = SymbolicContext(universe=universe, constraints=constraints)
+
+
+def get_latest_symbolic_context() -> SymbolicContext | None:
+    return _symbolic_context
+
+
+def clear_latest_symbolic_context() -> None:
+    global _symbolic_context
+    _symbolic_context = None

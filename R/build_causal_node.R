@@ -51,6 +51,7 @@ build_causal_node <- function(nodes,
                               user_mods=NULL,
                               include_subsets=FALSE,
                               return_node=FALSE){
+    .Deprecated("build_component_registry")
     # Check if 'inputs' is a list and has required components
     if (!is.character(nodes) | !is.character(types) | !is.double(timing)) {
         stop("Wrong input format. Please check that nodes and types are character and timing is double!")

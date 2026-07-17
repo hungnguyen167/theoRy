@@ -56,29 +56,26 @@ considered internally consistent. Must be in [0, 1]. Defaults to 0.6.}
 considered mainstream (aligned with prior). Must be in [0, 1].
 Defaults to 0.4.}
 
-\item{score_field}{Dyad column to use as the compatibility score. Defaults
-to \code{"similarity_rate"}. Use causal fields such as
-\code{"mas_compatible"} or \code{"full_compatible"} for alternative
-simulation scenarios.}
+\item{score_field}{Dyad column to use as the compatibility score. Must be
+exactly one of \code{"similarity_rate"}, \code{"mas_compatible"}, or
+\code{"identified_compatible"}. Defaults to \code{"similarity_rate"}.}
 
 \item{url}{Base URL of the theoRy Python backend API. Defaults to
 \code{getOption("theoRy.engine_url", "http://localhost:8000")}.}
 }
 \value{
 A list with components:
-\itemize{
-\item \code{cluster_assignments}: data frame with columns \code{model_id}
-and \code{cluster_id}. Noise models have \code{NA} for \code{cluster_id}.
-\item \code{cluster_summaries}: data frame with columns \code{cluster_id},
-\code{model_count}, and \code{internal_compatibility}.
-\item \code{ghost_clusters}: data frame with columns \code{cluster_id},
-\code{model_count}, \code{internal_compatibility},
-\code{prior_compatibility}, \code{prior_distance}, \code{label}, and
-\code{representative_models}. Empty when no prior is supplied or no ghosts
-are detected.
-\item \code{embedding_2d}: data frame with columns \code{model_id},
-\code{x}, and \code{y} for visualization.
-}
+  \item{cluster_assignments}{Data frame with columns \code{model_id} and
+    \code{cluster_id}. Noise models have \code{NA} for \code{cluster_id}.}
+  \item{cluster_summaries}{Data frame with columns \code{cluster_id},
+    \code{model_count}, and \code{internal_compatibility}.}
+  \item{ghost_clusters}{Data frame with columns \code{cluster_id},
+    \code{model_count}, \code{internal_compatibility},
+    \code{prior_compatibility}, \code{prior_distance}, \code{label}, and
+    \code{representative_models} (list-column). Empty when no prior is
+    supplied or no ghosts are detected.}
+  \item{embedding_2d}{Data frame with columns \code{model_id}, \code{x},
+    and \code{y} for visualization.}
 }
 \description{
 Discovers internally consistent but "invisible" theoretical traditions by
@@ -86,26 +83,35 @@ clustering compatibility profiles and contrasting them against a user prior
 model. Uses UMAP for dimensionality reduction and DBSCAN for clustering.
 }
 \details{
-Ghost cluster detection works by building compatibility profile vectors from
-dyad records, reducing dimensionality with UMAP, clustering with DBSCAN, and
-contrasting each cluster against the user's prior model.
+Ghost cluster detection works by:
+\enumerate{
+  \item Building compatibility profile vectors from dyad records
+  \item Reducing dimensionality with UMAP
+  \item Clustering with DBSCAN
+  \item Contrasting each cluster against the user's prior model
+}
 
-Clusters are labeled as \code{"ghost"} when internal compatibility is high
-but prior compatibility is low, \code{"mainstream"} when prior compatibility
-is high, and \code{"fragmented"} when internal compatibility is low.
+Clusters are labeled as:
+\itemize{
+  \item \code{"ghost"}: High internal compatibility but low prior
+    compatibility (invisible from the prior's perspective)
+  \item \code{"mainstream"}: High prior compatibility (aligned with prior)
+  \item \code{"fragmented"}: Low internal compatibility
+}
 
-When ghost clusters are detected, a summary message is printed showing the
-number of ghost clusters, total models, and representative models for the top
-ghost cluster.
+When ghost clusters are detected, a summary message is printed showing
+the number of ghost clusters, total models, and the top ghost cluster
+with representative models.
 
-DBSCAN's \code{eps} is a sensitivity parameter rather than a fixed
+DBSCAN's \\code{eps} is a sensitivity parameter rather than a fixed
 substantive threshold, especially after UMAP because UMAP coordinates have
-arbitrary scale. For small synthetic simulations, use \code{min_samples = 2}
-and consider a sweep over plausible \code{eps} values. A robust ghost-cluster
-result should appear across a stable plateau of \code{eps} values, not only at
-one narrow setting. A practical default reporting rule is to choose the
-smallest \code{eps} in the plateau that gives the expected number of clusters
-with no noise points and the same ghost-cluster count.
+arbitrary scale. For small synthetic simulations, use
+\\code{min_samples = 2} and consider a sweep over plausible \\code{eps}
+values. A robust ghost-cluster result should appear across a stable plateau
+of \\code{eps} values, not only at one narrow setting. A practical default
+reporting rule is to choose the smallest \\code{eps} in the plateau that
+gives the expected number of clusters with no noise points and the same
+ghost-cluster count.
 }
 \examples{
 \dontrun{
@@ -113,12 +119,14 @@ start_theory_engine()
 
 reg <- build_component_registry(c("X", "Y", "Z"), timing = c(1, 2, 3))
 states <- expand_model_states(reg, mode = "exhaustive",
-   edge_statuses = c("causal", "unknown"))
+  edge_statuses = c("causal", "unknown"))
 dyads <- build_dyad_matrix(reg, states, mode = "basic")
 
+# Clustering with ghost detection
 result <- detect_ghost_clusters(dyads, prior_model = "M0001")
 result$ghost_clusters
 
+# Clustering without prior
 result_no_prior <- detect_ghost_clusters(dyads)
 result_no_prior$cluster_summaries
 
@@ -145,4 +153,5 @@ chosen_eps <- min(valid_eps$eps)
 
 stop_theory_engine()
 }
+
 }

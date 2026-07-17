@@ -18,6 +18,8 @@ class ComponentSchema(BaseModel):
     target: str | None = None
     direction: Literal["->", "<->"] | None = None
     description: str
+    fixed_status: Literal["causal"] | None = None
+    observed: bool = True
 
     @field_validator("comp_id")
     @classmethod
@@ -76,6 +78,10 @@ class ComponentRegistry:
         if missing:
             raise RegistryError(f"Missing required columns: {missing}")
         self._data = data.copy()
+        if "observed" not in self._data.columns:
+            self._data["observed"] = True
+        else:
+            self._data["observed"] = self._data["observed"].fillna(True).astype(bool)
 
     @property
     def data(self) -> pd.DataFrame:

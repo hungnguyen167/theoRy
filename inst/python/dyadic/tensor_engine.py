@@ -4,6 +4,10 @@ import torch
 
 from registry.schema import ComponentRegistry
 from state.tensor import StateTensor
+from state.semantics import (
+    edge_endpoint_components,
+    node_component_map,
+)
 
 
 def resolve_device(device: str = "auto") -> torch.device:
@@ -43,6 +47,51 @@ def causal_mask(
     return mask
 
 
+def _node_present_mask(
+    state: StateTensor,
+    device: str | torch.device = "cpu",
+) -> torch.Tensor:
+    if hasattr(state, "node_present_mask") and state.node_present_mask is not None:
+        return state.node_present_mask.to(device)
+
+    mask = causal_mask(state, device=device)
+    node_mask = torch.zeros_like(mask)
+    for cid in state._node_comp_ids:
+        if cid in state.component_index:
+            j = state.component_index[cid]
+            node_mask[:, j] = mask[:, j]
+    return node_mask
+
+
+def _edge_applicable_mask(
+    state: StateTensor,
+    device: str | torch.device = "cpu",
+) -> torch.Tensor:
+    if hasattr(state, "edge_applicable_mask") and state.edge_applicable_mask is not None:
+        return state.edge_applicable_mask.to(device)
+
+    M = len(state.model_ids)
+    C = len(state.component_ids)
+    applicable = torch.zeros((M, C), dtype=torch.bool, device=device)
+
+    node_map = node_component_map(
+        type('R', (), {'data': state._registry.data if hasattr(state, '_registry') else None})()
+        if hasattr(state, '_registry')
+        else None
+    ) if hasattr(state, '_registry') else {}
+
+    for mid in state.model_ids:
+        i = state.model_index[mid]
+        for cid in state._edge_comp_ids:
+            if cid not in state.component_index:
+                continue
+            j = state.component_index[cid]
+            if state.edge_applicable(mid, cid):
+                applicable[i, j] = True
+
+    return applicable
+
+
 def _temporal_valid_mask(
     state: StateTensor,
     registry: ComponentRegistry,
@@ -76,6 +125,8 @@ def _temporal_valid_mask(
 
         for mid in state.model_ids:
             i = state.model_index[mid]
+            if not state.edge_applicable(mid, cid):
+                continue
             status = state.get_status(mid, cid)
             if status != "causal":
                 continue
@@ -93,6 +144,25 @@ def _temporal_valid_mask(
     return valid
 
 
+def _build_component_type_masks(state: StateTensor):
+    """Build boolean masks for node and edge component indices."""
+    C = len(state.component_ids)
+    node_mask = torch.zeros(C, dtype=torch.bool)
+    edge_mask = torch.zeros(C, dtype=torch.bool)
+
+    for cid in state._node_comp_ids:
+        if cid in state.component_index:
+            j = state.component_index[cid]
+            node_mask[j] = True
+
+    for cid in state._edge_comp_ids:
+        if cid in state.component_index:
+            j = state.component_index[cid]
+            edge_mask[j] = True
+
+    return node_mask, edge_mask
+
+
 def structural_similarity_matrix(
     state: StateTensor,
     registry: ComponentRegistry,
@@ -107,22 +177,60 @@ def structural_similarity_matrix(
 
     device = torch.device(device)
 
-    causal = causal_mask(state, device=device)[indices]
+    np_mask = _node_present_mask(state, device=device)[indices]
+
+    edge_app_mask = _edge_applicable_mask(state, device=device)[indices]
+
+    t = state.tensor.to(device)
+    causal = (t[:, :, 0] == 1)[indices]
+    non_causal = (t[:, :, 1] == 1)[indices]
 
     if exclude_temporally_invalid:
         valid = _temporal_valid_mask(state, registry, device=device)[indices]
     else:
         valid = torch.ones_like(causal, dtype=torch.bool, device=device)
 
-    M = causal.shape[0]
-    similarity = torch.zeros((M, M), dtype=torch.float32, device=device)
+    node_mask, edge_mask = _build_component_type_masks(state)
+    node_mask_d = node_mask.to(device)
+    edge_mask_d = edge_mask.to(device)
 
-    causal_i = causal[:, None, :]
-    causal_j = causal[None, :, :]
-    pair_mask = valid[:, None, :] & valid[None, :, :]
+    M = np_mask.shape[0]
 
-    shared = (causal_i & causal_j & pair_mask).sum(dim=2)
-    union = ((causal_i | causal_j) & pair_mask).sum(dim=2)
+    # --- Node contribution ---
+    # shared nodes: present in both
+    node_shared = (np_mask[:, None, :] & np_mask[None, :, :]).sum(dim=2)
+    # union nodes: present in either
+    node_union = (np_mask[:, None, :] | np_mask[None, :, :]).sum(dim=2)
+
+    # --- Edge contribution ---
+    # Only compare edges applicable in both models
+    pair_applicable = edge_app_mask[:, None, :] & edge_app_mask[None, :, :]
+
+    # One-sided applicable edges: applicable in exactly one model (XOR)
+    one_sided_applicable = edge_app_mask[:, None, :] ^ edge_app_mask[None, :, :]
+
+    # Resolved status for each model on edge components only
+    resolved_any = (causal | non_causal) & edge_mask_d.unsqueeze(0)  # (M, C)
+
+    # Same resolved status
+    same_causal = causal.unsqueeze(1) & causal.unsqueeze(0) & pair_applicable
+    same_noncausal = non_causal.unsqueeze(1) & non_causal.unsqueeze(0) & pair_applicable
+    shared_edges = (same_causal | same_noncausal).sum(dim=2)
+
+    # Conflicting resolved claims (causal vs non-causal)
+    conflicting = (
+        ((causal.unsqueeze(1) & non_causal.unsqueeze(0)) |
+         (non_causal.unsqueeze(1) & causal.unsqueeze(0)))
+        & pair_applicable
+    ).sum(dim=2)
+
+    # Union edges: resolved in either model (OR), plus conflicting gets counted twice,
+    # plus one-sided applicable edges (each adds one union claim)
+    resolved_or = (resolved_any.unsqueeze(1) | resolved_any.unsqueeze(0)) & pair_applicable
+    union_edges = resolved_or.sum(dim=2) + conflicting + one_sided_applicable.sum(dim=2)
+
+    shared = node_shared + shared_edges
+    union = node_union + union_edges
 
     similarity = torch.where(
         union == 0,

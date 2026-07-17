@@ -27,6 +27,7 @@
 #' @export
 
 run_theoRy <- function(nodes, types, timing,include_subsets=FALSE, user_mods=NULL){
+    .Deprecated("build_component_registry")
     causal_matrix <- build_causal_node(nodes, types, timing,include_subsets=include_subsets,
                                          user_mods=user_mods, return_node=FALSE)
     node_timing <- build_causal_node(nodes, types, timing,include_subsets=include_subsets, return_node=TRUE)

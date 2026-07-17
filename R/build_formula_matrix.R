@@ -24,6 +24,7 @@
 
 
 build_formula_matrix <- function(causal_matrix, node_timing=NULL) {
+    .Deprecated("build_dyad_matrix")
     causal_matrix_t <- data.table::copy(causal_matrix)
     setDT(causal_matrix_t)
     # Use lapply to apply the function to each group

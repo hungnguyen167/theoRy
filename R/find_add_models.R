@@ -41,6 +41,7 @@ find_add_models <- function(ls_theory=NULL,
                             on_ls=TRUE,
                             add_nodes=NULL,
                             assert_mod_num=NULL){
+    .Deprecated("expand_model_states")
 
     if(is.null(user_mods)){
         stop("User-defined models must be provided!")

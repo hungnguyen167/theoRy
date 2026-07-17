@@ -29,22 +29,16 @@
 #' @param synergistic_search Search strategy for synergistic sets:
 #'   \code{"greedy"} (default) or \code{"beam"}.
 #' @param synergistic_beam_width Beam width for beam search.  Defaults to 5.
-#' @param scoring Scoring mode: \code{"structural"} (default, uses
-#'   \code{similarity_rate}), \code{"causal"} (uses \code{mas_compatible}
-#'   and \code{full_compatible}), or \code{"hybrid"} (weighted combination).
-#'   Causal and hybrid modes recompute full dyads from context when needed.
-#' @param structural_weight Weight for structural score in hybrid mode
-#'   (default 0.5).  Must be in \eqn{[0, 1]}.
-#' @param causal_weight Weight for causal score in hybrid mode (default 0.5).
-#'   Must be in \eqn{[0, 1]}.  At least one weight must be positive.
-#' @param causal_metrics Character vector of causal metric fields to use
-#'   (default \code{c("mas_compatible", "full_compatible")}).  Ignored when
-#'   \code{scoring = "structural"}.
+#' @param compatibility_metric Compatibility metric used to score each dyad:
+#'   \code{"similarity_rate"} (default), \code{"mas_compatible"}, or
+#'   \code{"identified_compatible"}. Exactly one metric is used. The two
+#'   causal metrics require \code{exposure} and \code{outcome} in the dyads'
+#'   \code{theory_context} attribute.
 #' @param device Compute device: \code{"auto"} (default), \code{"cpu"}, or
 #'   \code{"cuda"}.  \code{"cuda"} requires a CUDA-capable GPU with PyTorch.
 #' @param use_tensor_engine Whether to use the tensorized structural engine
-#'   when \code{scoring = "structural"} (default \code{TRUE}).  Improves
-#'   performance on larger state spaces.
+#'   when \code{compatibility_metric = "similarity_rate"} (default
+#'   \code{TRUE}). Improves performance on larger state spaces.
 #' @param url Base URL of the theoRy Python backend API.  Defaults to
 #'   \code{getOption("theoRy.engine_url", "http://localhost:8000")}.
 #'
@@ -67,24 +61,31 @@
 #'   \code{rankings} (data frame) and \code{synergistic_sets} (data frame
 #'   with columns \code{components}, \code{delta_u_combined},
 #'   \code{delta_u_individual_sum}, \code{synergy_score}, \code{label}).
+#'   The returned data frame or list has a \code{compatibility_metric}
+#'   attribute recording the selected metric.
 #'
 #' @details
 #' Delta-U simulates what would happen if each uncertain (unknown)
-#' component were resolved.  For each component and each possible
+#' \strong{applicable edge} were resolved.  For each edge and each possible
 #' resolution direction (causal / non-causal), it recomputes dyadic
-#' similarity scores and measures the average change in global
+#' compatibility scores and measures the average change in global
 #' compatibility.  The component with the largest positive delta is
 #' the \strong{Lynchpin} that maximally reduces theoretical uncertainty.
 #'
-#' Edge components respect temporal integrity: forcing an edge to
-#' \code{"causal"} is only applied to models where
-#' \code{timing(source) < timing(target)}.
+#' Under sparse node semantics, only edge components that are \code{"unknown"}
+#' in at least one model where the edge is applicable are considered as
+#' candidates.  Absent nodes and inapplicable edges are excluded from
+#' default Delta-U candidate selection.
 #'
-#' Causal and hybrid scoring modes may be slow for large multiverses
-#' because they require recomputing full causal metrics per resolution
-#' scenario.  Consider using \code{mode = "two-stage"} with an
-#' appropriate \code{heatmap_threshold} to reduce the number of
-#' full evaluations.
+#' Edge components respect temporal integrity: forcing an edge to
+#' \code{"causal"} is skipped when both endpoint timings are known and
+#' \code{timing(source) >= timing(target)}.
+#'
+#' The \code{"mas_compatible"} and \code{"identified_compatible"} metrics may
+#' be slow for large multiverses because they require recomputing causal
+#' metrics per resolution scenario. Consider using \code{mode = "two-stage"}
+#' with an appropriate \code{heatmap_threshold} to reduce the number of full
+#' evaluations.
 #'
 #' @examples
 #' \dontrun{
@@ -103,13 +104,12 @@
 #' syn <- compute_delta_u(dyads, top_k = 10, synergistic_set_size = 2)
 #' syn$synergistic_sets
 #'
-#' causal_rankings <- compute_delta_u(
-#'   dyads, top_k = 10, scoring = "causal"
+#' causal_dyads <- build_dyad_matrix(
+#'   reg, states, mode = "full", exposure = "X", outcome = "Z"
 #' )
-#'
-#' hybrid_rankings <- compute_delta_u(
-#'   dyads, top_k = 10, scoring = "hybrid",
-#'   structural_weight = 0.4, causal_weight = 0.6
+#' causal_rankings <- compute_delta_u(
+#'   causal_dyads, top_k = 10,
+#'   compatibility_metric = "identified_compatible"
 #' )
 #' }
 #'
@@ -122,16 +122,15 @@ compute_delta_u <- function(dyads,
                             synergistic_set_size = NULL,
                             synergistic_search = c("greedy", "beam"),
                             synergistic_beam_width = NULL,
-                            scoring = c("structural", "causal", "hybrid"),
-                            structural_weight = 0.5,
-                            causal_weight = 0.5,
-                            causal_metrics = c("mas_compatible", "full_compatible"),
+                            compatibility_metric = c("similarity_rate",
+                                                     "mas_compatible",
+                                                     "identified_compatible"),
                             device = c("auto", "cpu", "cuda"),
                             use_tensor_engine = TRUE,
                             url = getOption("theoRy.engine_url",
                                              "http://localhost:8000")) {
   mode <- match.arg(mode)
-  scoring <- match.arg(scoring)
+  compatibility_metric <- match.arg(compatibility_metric)
   device <- match.arg(device)
 
   if (missing(dyads) || !is.data.frame(dyads)) {
@@ -168,23 +167,28 @@ compute_delta_u <- function(dyads,
     stop("synergistic_beam_width must be positive.", call. = FALSE)
   }
 
-  if (!is.numeric(structural_weight) || structural_weight < 0 || structural_weight > 1) {
-    stop("structural_weight must be between 0 and 1.", call. = FALSE)
-  }
-  if (!is.numeric(causal_weight) || causal_weight < 0 || causal_weight > 1) {
-    stop("causal_weight must be between 0 and 1.", call. = FALSE)
-  }
-  if (identical(scoring, "hybrid") && structural_weight + causal_weight <= 0) {
-    stop("At least one scoring weight must be positive.", call. = FALSE)
+  causal_metric <- compatibility_metric %in%
+    c("mas_compatible", "identified_compatible")
+  if (causal_metric &&
+      (is.null(context$exposure) || is.null(context$outcome))) {
+    stop(
+      "compatibility_metric = '", compatibility_metric,
+      "' requires exposure and outcome in the dyads' theory_context. ",
+      "Recreate dyads with build_dyad_matrix(..., exposure = ..., outcome = ...).",
+      call. = FALSE
+    )
   }
 
   payload <- list(
     registry_data = context$registry_data,
     state_data = context$state_data,
-    model_ids = context$model_ids,
-    dyads = .delta_u_dyads_to_records(dyads),
+    model_ids = I(context$model_ids),
+    dyads = .delta_u_dyads_to_records(
+      dyads, metric_fields = compatibility_metric
+    ),
     top_k = as.integer(top_k),
-    mode = mode
+    mode = mode,
+    compatibility_metric = compatibility_metric
   )
 
   if (!is.null(component_id)) {
@@ -203,14 +207,8 @@ compute_delta_u <- function(dyads,
     payload$outcome <- context$outcome
   }
 
-  payload$scoring <- scoring
-  payload$structural_weight <- structural_weight
-  payload$causal_weight <- causal_weight
   payload$device <- device
   payload$use_tensor_engine <- use_tensor_engine
-  if (!identical(scoring, "structural")) {
-    payload$causal_metrics <- as.list(causal_metrics)
-  }
 
   req <- httr2::request(url) |>
     httr2::req_url_path("api/v1/delta-u") |>
@@ -269,9 +267,8 @@ compute_delta_u <- function(dyads,
   }
 
   if (!is.null(rankings)) {
-    if (!is.null(data$scoring)) {
-      attr(rankings, "scoring") <- data$scoring
-    }
+    attr(rankings, "compatibility_metric") <-
+      data$compatibility_metric %||% compatibility_metric
     if (!is.null(data$device)) {
       attr(rankings, "device") <- data$device
     }
@@ -279,9 +276,8 @@ compute_delta_u <- function(dyads,
 
   if (!is.null(synergistic)) {
     result <- list(rankings = rankings, synergistic_sets = synergistic)
-    if (!is.null(data$scoring)) {
-      attr(result, "scoring") <- data$scoring
-    }
+    attr(result, "compatibility_metric") <-
+      data$compatibility_metric %||% compatibility_metric
     if (!is.null(data$device)) {
       attr(result, "device") <- data$device
     }
@@ -292,7 +288,23 @@ compute_delta_u <- function(dyads,
 }
 
 
-.delta_u_dyads_to_records <- function(dyads) {
+.delta_u_dyads_to_records <- function(
+    dyads,
+    metric_fields = intersect(
+      c("similarity_rate", "mas_compatible", "identified_compatible"),
+      names(dyads)
+    )) {
+  valid_metrics <- c(
+    "similarity_rate", "mas_compatible", "identified_compatible"
+  )
+  if (length(metric_fields) < 1L || any(!metric_fields %in% valid_metrics)) {
+    stop(
+      "metric_fields must contain one or more of: ",
+      paste(valid_metrics, collapse = ", "), ".",
+      call. = FALSE
+    )
+  }
+
   required <- c("dyad_id", "ego_id", "alter_id", "similarity_rate")
   missing_cols <- setdiff(required, names(dyads))
   if (length(missing_cols) > 0) {
@@ -308,11 +320,12 @@ compute_delta_u <- function(dyads,
       alter_id = as.character(row$alter_id),
       similarity_rate = as.numeric(row$similarity_rate)
     )
-    if ("mas_compatible" %in% names(row) && !is.na(row$mas_compatible)) {
-      entry$mas_compatible <- as.logical(row$mas_compatible)
-    }
-    if ("full_compatible" %in% names(row) && !is.na(row$full_compatible)) {
-      entry$full_compatible <- as.logical(row$full_compatible)
+    available_fields <- setdiff(
+      intersect(metric_fields, names(dyads)), "similarity_rate"
+    )
+    for (field in available_fields) {
+      value <- dyads[[field]][i]
+      entry[[field]] <- as.logical(value)
     }
     entry
   })

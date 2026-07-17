@@ -32,6 +32,7 @@
 add_compatible <- function(formula_matrix,
                            effect="direct",
                            ref_mod=NULL){
+    .Deprecated("build_dyad_matrix")
 
     ## Set up function specific formula_matrix object
 

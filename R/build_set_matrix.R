@@ -21,6 +21,7 @@ build_set_matrix <- function(causal_matrix,
                              outcome_var="test_compatible",
                              outcome_positive = "compatible", # choose the string that indicates a positive outcome
                              cmp_matrix) {
+    .Deprecated("compute_delta_u")
 
     causal_matrix_t <- causal_matrix %>%
         as.data.frame() %>%

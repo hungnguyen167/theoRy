@@ -13,6 +13,9 @@ compute_delta_u(
   synergistic_set_size = NULL,
   synergistic_search = c("greedy", "beam"),
   synergistic_beam_width = NULL,
+  compatibility_metric = c("similarity_rate", "mas_compatible", "identified_compatible"),
+  device = c("auto", "cpu", "cuda"),
+  use_tensor_engine = TRUE,
   url = getOption("theoRy.engine_url", "http://localhost:8000")
 )
 }
@@ -34,7 +37,7 @@ all uncertain components; \code{"two-stage"} uses a heatmap filter
 to reduce the number of full evaluations.}
 
 \item{heatmap_threshold}{Minimum Delta-U score for a component to be
-included in Stage 2 of two-stage mode.  Must be in [0, 1].
+included in Stage 2 of two-stage mode.  Must be in \eqn{[0, 1]}.
 Defaults to \code{0.1} when \code{mode = "two-stage"} and omitted.}
 
 \item{synergistic_set_size}{When supplied, also evaluate the combined
@@ -46,20 +49,44 @@ least 2.}
 
 \item{synergistic_beam_width}{Beam width for beam search.  Defaults to 5.}
 
+\item{compatibility_metric}{Compatibility metric used to score each dyad:
+\code{"similarity_rate"} (default), \code{"mas_compatible"}, or
+\code{"identified_compatible"}. Exactly one metric is used. The two
+causal metrics require \code{exposure} and \code{outcome} in the dyads'
+\code{theory_context} attribute.}
+
+\item{device}{Compute device: \code{"auto"} (default), \code{"cpu"}, or
+\code{"cuda"}.  \code{"cuda"} requires a CUDA-capable GPU with PyTorch.}
+
+\item{use_tensor_engine}{Whether to use the tensorized structural engine
+when \code{compatibility_metric = "similarity_rate"} (default
+\code{TRUE}). Improves performance on larger state spaces.}
+
 \item{url}{Base URL of the theoRy Python backend API.  Defaults to
 \code{getOption("theoRy.engine_url", "http://localhost:8000")}.}
 }
 \value{
-By default, a data frame with columns for rank, component_id,
-type, source, target, delta_u, best_resolution, dyads_improved,
-and dyads_worsened.  When \code{component_id} is supplied, a one-row
-data frame with the same columns plus delta_u_positive and
-delta_u_negative.
+By default, a data frame with columns:
+  \item{rank}{Rank (1 = highest impact)}
+  \item{component_id}{Component identifier}
+  \item{type}{Component type (\code{"node"} or \code{"edge"})}
+  \item{source}{Node source name}
+  \item{target}{Node target name (\code{NA} for nodes)}
+  \item{delta_u}{Delta-U score (mean compatibility improvement)}
+  \item{best_resolution}{Recommended resolution (\code{"positive"},
+    \code{"negative"}, or \code{"none"})}
+  \item{dyads_improved}{Number of dyads that improved}
+  \item{dyads_worsened}{Number of dyads that worsened}
 
-When \code{synergistic_set_size} is supplied, a list with components
-\code{rankings} (data frame) and \code{synergistic_sets} (data frame
-with columns components, delta_u_combined, delta_u_individual_sum,
-synergy_score, label).
+  When \code{component_id} is supplied, a one-row data frame with the
+  same columns plus \code{delta_u_positive} and \code{delta_u_negative}.
+
+  When \code{synergistic_set_size} is supplied, a list with components
+  \code{rankings} (data frame) and \code{synergistic_sets} (data frame
+  with columns \code{components}, \code{delta_u_combined},
+  \code{delta_u_individual_sum}, \code{synergy_score}, \code{label}).
+  The returned data frame or list has a \code{compatibility_metric}
+  attribute recording the selected metric.
 }
 \description{
 Identifies which theoretical claims, if resolved, would maximize global
@@ -69,15 +96,26 @@ states, and dyad records explicitly.
 }
 \details{
 Delta-U simulates what would happen if each uncertain (unknown)
-component were resolved.  For each component and each possible
+\strong{applicable edge} were resolved.  For each edge and each possible
 resolution direction (causal / non-causal), it recomputes dyadic
-similarity scores and measures the average change in global
+compatibility scores and measures the average change in global
 compatibility.  The component with the largest positive delta is
 the \strong{Lynchpin} that maximally reduces theoretical uncertainty.
 
+Under sparse node semantics, only edge components that are \code{"unknown"}
+in at least one model where the edge is applicable are considered as
+candidates.  Absent nodes and inapplicable edges are excluded from
+default Delta-U candidate selection.
+
 Edge components respect temporal integrity: forcing an edge to
-\code{"causal"} is only applied to models where
-\code{timing(source) < timing(target)}.
+\code{"causal"} is skipped when both endpoint timings are known and
+\code{timing(source) >= timing(target)}.
+
+The \code{"mas_compatible"} and \code{"identified_compatible"} metrics may
+be slow for large multiverses because they require recomputing causal
+metrics per resolution scenario. Consider using \code{mode = "two-stage"}
+with an appropriate \code{heatmap_threshold} to reduce the number of full
+evaluations.
 }
 \examples{
 \dontrun{
@@ -85,7 +123,7 @@ start_theory_engine()
 
 reg <- build_component_registry(c("X", "Y", "Z"), timing = c(1, 2, 3))
 states <- expand_model_states(reg, mode = "exhaustive",
-   edge_statuses = c("causal", "unknown"))
+  edge_statuses = c("causal", "unknown"))
 dyads <- build_dyad_matrix(reg, states, mode = "basic")
 
 rankings <- compute_delta_u(dyads, top_k = 5)
@@ -95,5 +133,14 @@ single <- compute_delta_u(dyads, component_id = rankings$component_id[1])
 
 syn <- compute_delta_u(dyads, top_k = 10, synergistic_set_size = 2)
 syn$synergistic_sets
+
+causal_dyads <- build_dyad_matrix(
+  reg, states, mode = "full", exposure = "X", outcome = "Z"
+)
+causal_rankings <- compute_delta_u(
+  causal_dyads, top_k = 10,
+  compatibility_metric = "identified_compatible"
+)
 }
+
 }

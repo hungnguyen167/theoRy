@@ -14,6 +14,11 @@ from api.models import (
     DyadMatrixRequest,
     ExpandModelStatesRequest,
     SimulateRequest,
+    SymbolicUniverseRequest,
+    SymbolicQueryRequest,
+    SymbolicCompareRequest,
+    SymbolicDeltaURequest,
+    SymbolicSimulateRequest,
 )
 from registry.builder import ComponentRegistryBuilder
 from registry.loader import RegistryLoader
@@ -22,12 +27,28 @@ from state.expander import ModelStateExpander
 from state.tensor import StateError, StateTensor
 from dyadic.engine import DyadicEngine, DyadicError
 from dyadic.causal import CausalWrapper, CausalError
+from dyadic.identification import IdentificationWrapper, IdentificationError
 from dyadic.hybrid import HybridDyadicEngine
-from api.session import update_latest_dyad_context, get_latest_dyad_context
+from api.session import (
+    update_latest_dyad_context,
+    get_latest_dyad_context,
+    update_latest_symbolic_context,
+)
 from simulation.delta_u import DeltaUEngine, DeltaUError
-from simulation.suite import SimulationSuite, SimulationError
+from simulation.suite import SimulationSuite, SimulationError, SimulationInputError
 from clustering.engine import ClusteringEngine, ClusteringError
 from clustering.ghost import GhostDetector, GhostError
+from symbolic.universe import build_symbolic_universe as sym_build_universe
+from symbolic.constraints import (
+    constraints_from_edge_statuses as sym_edge_constraints,
+    constraints_from_dag_spec as sym_dag_constraints,
+    node_absence_constraints as sym_absence_constraints,
+    fixed_edge_constraints as sym_fixed_constraints,
+)
+from symbolic.engine import SymbolicCompatibilityEngine
+from symbolic.delta_u import SymbolicDeltaUEngine
+from symbolic.simulation import SymbolicSimulationEngine
+from symbolic.classes import build_query_classes as sym_build_query_classes
 
 router = APIRouter()
 
@@ -51,6 +72,12 @@ def _sanitize_record(record: dict) -> dict:
     return {k: _sanitize_null(v) for k, v in record.items()}
 
 
+def _json_mass(value):
+    if isinstance(value, int) and abs(value) > 10**15:
+        return str(value)
+    return value
+
+
 @router.get("/health")
 async def health():
     return {"status": "success", "data": {"status": "healthy", "version": "0.1.0"}}
@@ -71,6 +98,8 @@ async def build_component_registry_endpoint(request: BuildRegistryRequest):
             respect_timing=request.respect_timing,
             include_bidirectional=request.include_bidirectional,
             constraints=constraints,
+            exposure=request.exposure,
+            outcome=request.outcome,
         )
         clean_records = []
         for r in registry.data.to_dict(orient="records"):
@@ -108,6 +137,40 @@ async def expand_model_states_endpoint(request: ExpandModelStatesRequest):
         [s.model_dump() for s in request.seed_claims] if request.seed_claims else None
     )
 
+    exposure = request.exposure
+    outcome = request.outcome
+
+    if (exposure is None) != (outcome is None):
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": "INVALID_CAUSAL_TARGET",
+                "message": "Both or neither of exposure and outcome must be provided",
+            },
+        )
+
+    if exposure is not None and outcome is not None:
+        node_names = set(
+            registry.data[registry.data["type"] == "node"]["source"].tolist()
+        )
+        if exposure == outcome:
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "code": "INVALID_CAUSAL_TARGET",
+                    "message": "Exposure and outcome must be distinct nodes",
+                },
+            )
+        invalid = [n for n in (exposure, outcome) if n not in node_names]
+        if invalid:
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "code": "INVALID_CAUSAL_TARGET",
+                    "message": f"Invalid exposure/outcome node(s): {invalid}",
+                },
+            )
+
     try:
         state_records = ModelStateExpander.expand(
             registry,
@@ -118,14 +181,21 @@ async def expand_model_states_endpoint(request: ExpandModelStatesRequest):
             n_models=request.n_models,
             seed=request.seed,
             edge_statuses=request.edge_statuses,
+            node_policy=request.node_policy,
+            exposure=exposure,
+            outcome=outcome,
         )
         model_ids = sorted({r["model_id"] for r in state_records})
+        seeded_model_ids = sorted(
+            {r["model_id"] for r in state_records if r.get("seeded")}
+        )
         return {
             "status": "success",
             "data": {
                 "state_data": state_records,
                 "model_count": len(model_ids),
                 "component_count": len(registry.data),
+                "seeded_model_ids": seeded_model_ids,
             },
         }
     except StateError as e:
@@ -199,6 +269,7 @@ async def dyad_matrix(request: DyadMatrixRequest):
             )
 
     causal_wrapper = None
+    identification_wrapper = None
     if request.mode in ("full", "two-stage"):
         try:
             causal_wrapper = CausalWrapper()
@@ -207,17 +278,33 @@ async def dyad_matrix(request: DyadMatrixRequest):
                 status_code=400,
                 detail={"code": "CAUSAL_ERROR", "message": str(e)},
             )
+        if exposure is not None and outcome is not None:
+            try:
+                identification_wrapper = IdentificationWrapper()
+            except IdentificationError as e:
+                raise HTTPException(
+                    status_code=400,
+                    detail={"code": "IDENTIFICATION_ERROR", "message": str(e)},
+                )
 
     try:
         if request.mode == "basic":
             dyads = engine.compare_pairs(
-                state, registry, mode="basic",
-                exposure=exposure, outcome=outcome,
+                state,
+                registry,
+                mode="basic",
+                exposure=exposure,
+                outcome=outcome,
             )
         elif request.mode == "full":
             dyads = engine.compare_pairs(
-                state, registry, mode="full", causal_wrapper=causal_wrapper,
-                exposure=exposure, outcome=outcome,
+                state,
+                registry,
+                mode="full",
+                causal_wrapper=causal_wrapper,
+                identification_wrapper=identification_wrapper,
+                exposure=exposure,
+                outcome=outcome,
             )
         elif request.mode == "single-ref":
             if request.reference_id is None:
@@ -230,8 +317,12 @@ async def dyad_matrix(request: DyadMatrixRequest):
                 )
             try:
                 dyads = hybrid.compare_single_ref(
-                    request.reference_id, state, registry, mode="basic",
-                    exposure=exposure, outcome=outcome,
+                    request.reference_id,
+                    state,
+                    registry,
+                    mode="basic",
+                    exposure=exposure,
+                    outcome=outcome,
                 )
             except ValueError as e:
                 raise HTTPException(
@@ -249,9 +340,12 @@ async def dyad_matrix(request: DyadMatrixRequest):
                     },
                 )
             two_stage_result = hybrid.compare_two_stage(
-                state, registry, top_k=top_k,
+                state,
+                registry,
+                top_k=top_k,
                 causal_wrapper=causal_wrapper,
-                exposure=exposure, outcome=outcome,
+                exposure=exposure,
+                outcome=outcome,
             )
         else:
             raise HTTPException(
@@ -340,7 +434,9 @@ async def delta_u(request: DeltaURequest):
             registry = RegistryLoader.from_records(registry_records)
             state_records = [r.model_dump() for r in request.state_data]
             state = StateTensor.from_records(
-                registry, state_records, request.model_ids,
+                registry,
+                state_records,
+                request.model_ids,
             )
         except Exception as e:
             raise HTTPException(
@@ -375,35 +471,17 @@ async def delta_u(request: DeltaURequest):
             },
         )
 
-    scoring = request.scoring
+    compatibility_metric = request.compatibility_metric
 
-    if scoring not in ("structural", "causal", "hybrid"):
+    if compatibility_metric not in (
+        "similarity_rate", "mas_compatible", "identified_compatible"
+    ):
         raise HTTPException(
             status_code=422,
             detail={
-                "code": "INVALID_SCORING",
-                "message": "scoring must be structural, causal, or hybrid",
-            },
-        )
-
-    sw = request.structural_weight
-    cw = request.causal_weight
-
-    if not 0.0 <= sw <= 1.0 or not 0.0 <= cw <= 1.0:
-        raise HTTPException(
-            status_code=422,
-            detail={
-                "code": "INVALID_SCORING_WEIGHTS",
-                "message": "structural_weight and causal_weight must be in [0, 1]",
-            },
-        )
-
-    if scoring == "hybrid" and sw + cw <= 0.0:
-        raise HTTPException(
-            status_code=422,
-            detail={
-                "code": "INVALID_SCORING_WEIGHTS",
-                "message": "At least one scoring weight must be positive in hybrid mode",
+                "code": "INVALID_COMPATIBILITY_METRIC",
+                "message": "compatibility_metric must be one of: "
+                           "similarity_rate, mas_compatible, identified_compatible",
             },
         )
 
@@ -418,14 +496,6 @@ async def delta_u(request: DeltaURequest):
                     "message": "CUDA requested but not available",
                 },
             )
-
-    causal_metrics = (
-        list(request.causal_metrics)
-        if request.causal_metrics is not None
-        else None
-    )
-    if scoring in ("causal", "hybrid") and causal_metrics is None:
-        causal_metrics = ["mas_compatible", "full_compatible"]
 
     if (exposure is None) != (outcome is None):
         raise HTTPException(
@@ -459,9 +529,7 @@ async def delta_u(request: DeltaURequest):
 
     if request.mode == "two-stage":
         heatmap_threshold = (
-            request.heatmap_threshold
-            if request.heatmap_threshold is not None
-            else 0.1
+            request.heatmap_threshold if request.heatmap_threshold is not None else 0.1
         )
         if not 0.0 <= heatmap_threshold <= 1.0:
             raise HTTPException(
@@ -484,7 +552,9 @@ async def delta_u(request: DeltaURequest):
         )
 
     causal_wrapper = None
-    if scoring in ("causal", "hybrid"):
+    identification_wrapper = None
+    requires_causal = compatibility_metric in ("mas_compatible", "identified_compatible")
+    if requires_causal:
         try:
             causal_wrapper = CausalWrapper()
         except CausalError as e:
@@ -492,24 +562,37 @@ async def delta_u(request: DeltaURequest):
                 status_code=400,
                 detail={"code": "CAUSAL_ERROR", "message": str(e)},
             )
+        if compatibility_metric == "identified_compatible":
+            try:
+                from dyadic.identification import IdentificationWrapper
+                identification_wrapper = IdentificationWrapper()
+            except Exception as e:
+                raise HTTPException(
+                    status_code=400,
+                    detail={
+                        "code": "IDENTIFICATION_ERROR",
+                        "message": f"Failed to initialize identification: {e}",
+                    },
+                )
 
     delta_engine = DeltaUEngine(
         dyadic_engine=engine,
         causal_wrapper=causal_wrapper,
-        scoring=scoring,
-        structural_weight=sw,
-        causal_weight=cw,
-        causal_metrics=causal_metrics,
+        compatibility_metric=compatibility_metric,
         device=request.device,
         use_tensor_engine=request.use_tensor_engine,
         exposure=exposure,
         outcome=outcome,
+        identification_wrapper=identification_wrapper,
+        model_ids=list(state.model_ids),
     )
     computation_mode = request.mode
 
     if len(dyads) != len(state.model_ids) * (len(state.model_ids) - 1):
         dyads = engine.compare_pairs(
-            state, registry, mode="basic",
+            state,
+            registry,
+            mode="basic",
         )
 
     try:
@@ -526,7 +609,10 @@ async def delta_u(request: DeltaURequest):
                     },
                 )
             single = delta_engine.compute_delta_u(
-                request.component_id, state, dyads, registry,
+                request.component_id,
+                state,
+                dyads,
+                registry,
             )
             response_data = {
                 "result": single,
@@ -534,8 +620,11 @@ async def delta_u(request: DeltaURequest):
             }
         else:
             rankings = delta_engine.rank_lynchpins(
-                state, dyads, registry,
-                top_k=request.top_k, mode=request.mode,
+                state,
+                dyads,
+                registry,
+                top_k=request.top_k,
+                mode=request.mode,
                 heatmap_threshold=heatmap_threshold,
             )
             response_data = {
@@ -564,7 +653,9 @@ async def delta_u(request: DeltaURequest):
                         },
                     )
                 synergistic = delta_engine.compute_synergistic_sets(
-                    state, dyads, registry,
+                    state,
+                    dyads,
+                    registry,
                     set_size=request.synergistic_set_size,
                     top_n=request.top_k,
                     search_strategy=synergy_search,
@@ -594,11 +685,7 @@ async def delta_u(request: DeltaURequest):
             },
         )
 
-    response_data["scoring"] = scoring
-    response_data["structural_weight"] = sw
-    response_data["causal_weight"] = cw
-    if causal_metrics is not None:
-        response_data["causal_metrics"] = causal_metrics
+    response_data["compatibility_metric"] = compatibility_metric
     if exposure is not None:
         response_data["exposure"] = exposure
     if outcome is not None:
@@ -614,6 +701,7 @@ async def clusters(request: ClustersRequest):
     """Detect ghost clusters via compatibility profile clustering."""
     dyads = request.dyads
     model_ids = request.model_ids
+    context = None
 
     if dyads is None:
         context = get_latest_dyad_context()
@@ -639,11 +727,9 @@ async def clusters(request: ClustersRequest):
         )
 
     if model_ids is None:
-        model_ids = sorted({
-            d["ego_id"] for d in dyads
-        } | {
-            d["alter_id"] for d in dyads
-        })
+        model_ids = sorted(
+            {d["ego_id"] for d in dyads} | {d["alter_id"] for d in dyads}
+        )
 
     if request.eps <= 0:
         raise HTTPException(
@@ -717,6 +803,77 @@ async def clusters(request: ClustersRequest):
             },
         )
 
+    if request.score_field in ("mas_compatible", "identified_compatible"):
+        if request.dyads is not None and all(request.score_field in d for d in dyads):
+            pass
+        elif request.exposure is None or request.outcome is None:
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "code": "MISSING_EXPOSURE_OUTCOME",
+                    "message": (
+                        f"score_field '{request.score_field}' requires "
+                        "exposure and outcome to be specified"
+                    ),
+                },
+            )
+        if context is not None and request.dyads is None:
+            node_names = set(
+                context.registry.data[context.registry.data["type"] == "node"][
+                    "source"
+                ].tolist()
+            )
+            if request.exposure == request.outcome:
+                raise HTTPException(
+                    status_code=422,
+                    detail={
+                        "code": "INVALID_CAUSAL_TARGET",
+                        "message": "Exposure and outcome must be distinct nodes",
+                    },
+                )
+            invalid = [
+                n for n in (request.exposure, request.outcome) if n not in node_names
+            ]
+            if invalid:
+                raise HTTPException(
+                    status_code=422,
+                    detail={
+                        "code": "INVALID_CAUSAL_TARGET",
+                        "message": f"Invalid exposure/outcome node(s): {invalid}",
+                    },
+                )
+            try:
+                dyads = engine.compare_pairs(
+                    context.state,
+                    context.registry,
+                    model_ids,
+                    mode="full",
+                    causal_wrapper=CausalWrapper(),
+                    identification_wrapper=(
+                        IdentificationWrapper()
+                        if request.score_field == "identified_compatible"
+                        else None
+                    ),
+                    exposure=request.exposure,
+                    outcome=request.outcome,
+                )
+            except CausalError as e:
+                raise HTTPException(
+                    status_code=500,
+                    detail={"code": "CAUSAL_ERROR", "message": str(e)},
+                )
+        elif any(request.score_field not in d for d in dyads):
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "code": "MISSING_CAUSAL_SCORE_FIELD",
+                    "message": (
+                        f"dyads must include '{request.score_field}' when using "
+                        "a causal score field"
+                    ),
+                },
+            )
+
     if len(model_ids) < 2:
         raise HTTPException(
             status_code=400,
@@ -736,7 +893,7 @@ async def clusters(request: ClustersRequest):
         )
 
     try:
-        engine = ClusteringEngine(
+        clustering_engine = ClusteringEngine(
             umap_components=request.umap_components,
             umap_n_neighbors=request.umap_n_neighbors,
             umap_min_dist=request.umap_min_dist,
@@ -746,10 +903,10 @@ async def clusters(request: ClustersRequest):
             random_state=request.random_state,
             score_field=request.score_field,
         )
-        result = engine.detect_clusters(dyads, model_ids)
+        result = clustering_engine.detect_clusters(dyads, model_ids)
     except ClusteringError as e:
         raise HTTPException(
-            status_code=500,
+            status_code=422,
             detail={"code": "CLUSTERING_ERROR", "message": str(e)},
         )
 
@@ -764,6 +921,11 @@ async def clusters(request: ClustersRequest):
         "eps": request.eps,
         "min_samples": request.min_samples,
         "score_field": request.score_field,
+        "metric_unique_values": result["metric_unique_values"],
+        "all_pairs_compatible": result["all_pairs_compatible"],
+        "all_pairs_incompatible": result["all_pairs_incompatible"],
+        "profile_variance": result["profile_variance"],
+        "degenerate_metric": result["degenerate_metric"],
     }
 
     ghost_clusters = []
@@ -787,7 +949,7 @@ async def clusters(request: ClustersRequest):
             response_data["ghost_count"] = len(ghost_clusters)
         except GhostError as e:
             raise HTTPException(
-                status_code=500,
+                status_code=422,
                 detail={"code": "GHOST_ERROR", "message": str(e)},
             )
 
@@ -798,12 +960,74 @@ async def clusters(request: ClustersRequest):
 
 @router.post("/simulate")
 async def simulate(request: SimulateRequest):
+    is_seeded = request.registry_data is not None and request.state_data is not None
+
     try:
         suite = SimulationSuite(random_state=request.random_state)
-        result = suite.run_scenario(
-            scenario=request.scenario,
+        enforce_thresholds = request.enforce_thresholds
+        if enforce_thresholds is None:
+            enforce_thresholds = not is_seeded
+
+        common = dict(
             n_models=request.n_models,
             n_components=request.n_components,
+            compatibility_metric=request.compatibility_metric,
+            enforce_thresholds=enforce_thresholds,
+            exposure=request.exposure,
+            outcome=request.outcome,
+            include_bidirectional=request.include_bidirectional,
+        )
+
+        if is_seeded:
+            registry_records = [r.model_dump() for r in request.registry_data]
+            state_records = [r.model_dump() for r in request.state_data]
+            common.update(
+                registry_data=registry_records,
+                state_data=state_records,
+                sample_n=request.sample_n,
+            )
+
+        if request.include_plot_data:
+            common.update(
+                include_plot_data=True,
+                plot_sample_n=request.plot_sample_n,
+                pair_sample_n=request.pair_sample_n,
+            )
+
+        if request.scenario == "illusion_of_precision":
+            result = suite.run_scenario(
+                scenario=request.scenario,
+                **common,
+            )
+        elif request.scenario in ("lynchpin_of_certainty", "crux_of_certainty"):
+            result = suite.run_scenario(
+                scenario=request.scenario,
+                **common,
+                n_zones=request.n_zones,
+                noise_fraction=request.noise_fraction,
+            )
+        elif request.scenario == "ghost_discovery":
+            result = suite.run_scenario(
+                scenario=request.scenario,
+                **common,
+                mainstream_fraction=request.mainstream_fraction,
+                ghost_fraction=request.ghost_fraction,
+                eps=request.eps,
+                min_samples=request.min_samples,
+                internal_threshold=request.internal_threshold,
+                prior_threshold=request.prior_threshold,
+                divergent_fraction=request.divergent_fraction,
+            )
+        else:
+            result = suite.run_scenario(scenario=request.scenario, **common)
+    except SimulationInputError as e:
+        return JSONResponse(
+            status_code=422,
+            content={
+                "status": "error",
+                "code": "INVALID_SIMULATION_INPUT",
+                "message": str(e),
+            },
         )
     except SimulationError as e:
         return JSONResponse(
@@ -824,6 +1048,356 @@ async def simulate(request: SimulateRequest):
             "results": result["results"],
             "artifacts": result["artifacts"],
         },
+    }
+
+
+# --- Symbolic endpoints --------------------------------------------------------
+
+
+def _universe_from_request(request: SymbolicUniverseRequest):
+    if request.registry_data is not None:
+        import pandas as pd
+
+        recs = [r.model_dump() for r in request.registry_data]
+        reg = pd.DataFrame(recs)
+        universe = sym_build_universe(
+            registry=reg,
+            exposure=request.exposure,
+            outcome=request.outcome,
+        )
+    elif request.nodes is not None:
+        node_names = []
+        timing: dict[str, int | None] = {}
+        for n in request.nodes:
+            if isinstance(n, str):
+                node_names.append(n)
+                timing[n] = None
+            else:
+                node_names.append(n.name)
+                timing[n.name] = n.timing
+        if (
+            request.preferred_model is not None
+            and request.preferred_model.timing is not None
+        ):
+            for k, v in request.preferred_model.timing.items():
+                timing[k] = v
+        universe = sym_build_universe(
+            nodes=node_names,
+            timing=timing,
+            exposure=request.exposure or "",
+            outcome=request.outcome or "",
+        )
+    else:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "code": "INVALID_UNIVERSE",
+                "message": "registry_data or nodes required",
+            },
+        )
+
+    if universe.fixed_causal_edges:
+        if request.constraints is not None:
+            for c_record in request.constraints:
+                c = c_record if isinstance(c_record, dict) else c_record.model_dump()
+                if c.get("status") == "non-causal":
+                    edge = universe.comp_to_edge.get(c.get("comp_id"))
+                    if edge and edge in universe.fixed_causal_edges:
+                        raise HTTPException(
+                            status_code=422,
+                            detail={
+                                "code": "FIXED_EDGE_CONFLICT",
+                                "message": (
+                                    f"Cannot set fixed edge {edge[0]} -> {edge[1]} "
+                                    f"to non-causal"
+                                ),
+                            },
+                        )
+
+        if request.absent_nodes is not None:
+            for (src, tgt) in universe.fixed_causal_edges:
+                if src in request.absent_nodes or tgt in request.absent_nodes:
+                    raise HTTPException(
+                        status_code=422,
+                        detail={
+                            "code": "FIXED_EDGE_CONFLICT",
+                            "message": (
+                                f"Cannot mark node '{src}' or '{tgt}' as absent: "
+                                f"fixed edge {src} -> {tgt} requires both endpoints"
+                            ),
+                        },
+                    )
+
+    return universe
+
+
+def _constraints_from_request(request: SymbolicUniverseRequest, universe):
+    terms = []
+    fixed = sym_fixed_constraints(universe)
+    if not isinstance(fixed, type(True)) or fixed is not True:
+        terms.append(fixed)
+    if request.preferred_model is not None:
+        pm = request.preferred_model
+        dag_dict = {
+            "nodes": [n if isinstance(n, str) else n.name for n in pm.nodes],
+            "edges": pm.edges,
+            "exposure": pm.exposure,
+            "outcome": pm.outcome,
+        }
+        terms.append(
+            sym_dag_constraints(
+                dag_dict, universe, unmentioned_edges=pm.unmentioned_edges
+            )
+        )
+    if request.constraints is not None:
+        edge_records = [c.model_dump() for c in request.constraints]
+        terms.append(sym_edge_constraints(edge_records, universe))
+    if request.absent_nodes is not None:
+        terms.append(sym_absence_constraints(universe, set(request.absent_nodes)))
+    if not terms:
+        from symbolic.formula import TRUE
+
+        return TRUE
+    if len(terms) == 1:
+        return terms[0]
+    from symbolic.formula import And
+
+    return And(*terms)
+
+
+@router.post("/symbolic/universe")
+async def symbolic_universe(request: SymbolicUniverseRequest):
+    universe = _universe_from_request(request)
+    constraints = _constraints_from_request(request, universe)
+    update_latest_symbolic_context(universe=universe, constraints=constraints)
+    return {
+        "status": "success",
+        "data": {
+            "nodes": list(universe.nodes),
+            "exposure": universe.exposure,
+            "outcome": universe.outcome,
+            "edge_count": universe.edge_count,
+            "edge_variables": [
+                {"source": s, "target": t, "name": ev.name, "comp_id": ev.comp_id}
+                for (s, t), ev in universe.edge_vars.items()
+            ],
+        },
+    }
+
+
+@router.post("/symbolic/query-classes")
+async def symbolic_query_classes(request: SymbolicQueryRequest):
+    universe = _universe_from_request(request)
+    constraints = _constraints_from_request(request, universe)
+    result = sym_build_query_classes(
+        universe,
+        constraints,
+        mode=request.mode,
+        n_samples=request.n_samples,
+        fallback=request.fallback,
+        signature_policy=request.signature_policy,
+        max_signature_atoms=request.max_signature_atoms,
+        max_path_len=request.max_path_len,
+        max_paths=request.max_paths,
+        max_compile_seconds=request.max_compile_seconds,
+        max_count_seconds=request.max_count_seconds,
+        max_bdd_nodes=request.max_bdd_nodes,
+    )
+    class_list = []
+    for c in result.classes:
+        class_list.append(
+            {
+                "class_id": c.class_id,
+                "mass": _json_mass(c.mass),
+                "proportion": round(c.proportion, 6),
+                "adjustment_identifiable": c.atom_values.get(
+                    "adjustment_identifiable", False
+                ),
+                "empty_adjustment_valid": c.atom_values.get(
+                    "empty_adjustment_valid", False
+                ),
+                "signature": c.signature,
+                "atom_values": c.atom_values,
+            }
+        )
+    return {
+        "status": "success",
+        "data": {
+            "mode": result.mode,
+            "exact": result.exact,
+            "edge_variable_count": result.edge_variable_count,
+            "candidate_adjustment_set_count": result.candidate_adjustment_set_count,
+            "signature_atom_count": result.signature_atom_count,
+            "total_mass": _json_mass(result.total_mass),
+            "classes": class_list,
+            "warnings": result.warnings,
+        },
+    }
+
+
+@router.post("/symbolic/compare")
+async def symbolic_compare(request: SymbolicCompareRequest):
+    universe = _universe_from_request(request)
+    constraints = _constraints_from_request(request, universe)
+    engine = SymbolicCompatibilityEngine()
+
+    theory_a_dag = {
+        "nodes": [n if isinstance(n, str) else n.name for n in request.theory_a.nodes],
+        "edges": request.theory_a.edges,
+        "exposure": request.theory_a.exposure,
+        "outcome": request.theory_a.outcome,
+    }
+    a_constraints = sym_dag_constraints(
+        theory_a_dag, universe, unmentioned_edges=request.theory_a.unmentioned_edges
+    )
+
+    fixed = sym_fixed_constraints(universe)
+    from symbolic.formula import And as _And
+    from symbolic.formula import TRUE as _TRUE
+
+    if not isinstance(fixed, type(True)) or fixed is not _TRUE:
+        a_constraints = _And(fixed, a_constraints)
+
+    if request.theory_b is not None:
+        theory_b_dag = {
+            "nodes": [
+                n if isinstance(n, str) else n.name for n in request.theory_b.nodes
+            ],
+            "edges": request.theory_b.edges,
+            "exposure": request.theory_b.exposure,
+            "outcome": request.theory_b.outcome,
+        }
+        b_constraints = sym_dag_constraints(
+            theory_b_dag, universe, unmentioned_edges=request.theory_b.unmentioned_edges
+        )
+        if not isinstance(fixed, type(True)) or fixed is not _TRUE:
+            b_constraints = _And(fixed, b_constraints)
+        comparison = engine.compare_theories(universe, a_constraints, b_constraints)
+        return {
+            "status": "success",
+            "data": {
+                "adjustment_identifiable_compatible": comparison["adjustment_identifiable_compatible"],
+                "a_signature": _sig_to_dict(comparison["a_signature"]),
+                "b_signature": _sig_to_dict(comparison["b_signature"]),
+            },
+        }
+
+    comparison = engine.compare_preferred_to_multiverse(
+        universe, a_constraints, constraints
+    )
+    class_list = []
+    for c in comparison["classes"]:
+        class_list.append(
+            {
+                "class_id": c.class_id,
+                "mass": c.mass,
+                "adjustment_identifiable": c.adjustment_identifiable,
+            }
+        )
+    return {
+        "status": "success",
+        "data": {
+            "preferred_adjustment_identifiable": comparison.get(
+                "preferred_adjustment_identifiable"
+            ),
+            "classes": class_list,
+        },
+    }
+
+
+def _sig_to_dict(sig):
+    return {
+        "adjustment_identifiable": sig.adjustment_identifiable,
+        "possibly_adjustment_identifiable": sig.possibly_adjustment_identifiable,
+        "necessarily_adjustment_identifiable": sig.necessarily_adjustment_identifiable,
+        "adjustment_identifiable_mass": sig.adjustment_identifiable_mass,
+        "empty_adjustment_valid": sig.empty_adjustment_valid,
+    }
+
+
+@router.post("/symbolic/delta-u")
+async def symbolic_delta_u(request: SymbolicDeltaURequest):
+    universe = _universe_from_request(request)
+    constraints = _constraints_from_request(request, universe)
+    engine = SymbolicDeltaUEngine()
+    results = engine.compute_delta_u(
+        universe,
+        constraints,
+        top_k=request.top_k,
+        mode=request.mode,
+        n_samples=request.n_samples,
+        fallback=request.fallback,
+        signature_policy=request.signature_policy,
+        max_signature_atoms=request.max_signature_atoms,
+    )
+    result_mode = results[0]["mode"] if results else f"symbolic_{request.mode}"
+    exact = (
+        all(r.get("exact", False) for r in results)
+        if results
+        else request.mode == "full"
+    )
+    return {
+        "status": "success",
+        "data": {
+            "mode": result_mode,
+            "exact": exact,
+            "results": results,
+        },
+    }
+
+
+@router.post("/symbolic/simulate")
+async def symbolic_simulate(request: SymbolicSimulateRequest):
+    engine = SymbolicSimulationEngine()
+    if request.scenario == "illusion_of_precision":
+        result = engine.run_illusion_of_precision(
+            n_shared_edges=request.n_shared_edges,
+            n_critical_unknown=request.n_critical_unknown,
+            seed=request.seed,
+            mode=request.mode,
+            n_samples=request.n_samples,
+            fallback=request.fallback,
+            signature_policy=request.signature_policy,
+            template_size=request.template_size,
+            max_signature_atoms=request.max_signature_atoms,
+        )
+    elif request.scenario == "lynchpin_of_certainty":
+        result = engine.run_lynchpin_of_certainty(
+            n_zones=request.n_zones,
+            n_edges_per_zone=request.n_edges_per_zone,
+            seed=request.seed,
+            mode=request.mode,
+            n_samples=request.n_samples,
+            fallback=request.fallback,
+            signature_policy=request.signature_policy,
+            template_size=request.template_size,
+            max_signature_atoms=request.max_signature_atoms,
+        )
+    elif request.scenario == "ghost_discovery":
+        result = engine.run_ghost_discovery(
+            n_mainstream=request.n_mainstream,
+            n_ghost=request.n_ghost,
+            n_noise=request.n_noise,
+            seed=request.seed,
+            mode=request.mode,
+            n_samples=request.n_samples,
+            fallback=request.fallback,
+            signature_policy=request.signature_policy,
+            template_size=request.template_size,
+            max_signature_atoms=request.max_signature_atoms,
+        )
+    else:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": "INVALID_SCENARIO",
+                "message": f"Unknown scenario: {request.scenario}",
+            },
+        )
+
+    return {
+        "status": "success",
+        "data": result,
     }
 
 

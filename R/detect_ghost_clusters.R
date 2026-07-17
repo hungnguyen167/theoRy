@@ -28,10 +28,9 @@
 #' @param prior_threshold Minimum prior_compatibility for a cluster to be
 #'   considered mainstream (aligned with prior). Must be in [0, 1].
 #'   Defaults to 0.4.
-#' @param score_field Dyad column to use as the compatibility score. Defaults
-#'   to \code{"similarity_rate"}. Use causal fields such as
-#'   \code{"mas_compatible"} or \code{"full_compatible"} for alternative
-#'   simulation scenarios.
+#' @param score_field Dyad column to use as the compatibility score. Must be
+#'   exactly one of \code{"similarity_rate"}, \code{"mas_compatible"}, or
+#'   \code{"identified_compatible"}. Defaults to \code{"similarity_rate"}.
 #' @param url Base URL of the theoRy Python backend API. Defaults to
 #'   \code{getOption("theoRy.engine_url", "http://localhost:8000")}.
 #'
@@ -168,25 +167,30 @@ detect_ghost_clusters <- function(dyads,
       prior_threshold > 1) {
     stop("prior_threshold must be between 0 and 1.", call. = FALSE)
   }
+  valid_score_fields <- c(
+    "similarity_rate", "mas_compatible", "identified_compatible"
+  )
   if (!is.character(score_field) || length(score_field) != 1L ||
-      is.na(score_field) || identical(score_field, "")) {
-    stop("score_field must be a non-empty string.", call. = FALSE)
+      is.na(score_field) || !score_field %in% valid_score_fields) {
+    stop(
+      "score_field must be one of: ",
+      paste(valid_score_fields, collapse = ", "), ".",
+      call. = FALSE
+    )
+  }
+  if (!score_field %in% names(dyads)) {
+    stop("dyads is missing required column: ", score_field, ".",
+         call. = FALSE)
   }
 
-  dyad_records <- .delta_u_dyads_to_records(dyads)
-  if (score_field %in% names(dyads)) {
-    for (i in seq_along(dyad_records)) {
-      value <- dyads[[score_field]][i]
-      if (!is.na(value)) {
-        dyad_records[[i]][[score_field]] <- value
-      }
-    }
-  }
+  dyad_records <- .delta_u_dyads_to_records(
+    dyads, metric_fields = score_field
+  )
 
   payload <- list(
     registry_data = context$registry_data,
     state_data = context$state_data,
-    model_ids = context$model_ids,
+    model_ids = I(context$model_ids),
     dyads = dyad_records,
     eps = eps,
     min_samples = as.integer(min_samples),

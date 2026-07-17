@@ -2,12 +2,12 @@
 % Please edit documentation in R/build_dyad_matrix.R
 \name{build_dyad_matrix}
 \alias{build_dyad_matrix}
-\title{Build dyadic compatibility matrix}
+\title{Build a dyadic compatibility matrix}
 \usage{
 build_dyad_matrix(
   registry,
   states,
-  mode = c("basic", "full", "single-ref", "two-stage"),
+  mode = c("basic", "full", "single-ref", "two-stage", "symbolic"),
   reference_id = NULL,
   top_k = NULL,
   exposure = NULL,
@@ -17,31 +17,38 @@ build_dyad_matrix(
 }
 \arguments{
 \item{registry}{A data frame (from \code{\link{build_component_registry}})
-  or a path to a Parquet file containing the component registry.}
+or a path to a Parquet file containing the component registry.}
 
 \item{states}{A list of state records or a data frame (from
-  \code{\link{expand_model_states}}) with columns \code{model_id},
-  \code{comp_id}, \code{status}, and optionally \code{timing}.}
+\code{\link{expand_model_states}}) with columns \code{model_id},
+\code{comp_id}, \code{status}, and optionally \code{timing}.
+Under sparse semantics, node components use \code{"present"} status
+and edge components use \code{"causal"}, \code{"unknown"}, or
+\code{"non-causal"}.  Missing node records mean absent.}
 
 \item{mode}{Output mode: \code{"basic"} (structural only, default),
-  \code{"full"} (structural + causal metrics),
-  \code{"single-ref"} (dyads with the reference model as ego only),
-  \code{"two-stage"} (top-K detailed comparisons with heatmap summary).}
+\code{"full"} (structural + causal metrics),
+\code{"single-ref"} (dyads with the reference model as ego only),
+\code{"two-stage"} (top-K detailed comparisons with heatmap summary),
+\code{"symbolic"} (symbolic query class comparison).}
 
 \item{reference_id}{Required when \code{mode = "single-ref"}. The model ID
-  used as the ego model for pairwise comparisons.}
+used as the ego model for pairwise comparisons.}
 
 \item{top_k}{Required when \code{mode = "two-stage"}. Number of top
-  similarity pairs to compute full causal metrics for. Defaults to 100.}
+similarity pairs to compute full causal metrics for. Defaults to 100.}
 
-\item{exposure}{Optional name of the exposure variable for causal metrics.
-Both or neither of \code{exposure} and \code{outcome} must be provided.}
+\item{exposure}{Optional name of the exposure (cause) variable for causal
+metrics. Must be a node in the registry. When omitted, defaults to the
+first node in the registry.}
 
 \item{outcome}{Optional name of the outcome variable for causal metrics.
-Both or neither of \code{exposure} and \code{outcome} must be provided.}
+Must be a node in the registry. When omitted, defaults to the last node
+in the registry. Both or neither of \code{exposure} and \code{outcome}
+must be provided.}
 
 \item{url}{Base URL of the theoRy Python backend API. Defaults to
-  \code{getOption("theoRy.engine_url", "http://localhost:8000")}.}
+\code{getOption("theoRy.engine_url", "http://localhost:8000")}.}
 }
 \value{
 For \code{mode = "basic"}, \code{"full"}, or \code{"single-ref"}:
@@ -49,29 +56,62 @@ For \code{mode = "basic"}, \code{"full"}, or \code{"single-ref"}:
   The returned object includes a \code{theory_context} attribute used by
   \code{\link{compute_delta_u}} to make follow-on Delta-U calls explicit.
   Columns for \code{"basic"}:
-  \code{dyad_id}, \code{ego_id}, \code{alter_id}, \code{similarity_rate},
-  \code{timing_compatible}, \code{existence_conflict}, \code{repair_cost}.
+  \item{dyad_id}{Deterministic pair ID (\code{"M0001__M0002"})}
+  \item{ego_id}{ID of the ego model}
+  \item{alter_id}{ID of the alter model}
+  \item{similarity_rate}{Similarity based on shared resolved claims over
+    union of resolved claims. Node presence differences count once;
+    inapplicable edges are ignored.}
+  \item{timing_compatible}{Whether timing is compatible}
+  \item{existence_conflict}{Whether there are existence conflicts}
+  \item{repair_cost}{Number of structural differences}
 
   Additional columns for \code{"full"}:
-  \code{mas_ego}, \code{mas_alter}, \code{mas_compatible},
-  \code{full_model_ego}, \code{full_model_alter}, \code{full_compatible}.
-  \code{full_compatible} means agreement on identifiability status and
-  that active-node differences are ignorable (all differing nodes have
-  timing strictly between exposure and outcome).
+  \item{mas_ego}{Minimal adjustment sets for the ego model (list-column)}
+  \item{mas_alter}{Minimal adjustment sets for the alter model (list-column)}
+  \item{mas_compatible}{Whether adjustment sets are compatible}
+  \item{identified_ego}{Whether the ego model's exposure-outcome effect is
+    identified}
+  \item{identified_alter}{Whether the alter model's exposure-outcome effect
+    is identified}
+  \item{identified_compatible}{Whether the exposure-outcome effect is
+    identified in both models}
 
   For \code{"two-stage"}: a list with components
   \code{heatmap_summary} and \code{detailed_comparisons} (data frame).
+
+  The returned object includes a \code{theory_context} attribute
+  preserving registry, state, model IDs, and exposure/outcome metadata.
+  \code{\link{compute_delta_u}} can recompute causal dyads from this context
+  when \code{compatibility_metric} is \code{"mas_compatible"} or
+  \code{"identified_compatible"}. \code{mode = "full"} dyads preserve
+  both causal compatibility columns for use as Delta-U baselines.
 }
 \description{
-Sends a component registry and model states to the theoRy Python
-backend to compute dyadic comparisons for every directed non-self model pair.
+Sends a component registry and model states to the theoRy Python backend
+to compute dyadic comparisons for every directed non-self model pair.
 }
 \details{
 Self-dyads are not computed.  Both \code{ego -> alter} and
   \code{alter -> ego} are included as distinct rows.
   For \code{M} models, the result has \code{M * (M - 1)} rows.
-  Explicit \code{exposure}/\code{outcome} arguments take precedence over
-  metadata attributes on \code{states} or \code{registry}.
+  \code{mas_ego} and \code{mas_alter} are represented as list-columns
+  using \code{I(list(...))}. An empty outer list means no adjustment sets
+  are available, while a list containing \code{character(0)} represents a
+  valid empty adjustment set.
+
+  Under sparse node semantics, a node-presence difference between two
+  models counts as one structural difference.  Edges incident to absent
+  nodes are inapplicable and are not compared.  Only edges applicable in
+  both models contribute to edge-level similarity.  Shared \code{"non-causal"}
+  resolutions reward agreement.
+
+  When \code{exposure} and \code{outcome} are omitted, the function
+  attempts to resolve them from the \code{states} data frame attributes
+  (\code{attr(states, "exposure")}, \code{attr(states, "outcome")}) and
+  then from the \code{registry} attributes. Explicit arguments always
+  take precedence. A warning is issued if the resolved exposure/outcome
+  differs from the metadata found on the inputs.
 }
 \examples{
 \dontrun{
@@ -86,7 +126,7 @@ head(dyads)
 # Full mode with causal metrics
 full <- build_dyad_matrix(reg, states, mode = "full")
 
-# Full mode with explicit causal target
+# Full mode with explicit exposure and outcome
 full <- build_dyad_matrix(reg, states, mode = "full",
   exposure = "X", outcome = "Z")
 
@@ -98,4 +138,5 @@ single <- build_dyad_matrix(reg, states, mode = "single-ref",
 two_stage <- build_dyad_matrix(reg, states, mode = "two-stage",
   top_k = 5)
 }
+
 }

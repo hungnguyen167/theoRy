@@ -2,8 +2,7 @@
 % Please edit documentation in R/start_theory_engine.R
 \name{start_theory_engine}
 \alias{start_theory_engine}
-\alias{stop_theory_engine}
-\title{Start and stop the theoRy Python backend engine}
+\title{Start the theoRy Python backend engine}
 \usage{
 start_theory_engine(
   port = 8000L,
@@ -11,43 +10,29 @@ start_theory_engine(
   timeout = 30,
   python = "python"
 )
-
-stop_theory_engine(
-  port = 8000L,
-  host = "127.0.0.1",
-  timeout = 3
-)
 }
 \arguments{
-\item{port}{Port number. Defaults to \code{8000}.}
+\item{port}{Port number.  Defaults to \code{8000}.}
 
-\item{host}{Host address. Defaults to \code{"127.0.0.1"}.}
+\item{host}{Host address.  Defaults to \code{"127.0.0.1"}.}
 
-\item{timeout}{Maximum seconds to wait. For \code{start_theory_engine}, this is
-the time to wait for the server to become ready (default 30).
-For \code{stop_theory_engine}, this is the time to wait for graceful
-shutdown before force-killing (default 3).}
+\item{timeout}{Maximum seconds to wait for the server to become
+ready.  Defaults to 30.}
 
-\item{python}{Path to the Python interpreter.}
+\item{python}{Path to the Python interpreter to use.  Defaults to
+\code{"python"} (on the system \code{PATH}).}
 }
 \value{
-Invisibly returns \code{TRUE} when the operation completes.
+Invisibly returns \code{TRUE} when the server is ready.
 }
 \description{
-\code{start_theory_engine()} launches the Python FastAPI server in the
-background and blocks until the health endpoint responds. Call this
-once per R session before using other theoRy functions that require
-the backend.
-
-\code{stop_theory_engine()} sends a graceful shutdown request to the
-running backend. If the backend is unreachable or the shutdown
-endpoint is unavailable, it falls back to killing the process bound
-to the given port.
+Launches the Python FastAPI server in the background and blocks until
+the health endpoint responds.  Call this once per R session before
+using any of the other theoRy functions that require the backend.
 }
 \examples{
 \dontrun{
 start_theory_engine()
-# ... use theoRy functions ...
-stop_theory_engine()
 }
+
 }

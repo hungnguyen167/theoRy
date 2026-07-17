@@ -8,3 +8,5 @@ _bmad/
 _bmad-output/
 docs/internal
 tests/
+.lavish/
+AGENTS.md

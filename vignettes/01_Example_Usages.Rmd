@@ -1,5 +1,5 @@
 ---
-title: "theoRy: An R package for meta-analyzing theoretical uncertainty"
+title: "theoRy: Deprecated Pure-R Workflow"
 output:
   pdf_document:
     fig_width: 4.5
@@ -14,12 +14,24 @@ classoption: landscape
 }
 </style>
 
-**Authors**: Hung H. V. Nguyen and Nate Breznau. The package is built on top of `dagitty` and `ggdag`. 
+**Authors**: Hung H. V. Nguyen and Nate Breznau.
 
 
 **Current version**: 0.1.0
 
 ## Setup
+
+> **Legacy vignette.** The functions demonstrated here are the deprecated,
+> pure-R workflow retained for historical analyses. The current package uses an
+> R client with a Python FastAPI backend; see
+> `02_Pipeline_and_Visualization.Rmd` for `start_theory_engine()`,
+> `build_component_registry()`, `expand_model_states()`,
+> `build_dyad_matrix()`, `compute_delta_u()`, and `run_simulation()`.
+>
+> The modern API exposes exactly `similarity_rate`, `mas_compatible`, and
+> `identified_compatible`. Its causal metrics use explicit total-effect queries,
+> Dagitty adjustment sets, and general identification from R `causaleffect`
+> through Python/rpy2.
 
 To install the package from Github, please use either the remotes (preferable) or devtools
 
@@ -32,7 +44,7 @@ library(data.table)
 library(gt)
 ```
 \newpage
-## Build Causal Matrix (`build_causal_node`)
+## Legacy: Build Causal Matrix (`build_causal_node`)
 
 A causal matrix includes all possible causal configurations of the variables supplied as inputs. When defining the inputs, the user places the variables ordinally in time. Then the algorithm creates every possible causal model, such that every path is either causal or not causal, and simultaneously occurring variables are either not related or are correlated (direction unknown).
 
@@ -96,7 +108,7 @@ causal_matrix %>% filter(model==1) %>% gt()
 ```
 
 \newpage
-## Build Formula Matrix (`build_formula_matrix`)
+## Legacy: Build Formula Matrix (`build_formula_matrix`)
 
 The formula matrix contains lavaan style formulas to express the causal models. This matrix has one model per row. For more information see [lavaan](https://cran.r-project.org/web/packages/lavaan/lavaan.pdf) documentation.
 
@@ -111,7 +123,7 @@ formula_matrix %>% filter(model %in% c(1,2)) %>% gt()
 ```
 
 \newpage
-## run_theoRy: the wrapper function
+## Legacy: `run_theoRy()` Wrapper
 
 To produce all of the above objects, instead of running through each function, you can (and are recommended) to use the run_theoRy function, which is a wrapper function that will produce the causal_matrix, node_timing, and formula_matrix from the same inputs.
 
@@ -143,9 +155,13 @@ dag_plots[[2]]
 ```
 \newpage
 
-## Add compatible
+## Legacy Compatibility
 
-In the working paper coming with this package, we discuss the concepts of test compatible and full-model compatible. To retrieve this information from the model universe, you can use the `add_compatible` function. This is practically choosing a reference model and see how compatible your preferred model is compared to the entire causal model universe. 
+The deprecated `add_compatible()` function compares a reference model with the
+legacy pure-R universe and emits `test_compatible` and
+`full_model_compatible`. The latter is a distinct historical concept: it is
+not a modern compatibility metric, is not general causal identification, and
+must not be interpreted as `identified_compatible`.
 
 ```{r add_compatible}
 cmp_matrix <- add_compatible(formula_matrix, ref_mod = 1)
@@ -159,9 +175,11 @@ cmp_matrix %>% filter(model %in% c(1:10)) %>%
 
 
 \newpage
-## Other utility functions
+## Other Legacy Utility Functions
 
-There are other utility functions that might be useful for adding/finding models (`find_add_models`) or build a set matrix used in QCA (`build_set_matrix`). You can consult the documentation for further details.
+Other deprecated utility functions add or find models (`find_add_models()`) or
+build a set matrix for QCA (`build_set_matrix()`). They do not call the Python
+engine and are separate from the current registry/state/dyad workflow.
 
 ## Future plans
 

@@ -9,6 +9,9 @@ import torch
 
 from registry.schema import ComponentRegistry
 from state.tensor import StateTensor
+from state.semantics import (
+    edge_applicable,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +23,59 @@ class DeltaUError(Exception):
     pass
 
 
+def _has_cycle(directed_edges: set[tuple[str, str]]) -> bool:
+    graph: dict[str, list[str]] = {}
+    for source, target in directed_edges:
+        graph.setdefault(source, []).append(target)
+        graph.setdefault(target, [])
+
+    visiting: set[str] = set()
+    visited: set[str] = set()
+
+    def visit(node: str) -> bool:
+        if node in visiting:
+            return True
+        if node in visited:
+            return False
+        visiting.add(node)
+        for child in graph.get(node, []):
+            if visit(child):
+                return True
+        visiting.remove(node)
+        visited.add(node)
+        return False
+
+    return any(visit(node) for node in list(graph))
+
+
+def _would_create_cycle(
+    comp_id: str,
+    model_id: str,
+    registry: ComponentRegistry,
+    state: StateTensor,
+) -> bool:
+    df = registry.data
+    row = df[df["comp_id"] == comp_id]
+    if row.empty or row["type"].values[0] != "edge":
+        return False
+    if row["direction"].values[0] != "->":
+        return False
+    if not edge_applicable(state, model_id, comp_id, registry):
+        return True
+
+    directed_edges: set[tuple[str, str]] = set()
+    for _, edge_row in df[
+        (df["type"] == "edge") & (df["direction"] == "->")
+    ].iterrows():
+        edge_cid = edge_row["comp_id"]
+        if not edge_applicable(state, model_id, edge_cid, registry):
+            continue
+        if edge_cid == comp_id or state.get_status(model_id, edge_cid) == "causal":
+            directed_edges.add((edge_row["source"], edge_row["target"]))
+
+    return _has_cycle(directed_edges)
+
+
 def _clone_state(state: StateTensor) -> StateTensor:
     return StateTensor(
         tensor=state.tensor.clone(),
@@ -28,6 +84,21 @@ def _clone_state(state: StateTensor) -> StateTensor:
         component_ids=list(state.component_ids),
         model_ids=list(state.model_ids),
         timing=dict(state.timing),
+        node_present=(
+            state.node_present_mask.clone()
+            if hasattr(state, "node_present_mask")
+            else None
+        ),
+        edge_applicable=(
+            state.edge_applicable_mask.clone()
+            if hasattr(state, "edge_applicable_mask")
+            else None
+        ),
+        node_comp_ids=set(state._node_comp_ids),
+        edge_comp_ids=set(state._edge_comp_ids),
+        edge_to_nodes=(
+            dict(state._edge_to_nodes) if hasattr(state, "_edge_to_nodes") else None
+        ),
     )
 
 
@@ -40,8 +111,7 @@ def _node_component_id(node_name: str, registry: ComponentRegistry) -> str:
         df = registry.data
         node_comps = df[df["type"] == "node"]
         _NODE_COMP_CACHE[registry_id] = {
-            row["source"]: row["comp_id"]
-            for _, row in node_comps.iterrows()
+            row["source"]: row["comp_id"] for _, row in node_comps.iterrows()
         }
 
     cache = _NODE_COMP_CACHE[registry_id]
@@ -64,6 +134,9 @@ def _edge_can_be_causal(
     if row.empty or row["type"].values[0] != "edge":
         return True
 
+    if row["direction"].values[0] == "<->":
+        return edge_applicable(state, model_id, comp_id, registry)
+
     source_name = row["source"].values[0]
     target_name = row["target"].values[0]
 
@@ -76,9 +149,13 @@ def _edge_can_be_causal(
     source_t = state.get_timing(model_id, source_cid)
     target_t = state.get_timing(model_id, target_cid)
 
-    if source_t is None or target_t is None:
+    if source_t is not None and target_t is not None and source_t >= target_t:
         return False
-    return source_t < target_t
+
+    if _would_create_cycle(comp_id, model_id, registry, state):
+        return False
+
+    return True
 
 
 def _compute_dyad_similarity_index(
@@ -108,11 +185,7 @@ def _merge_dyads(
     affected_dyads: list[dict],
     affected_models: set[str],
 ) -> list[dict]:
-    """Merge baseline dyads with recomputed affected dyads.
-    
-    Returns a new list where dyads involving affected_models come from
-    affected_dyads, and all others come from baseline_dyads.
-    """
+    """Merge baseline dyads with recomputed affected dyads."""
     affected_new = {d["dyad_id"]: d for d in affected_dyads}
     result = []
     for d in baseline_dyads:
@@ -122,9 +195,7 @@ def _merge_dyads(
             if d["dyad_id"] in affected_new:
                 result.append(affected_new[d["dyad_id"]])
             else:
-                raise DeltaUError(
-                    f"Missing recomputed affected dyad: {d['dyad_id']}"
-                )
+                raise DeltaUError(f"Missing recomputed affected dyad: {d['dyad_id']}")
         else:
             result.append(d)
     return result
@@ -135,14 +206,13 @@ class DeltaUEngine:
         self,
         dyadic_engine=None,
         causal_wrapper=None,
-        scoring: str = "structural",
-        structural_weight: float = 0.5,
-        causal_weight: float = 0.5,
-        causal_metrics: list[str] | None = None,
+        compatibility_metric: str = "similarity_rate",
         device: str = "auto",
         use_tensor_engine: bool = True,
         exposure: str | None = None,
         outcome: str | None = None,
+        identification_wrapper=None,
+        model_ids: list[str] | None = None,
     ):
         from dyadic.engine import DyadicEngine
         from simulation.scoring import CompatibilityScorer
@@ -150,22 +220,18 @@ class DeltaUEngine:
 
         self._dyadic_engine = dyadic_engine or DyadicEngine()
         self._causal_wrapper = causal_wrapper
-        self._scoring = scoring
-        self._structural_weight = structural_weight
-        self._causal_weight = causal_weight
-        self._causal_metrics = causal_metrics
+        self._compatibility_metric = compatibility_metric
         self._device = device
         self._use_tensor_engine = use_tensor_engine
         self._exposure = exposure
         self._outcome = outcome
+        self._identification_wrapper = identification_wrapper
+        self._model_ids = sorted(model_ids) if model_ids is not None else None
         self._resolved_device = resolve_device(device)
         self.used_tensor_engine = False
 
         self._scorer = CompatibilityScorer(
-            scoring=scoring,
-            structural_weight=structural_weight,
-            causal_weight=causal_weight,
-            causal_metrics=causal_metrics,
+            compatibility_metric=compatibility_metric,
         )
 
     def _get_causal_wrapper(self):
@@ -189,8 +255,10 @@ class DeltaUEngine:
         if component_id not in state.component_index:
             raise DeltaUError(f"Unknown component ID: {component_id!r}")
 
-        absent_models = self._models_with_absent(component_id, state)
-        if not absent_models:
+        unknown_models = self._models_with_unknown_applicable_edge(
+            component_id, state, registry, self._analysis_model_ids(state)
+        )
+        if not unknown_models:
             result = {
                 "component_id": component_id,
                 "delta_u_positive": 0.0,
@@ -211,14 +279,24 @@ class DeltaUEngine:
         dyad_ids = [d["dyad_id"] for d in baseline_dyads]
 
         pos = self._simulate_resolution(
-            component_id, "causal", absent_models,
-            state, registry, baseline_scores,
-            dyad_ids, baseline_dyads,
+            component_id,
+            "causal",
+            unknown_models,
+            state,
+            registry,
+            baseline_scores,
+            dyad_ids,
+            baseline_dyads,
         )
         neg = self._simulate_resolution(
-            component_id, "non-causal", absent_models,
-            state, registry, baseline_scores,
-            dyad_ids, baseline_dyads,
+            component_id,
+            "non-causal",
+            unknown_models,
+            state,
+            registry,
+            baseline_scores,
+            dyad_ids,
+            baseline_dyads,
         )
 
         delta_u = round(max(pos["delta"], neg["delta"], 0.0), _ROUND_DECIMALS)
@@ -232,8 +310,10 @@ class DeltaUEngine:
             best = "negative"
             best_stats = neg
         else:
-            best = "none"
-            best_stats = {"improved": 0, "worsened": 0}
+            # Both resolutions yield the same positive gain. Choose a stable
+            # direction rather than reporting that resolution has no value.
+            best = "positive"
+            best_stats = pos
 
         result = {
             "component_id": component_id,
@@ -258,11 +338,11 @@ class DeltaUEngine:
         if top_k <= 0:
             raise DeltaUError("top_k must be positive")
 
-        uncertain = self._uncertain_components(state)
+        uncertain = self._uncertain_applicable_edges(
+            state, registry, self._analysis_model_ids(state)
+        )
         if not uncertain:
-            logger.info(
-                "No uncertain components - multiverse is fully resolved"
-            )
+            logger.info("No uncertain applicable edges - multiverse is fully resolved")
             return []
 
         if self._scorer.requires_causal():
@@ -271,33 +351,38 @@ class DeltaUEngine:
             causal_dyads = dyads
 
         if mode == "two-stage":
-            threshold = (
-                heatmap_threshold if heatmap_threshold is not None else 0.1
-            )
+            threshold = heatmap_threshold if heatmap_threshold is not None else 0.1
             if not 0.0 <= threshold <= 1.0:
-                raise DeltaUError(
-                    "heatmap_threshold must be between 0 and 1"
-                )
+                raise DeltaUError("heatmap_threshold must be between 0 and 1")
             if self._scorer.requires_causal():
                 structural_engine = DeltaUEngine(
                     dyadic_engine=self._dyadic_engine,
-                    scoring="structural",
+                    compatibility_metric="similarity_rate",
                     device=self._device,
                     use_tensor_engine=self._use_tensor_engine,
+                    model_ids=self._analysis_model_ids(state),
                 )
                 results = structural_engine._stage1_all(
-                    uncertain, state, dyads, registry,
+                    uncertain,
+                    state,
+                    dyads,
+                    registry,
                 )
             else:
                 results = self._stage1_all(
-                    uncertain, state, causal_dyads, registry,
+                    uncertain,
+                    state,
+                    causal_dyads,
+                    registry,
                 )
-            candidates = [
-                r for r in results if r["delta_u"] >= threshold
-            ]
+            candidates = [r for r in results if r["delta_u"] >= threshold]
             if self._scorer.requires_causal():
                 final = self._stage2_rank(
-                    candidates, uncertain, state, causal_dyads, registry,
+                    candidates,
+                    uncertain,
+                    state,
+                    causal_dyads,
+                    registry,
                 )
             else:
                 final = candidates
@@ -329,15 +414,13 @@ class DeltaUEngine:
         if beam_width <= 0:
             raise DeltaUError("beam_width must be positive")
         if search_strategy not in ("greedy", "beam"):
-            raise DeltaUError(
-                "search_strategy must be 'greedy' or 'beam'"
-            )
+            raise DeltaUError("search_strategy must be 'greedy' or 'beam'")
 
-        uncertain = self._uncertain_components(state)
+        uncertain = self._uncertain_applicable_edges(
+            state, registry, self._analysis_model_ids(state)
+        )
         if len(uncertain) < set_size:
-            logger.info(
-                "No uncertain components - no synergistic sets possible"
-            )
+            logger.info("No uncertain applicable edges - no synergistic sets possible")
             return []
 
         if self._scorer.requires_causal():
@@ -349,19 +432,28 @@ class DeltaUEngine:
             cid: self.compute_delta_u(cid, state, causal_dyads, registry)
             for cid in uncertain
         }
-        individual_ranking = sorted(
-            uncertain, key=lambda c: -individual[c]["delta_u"]
-        )
+        individual_ranking = sorted(uncertain, key=lambda c: -individual[c]["delta_u"])
 
         if search_strategy == "greedy":
             sets = self._greedy_sets(
-                individual_ranking[:top_n], set_size, top_n,
-                individual, state, causal_dyads, registry,
+                individual_ranking[:top_n],
+                set_size,
+                top_n,
+                individual,
+                state,
+                causal_dyads,
+                registry,
             )
         else:
             sets = self._beam_sets(
-                individual_ranking, set_size, top_n, beam_width,
-                individual, state, causal_dyads, registry,
+                individual_ranking,
+                set_size,
+                top_n,
+                beam_width,
+                individual,
+                state,
+                causal_dyads,
+                registry,
             )
 
         return sets
@@ -371,21 +463,35 @@ class DeltaUEngine:
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _models_with_absent(
-        component_id: str,
+    def _models_with_unknown_applicable_edge(
+        edge_id: str,
         state: StateTensor,
+        registry: ComponentRegistry,
+        model_ids: list[str] | None = None,
     ) -> list[str]:
-        return [
-            mid
-            for mid in state.model_ids
-            if state.get_status(mid, component_id) == "unknown"
-        ]
+        """Find models where an edge is applicable and has unknown status."""
+        result = []
+        for mid in model_ids or state.model_ids:
+            if not edge_applicable(state, mid, edge_id, registry):
+                continue
+            if state.get_status(mid, edge_id) == "unknown":
+                result.append(mid)
+        return result
 
     @staticmethod
-    def _uncertain_components(state: StateTensor) -> list[str]:
+    def _uncertain_applicable_edges(
+        state: StateTensor,
+        registry: ComponentRegistry,
+        model_ids: list[str] | None = None,
+    ) -> list[str]:
+        """Find edge components that are unknown in at least one applicable model."""
         uncertain: list[str] = []
         for cid in state.component_ids:
-            for mid in state.model_ids:
+            if cid not in state._edge_comp_ids:
+                continue
+            for mid in model_ids or state.model_ids:
+                if not edge_applicable(state, mid, cid, registry):
+                    continue
                 if state.get_status(mid, cid) == "unknown":
                     uncertain.append(cid)
                     break
@@ -397,21 +503,18 @@ class DeltaUEngine:
         state: StateTensor,
         registry: ComponentRegistry,
     ) -> list[dict]:
-        missing = sorted({
-            m
-            for d in dyads
-            for m in self._scorer.causal_metrics
-            if m not in d
-        })
-        if not missing:
+        metric = self._compatibility_metric
+        if all(metric in d for d in dyads):
             return dyads
 
-        logger.info(
-            "Dyads missing causal metrics %s; recomputing full dyads", missing
-        )
+        logger.info("Dyads missing %s; recomputing full dyads", metric)
         return self._dyadic_engine.compare_pairs(
-            state, registry, mode="full",
+            state,
+            registry,
+            self._analysis_model_ids(state),
+            mode="full",
             causal_wrapper=self._get_causal_wrapper(),
+            identification_wrapper=self._identification_wrapper,
             exposure=self._exposure,
             outcome=self._outcome,
         )
@@ -421,27 +524,27 @@ class DeltaUEngine:
         sim_state: StateTensor,
         registry: ComponentRegistry,
     ) -> list[dict]:
-        if (
-            not self._scorer.requires_causal()
-            and self._use_tensor_engine
-        ):
+        if not self._scorer.requires_causal() and self._use_tensor_engine:
             from dyadic.tensor_engine import structural_dyad_scores
 
             try:
                 tensor_scores, tensor_ids = structural_dyad_scores(
-                    sim_state, registry,
-                    model_ids=list(sim_state.model_ids),
+                    sim_state,
+                    registry,
+                    model_ids=self._analysis_model_ids(sim_state),
                     device=self._resolved_device,
                 )
                 sim_dyads = []
                 for i, did in enumerate(tensor_ids):
                     parts = did.split("__")
-                    sim_dyads.append({
-                        "dyad_id": did,
-                        "ego_id": parts[0],
-                        "alter_id": parts[1],
-                        "similarity_rate": round(float(tensor_scores[i]), 6),
-                    })
+                    sim_dyads.append(
+                        {
+                            "dyad_id": did,
+                            "ego_id": parts[0],
+                            "alter_id": parts[1],
+                            "similarity_rate": round(float(tensor_scores[i]), 6),
+                        }
+                    )
                 self.used_tensor_engine = True
                 return sim_dyads
             except Exception as e:
@@ -451,14 +554,21 @@ class DeltaUEngine:
 
         if self._scorer.requires_causal():
             return self._dyadic_engine.compare_pairs(
-                sim_state, registry, mode="full",
+                sim_state,
+                registry,
+                self._analysis_model_ids(sim_state),
+                mode="full",
                 causal_wrapper=self._get_causal_wrapper(),
+                identification_wrapper=self._identification_wrapper,
                 exposure=self._exposure,
                 outcome=self._outcome,
             )
 
         return self._dyadic_engine.compare_pairs(
-            sim_state, registry, mode="basic",
+            sim_state,
+            registry,
+            self._analysis_model_ids(sim_state),
+            mode="basic",
         )
 
     def _compute_sim_dyads_incremental(
@@ -470,13 +580,17 @@ class DeltaUEngine:
     ) -> list[dict]:
         """Compute dyads incrementally: only recompute pairs involving mutated models."""
         mutated_set = set(mutated_models)
-        all_models = list(sim_state.model_ids)
+        all_models = self._analysis_model_ids(sim_state)
 
         if self._scorer.requires_causal():
             affected_dyads = self._dyadic_engine.compare_pairs_subset(
-                sim_state, registry, mutated_models, all_models,
+                sim_state,
+                registry,
+                mutated_models,
+                all_models,
                 mode="full",
                 causal_wrapper=self._get_causal_wrapper(),
+                identification_wrapper=self._identification_wrapper,
                 exposure=self._exposure,
                 outcome=self._outcome,
             )
@@ -485,7 +599,8 @@ class DeltaUEngine:
                 from dyadic.tensor_engine import structural_similarity_matrix
 
                 matrix, ordered_ids = structural_similarity_matrix(
-                    sim_state, registry,
+                    sim_state,
+                    registry,
                     model_ids=all_models,
                     device=self._resolved_device,
                     exclude_temporally_invalid=True,
@@ -497,24 +612,32 @@ class DeltaUEngine:
                             continue
                         if ego not in mutated_set and alter not in mutated_set:
                             continue
-                        affected_dyads.append({
-                            "dyad_id": f"{ego}__{alter}",
-                            "ego_id": ego,
-                            "alter_id": alter,
-                            "similarity_rate": round(float(matrix[i, j]), 6),
-                        })
+                        affected_dyads.append(
+                            {
+                                "dyad_id": f"{ego}__{alter}",
+                                "ego_id": ego,
+                                "alter_id": alter,
+                                "similarity_rate": round(float(matrix[i, j]), 6),
+                            }
+                        )
                 self.used_tensor_engine = True
             except Exception as e:
                 logger.warning(
                     "Tensor engine failed, falling back to DyadicEngine: %s", e
                 )
                 affected_dyads = self._dyadic_engine.compare_pairs_subset(
-                    sim_state, registry, mutated_models, all_models,
+                    sim_state,
+                    registry,
+                    mutated_models,
+                    all_models,
                     mode="basic",
                 )
         else:
             affected_dyads = self._dyadic_engine.compare_pairs_subset(
-                sim_state, registry, mutated_models, all_models,
+                sim_state,
+                registry,
+                mutated_models,
+                all_models,
                 mode="basic",
             )
 
@@ -524,7 +647,7 @@ class DeltaUEngine:
         self,
         component_id: str,
         target_status: str,
-        absent_models: list[str],
+        unknown_models: list[str],
         state: StateTensor,
         registry: ComponentRegistry,
         baseline_scores: torch.Tensor,
@@ -534,9 +657,12 @@ class DeltaUEngine:
         sim_state = _clone_state(state)
 
         updates = []
-        for mid in absent_models:
+        for mid in unknown_models:
             if target_status == "causal" and not _edge_can_be_causal(
-                component_id, mid, registry, state,
+                component_id,
+                mid,
+                registry,
+                state,
             ):
                 continue
             updates.append((mid, component_id, target_status))
@@ -548,7 +674,10 @@ class DeltaUEngine:
         mutated_models = [u[0] for u in updates]
 
         sim_dyads = self._compute_sim_dyads_incremental(
-            sim_state, registry, baseline_dyads, mutated_models,
+            sim_state,
+            registry,
+            baseline_dyads,
+            mutated_models,
         )
 
         sim_scores = self._scorer.score_dyads(sim_dyads)
@@ -558,8 +687,7 @@ class DeltaUEngine:
             id_to_idx = {did: i for i, did in enumerate(dyad_ids)}
             aligned_baseline = torch.tensor(
                 [
-                    baseline_scores[id_to_idx[did]].item()
-                    if did in id_to_idx else 0.0
+                    baseline_scores[id_to_idx[did]].item() if did in id_to_idx else 0.0
                     for did in sim_ids
                 ],
                 dtype=torch.float32,
@@ -568,7 +696,8 @@ class DeltaUEngine:
             aligned_baseline = baseline_scores
 
         improved, worsened, delta = _compute_delta_stats(
-            aligned_baseline, sim_scores,
+            aligned_baseline,
+            sim_scores,
         )
         return {"improved": improved, "worsened": worsened, "delta": delta}
 
@@ -583,8 +712,7 @@ class DeltaUEngine:
     ) -> list[dict]:
         if len(uncertain) <= 1:
             return [
-                self.compute_delta_u(cid, state, dyads, registry)
-                for cid in uncertain
+                self.compute_delta_u(cid, state, dyads, registry) for cid in uncertain
             ]
 
         results: dict[str, dict] = {}
@@ -594,9 +722,7 @@ class DeltaUEngine:
 
         with ThreadPoolExecutor(max_workers=workers) as executor:
             futures = {
-                executor.submit(
-                    self.compute_delta_u, cid, state, dyads, registry
-                ): cid
+                executor.submit(self.compute_delta_u, cid, state, dyads, registry): cid
                 for cid in uncertain
             }
             for future in as_completed(futures):
@@ -628,8 +754,7 @@ class DeltaUEngine:
     ) -> list[dict]:
         candidate_ids = [c["component_id"] for c in candidates]
         reranked = [
-            self.compute_delta_u(cid, state, dyads, registry)
-            for cid in candidate_ids
+            self.compute_delta_u(cid, state, dyads, registry) for cid in candidate_ids
         ]
         return reranked
 
@@ -647,9 +772,7 @@ class DeltaUEngine:
                     row = row.iloc[0]
                 entry["type"] = row["type"]
                 entry["source"] = row["source"]
-                entry["target"] = (
-                    row["target"] if row["target"] is not None else None
-                )
+                entry["target"] = row["target"] if row["target"] is not None else None
             else:
                 entry["type"] = None
                 entry["source"] = None
@@ -667,11 +790,14 @@ class DeltaUEngine:
         registry: ComponentRegistry,
     ) -> list[dict]:
         all_sets = self._enumerate_combinations(
-            candidates, set_size, individual, state, dyads, registry,
+            candidates,
+            set_size,
+            individual,
+            state,
+            dyads,
+            registry,
         )
-        all_sets.sort(
-            key=lambda r: (-r["delta_u_combined"], r["components"])
-        )
+        all_sets.sort(key=lambda r: (-r["delta_u_combined"], r["components"]))
         return self._with_set_ranks(all_sets[:top_n])
 
     def _beam_sets(
@@ -693,9 +819,7 @@ class DeltaUEngine:
             key=lambda c: -individual[c]["delta_u"],
         )[:beam_width]
 
-        beam: list[tuple[str, ...]] = [
-            (cid,) for cid in best_singles
-        ]
+        beam: list[tuple[str, ...]] = [(cid,) for cid in best_singles]
 
         for depth in range(1, set_size):
             next_beam: list[tuple[str, ...]] = []
@@ -713,24 +837,28 @@ class DeltaUEngine:
             scored: list[dict] = []
             for combo in next_beam:
                 score = self._evaluate_combination(
-                    list(combo), individual, state, dyads, registry,
+                    list(combo),
+                    individual,
+                    state,
+                    dyads,
+                    registry,
                 )
                 scored.append(score)
-            scored.sort(
-                key=lambda r: (-r["delta_u_combined"], r["components"])
-            )
+            scored.sort(key=lambda r: (-r["delta_u_combined"], r["components"]))
             beam = [tuple(s["components"]) for s in scored[:beam_width]]
 
         final_sets = [
             self._evaluate_combination(
-                list(combo), individual, state, dyads, registry,
+                list(combo),
+                individual,
+                state,
+                dyads,
+                registry,
             )
             for combo in beam
             if len(combo) == set_size
         ]
-        final_sets.sort(
-            key=lambda r: (-r["delta_u_combined"], r["components"])
-        )
+        final_sets.sort(key=lambda r: (-r["delta_u_combined"], r["components"]))
         return self._with_set_ranks(final_sets[:top_n])
 
     @staticmethod
@@ -752,7 +880,11 @@ class DeltaUEngine:
         for combo in combinations(candidates, set_size):
             combo_list = sorted(combo)
             score = self._evaluate_combination(
-                combo_list, individual, state, dyads, registry,
+                combo_list,
+                individual,
+                state,
+                dyads,
+                registry,
             )
             results.append(score)
         return results
@@ -776,10 +908,15 @@ class DeltaUEngine:
             else:
                 continue
 
-            absent_models = self._models_with_absent(cid, state)
-            for mid in absent_models:
+            unknown_models = self._models_with_unknown_applicable_edge(
+                cid, state, registry, self._analysis_model_ids(state)
+            )
+            for mid in unknown_models:
                 if target == "causal" and not _edge_can_be_causal(
-                    cid, mid, registry, state,
+                    cid,
+                    mid,
+                    registry,
+                    state,
                 ):
                     continue
                 sim_state.set_status(mid, cid, target)
@@ -795,24 +932,21 @@ class DeltaUEngine:
             id_to_idx = {did: i for i, did in enumerate(baseline_ids)}
             baseline_scores = torch.tensor(
                 [
-                    baseline_scores[id_to_idx[did]].item()
-                    if did in id_to_idx else 0.0
+                    baseline_scores[id_to_idx[did]].item() if did in id_to_idx else 0.0
                     for did in sim_ids
                 ],
                 dtype=torch.float32,
             )
 
         _, _, combined_delta = _compute_delta_stats(
-            baseline_scores, sim_scores,
+            baseline_scores,
+            sim_scores,
         )
 
         individual_sum = sum(
-            round(individual[cid]["delta_u"], _ROUND_DECIMALS)
-            for cid in component_ids
+            round(individual[cid]["delta_u"], _ROUND_DECIMALS) for cid in component_ids
         )
-        synergy = round(
-            combined_delta - individual_sum, _ROUND_DECIMALS
-        )
+        synergy = round(combined_delta - individual_sum, _ROUND_DECIMALS)
         label = "super-additive" if synergy > _TOLERANCE else "additive"
 
         return {
@@ -822,3 +956,8 @@ class DeltaUEngine:
             "synergy_score": synergy,
             "label": label,
         }
+
+    def _analysis_model_ids(self, state: StateTensor) -> list[str]:
+        if self._model_ids is None:
+            return list(state.model_ids)
+        return [model_id for model_id in self._model_ids if model_id in state.model_index]

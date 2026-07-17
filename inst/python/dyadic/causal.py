@@ -17,9 +17,7 @@ class CausalWrapper:
         if self._r_available is True:
             return True
         if self._r_available is False:
-            raise CausalError(
-                "R/dagitty not available (already checked this session)"
-            )
+            raise CausalError("R/dagitty not available (already checked this session)")
         try:
             import rpy2.robjects as ro  # noqa: F401
         except ImportError as e:
@@ -38,9 +36,7 @@ class CausalWrapper:
             ) from e
         except Exception as e:
             self._r_available = False
-            raise CausalError(
-                f"Unexpected error importing rpy2: {e}"
-            ) from e
+            raise CausalError(f"Unexpected error importing rpy2: {e}") from e
 
         try:
             from rpy2.robjects.packages import importr
@@ -71,18 +67,33 @@ class CausalWrapper:
     def _dag_spec_to_dagitty(dag_spec: dict) -> str:
         nodes = dag_spec.get("nodes", [])
         edges = dag_spec.get("edges", [])
+        bidirected_edges = dag_spec.get("bidirected_edges", [])
+        latent_nodes = CausalWrapper._latent_nodes(dag_spec)
 
         if not nodes:
             raise CausalError("DAG spec must contain at least one node")
 
         lines = ["dag {"]
         for node in nodes:
-            lines.append(f"  {node}")
+            suffix = " [unobserved]" if node in latent_nodes else ""
+            lines.append(f"  {node}{suffix}")
         for edge in edges:
             if isinstance(edge, (list, tuple)) and len(edge) == 2:
                 lines.append(f"  {edge[0]} -> {edge[1]}")
+        for edge in bidirected_edges:
+            if isinstance(edge, (list, tuple)) and len(edge) == 2:
+                lines.append(f"  {edge[0]} <-> {edge[1]}")
         lines.append("}")
         return "\n".join(lines)
+
+    @staticmethod
+    def _latent_nodes(dag_spec: dict) -> set[str]:
+        nodes = set(dag_spec.get("nodes", []))
+        latent = set(dag_spec.get("latent_nodes", []))
+        observed = dag_spec.get("observed_nodes")
+        if observed is not None:
+            latent.update(nodes - set(observed))
+        return latent & nodes
 
     def _resolve_endpoints(self, dag_spec: dict) -> tuple[str | None, str | None]:
         nodes = dag_spec.get("nodes", [])
@@ -121,12 +132,18 @@ class CausalWrapper:
                 outcome_vec = StrVector([outcome])
 
                 adj_sets = dagitty.adjustmentSets(
-                    dag_obj, exposure=exposure_vec, outcome=outcome_vec
+                    dag_obj,
+                    exposure=exposure_vec,
+                    outcome=outcome_vec,
+                    effect="total",
                 )
 
                 result: list[list[str]] = []
+                latent_nodes = self._latent_nodes(dag_spec)
                 for s in adj_sets:
-                    result.append(list(s))
+                    adjustment = list(s)
+                    if not latent_nodes.intersection(adjustment):
+                        result.append(adjustment)
 
             return result
         except Exception as e:
@@ -138,9 +155,7 @@ class CausalWrapper:
         try:
             self._ensure_r()
         except CausalError:
-            logger.warning(
-                "R/dagitty unavailable; assuming model not identified"
-            )
+            logger.warning("R/dagitty unavailable; assuming model not identified")
             return False
 
         try:
@@ -173,9 +188,12 @@ class CausalWrapper:
 
     def compare_mas(
         self,
-        mas_a: list[str] | list[list[str]],
-        mas_b: list[str] | list[list[str]],
+        mas_a: list[str] | list[list[str]] | None,
+        mas_b: list[str] | list[list[str]] | None,
     ) -> dict:
+        if mas_a is None or mas_b is None:
+            return {"compatible": None}
+
         def _normalize(sets):
             if not sets:
                 return set()
@@ -193,7 +211,7 @@ class CausalWrapper:
         sets_b = _normalize(mas_b)
 
         if not sets_a and not sets_b:
-            compatible = True
+            compatible = False
         elif not sets_a or not sets_b:
             compatible = False
         else:

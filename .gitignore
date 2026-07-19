@@ -10,3 +10,4 @@ docs/internal
 tests/
 .lavish/
 AGENTS.md
+inst/python/*.*

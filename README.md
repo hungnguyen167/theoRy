@@ -6,7 +6,13 @@ Python FastAPI computation engine.
 [Hung H.V. Nguyen](https://orcid.org/0000-0001-9496-6217)<br>
 [Nate Breznau](https://sites.google.com/site/nbreznau/)
 
-## Overview
+## Abstract
+
+This package supports our method of comparing theories to determine if they are compatible or not, and why. This is done through a combination of causal inference, set logic, visualization and meta-analysis. The method takes an existing theory specified at the causal level in the form of a directed acyclical graph (causal path model) and compares it with a multiverse of simulated and researcher-specified alternatives. Through meta-analysis, the method determines which particular model components of causal paths (edges) and variables (nodes) are more or less important when comparing models under conditions of theoretical uncertainty. The goal is to enable a researcher to take weak theory in a given area of science and discover where theoretical development is needed most. ‘Needed’ refers to where models are less compatible at the meta-level, and thus where theoretical development will provide the greatest knowledge gains. The compatibility is analyzed partly through qualitative comparative analysis of the causal model components and their roles alone or in particular sets. We developed an R software package, called theoRy, to both demonstrate our method and enable other researchers to use it. The package builds on the existing daggity, ggdag, and QCA packages. 
+
+The method uses a set of variables and basic information about their chronology, and transforms them into a multiverse of potential causal models stored in a network matrix. Built on top of dagitty and ggdag, this package: (a) develops an algorithm to isolate and categorize the node(s) or edge(s) that make models incompatible, (b) provides tools to analyze models visually, assumptively and statistically, and (c) tools to meta-analyze causal assumptions qualitatively and statistical outcomes quantitatively.
+
+## Package Overview
 
 theoRy represents a theory multiverse in two layers: a registry of possible
 node and edge components, and model states that assign claims to those
@@ -225,6 +231,15 @@ requests and responses.
 deprecated, pure-R workflow. The `full_model_compatible` column produced by
 legacy `add_compatible()` is a distinct historical concept. It is not one of
 the three modern metrics and has not been redefined as general identification.
+
+
+## Future developments
+
+- Figure out the algorithmic association of components to be able to generate the multiverse quickly. The goal is to be able to quickly run these models with 12 variables. 
+- Find a way to calculate DAG results our selves rather than calling DAGiity. Edges, nodes and causal or not is all we need for this.
+- Publish app in R Journal after developing the algorithmic basis.
+- Reorient temporal ordering so that Y is always at time 0 (currently Y can be at different listed time points in the same multiverse)
+- Force user to specify temporal ordering, and then optionally 'free' specific nodes by allowing them to be at specified time points (like X2 could come before or after X1) or free them completely so that they could be at any time point (not recommended as it blows up the size of the multiverse and is too 'weak' theoretically).
 
 ## Funding
 

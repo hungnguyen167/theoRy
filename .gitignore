@@ -10,4 +10,4 @@ docs/internal
 tests/
 .lavish/
 AGENTS.md
-inst/python/*.*
+inst/python/theory_engine.egg-info/*

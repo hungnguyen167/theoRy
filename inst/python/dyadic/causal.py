@@ -1,220 +1,85 @@
 from __future__ import annotations
-
 import logging
+import networkx as nx
 
 logger = logging.getLogger(__name__)
-
 
 class CausalError(Exception):
     pass
 
-
 class CausalWrapper:
     def __init__(self):
-        self._r_available: bool | None = None
+        self._r_available = True 
 
     def _ensure_r(self) -> bool:
-        if self._r_available is True:
-            return True
-        if self._r_available is False:
-            raise CausalError("R/dagitty not available (already checked this session)")
-        try:
-            import rpy2.robjects as ro  # noqa: F401
-        except ImportError as e:
-            self._r_available = False
-            raise CausalError(
-                "rpy2 is not installed. Install with: pip install rpy2"
-            ) from e
-        except OSError as e:
-            self._r_available = False
-            raise CausalError(
-                "Cannot load R shared library via rpy2 (likely a "
-                "libstdc++ version mismatch between your Python "
-                "environment and system R). "
-                "Try: LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libstdc++.so.6\n"
-                f"Underlying error: {e}"
-            ) from e
-        except Exception as e:
-            self._r_available = False
-            raise CausalError(f"Unexpected error importing rpy2: {e}") from e
+        return True
 
-        try:
-            from rpy2.robjects.packages import importr
-            from rpy2.robjects import conversion, default_converter
-
-            with conversion.localconverter(default_converter):
-                importr("dagitty")
-
-            self._r_available = True
-            return True
-        except OSError as e:
-            self._r_available = False
-            raise CausalError(
-                "Cannot load R shared library when loading dagitty "
-                "(likely a libstdc++ version mismatch). "
-                "Try: LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libstdc++.so.6\n"
-                f"Underlying error: {e}"
-            ) from e
-        except Exception as e:
-            self._r_available = False
-            raise CausalError(
-                "Cannot load R package dagitty. "
-                "Install in R with: install.packages('dagitty')\n"
-                f"Underlying error: {e}"
-            ) from e
-
-    @staticmethod
-    def _dag_spec_to_dagitty(dag_spec: dict) -> str:
+    def compute_adjustment_sets(self, dag_spec: dict) -> list[list[str]]:
         nodes = dag_spec.get("nodes", [])
         edges = dag_spec.get("edges", [])
         bidirected_edges = dag_spec.get("bidirected_edges", [])
-        latent_nodes = CausalWrapper._latent_nodes(dag_spec)
-
-        if not nodes:
-            raise CausalError("DAG spec must contain at least one node")
-
-        lines = ["dag {"]
-        for node in nodes:
-            suffix = " [unobserved]" if node in latent_nodes else ""
-            lines.append(f"  {node}{suffix}")
-        for edge in edges:
-            if isinstance(edge, (list, tuple)) and len(edge) == 2:
-                lines.append(f"  {edge[0]} -> {edge[1]}")
-        for edge in bidirected_edges:
-            if isinstance(edge, (list, tuple)) and len(edge) == 2:
-                lines.append(f"  {edge[0]} <-> {edge[1]}")
-        lines.append("}")
-        return "\n".join(lines)
-
-    @staticmethod
-    def _latent_nodes(dag_spec: dict) -> set[str]:
-        nodes = set(dag_spec.get("nodes", []))
-        latent = set(dag_spec.get("latent_nodes", []))
-        observed = dag_spec.get("observed_nodes")
-        if observed is not None:
-            latent.update(nodes - set(observed))
-        return latent & nodes
-
-    def _resolve_endpoints(self, dag_spec: dict) -> tuple[str | None, str | None]:
-        nodes = dag_spec.get("nodes", [])
         exposure = dag_spec.get("exposure")
         outcome = dag_spec.get("outcome")
 
-        if exposure is None and len(nodes) >= 2:
-            exposure = nodes[0]
-        if outcome is None and len(nodes) >= 2:
-            outcome = nodes[-1]
+        if not exposure or not outcome:
+            raise CausalError("Exposure and outcome required.")
 
-        return exposure, outcome
+        G = nx.DiGraph()
+        G.add_nodes_from(nodes)
+        G.add_edges_from(edges)
+        
+        for u, v in bidirected_edges:
+            latent_node = f"U_{u}_{v}"
+            G.add_edge(latent_node, u)
+            G.add_edge(latent_node, v)
 
-    def compute_adjustment_sets(self, dag_spec: dict) -> list[list[str]]:
-        self._ensure_r()
+        covariates = [n for n in nodes if n not in (exposure, outcome) and not n.startswith("U_")]
+        
+        def is_valid_adjustment_set(s):
+            s_set = set(s)
+            descendants = nx.descendants(G, exposure)
+            if s_set & descendants:
+                return False
+                
+            backdoor_g = G.copy()
+            for u, v in list(G.out_edges(exposure)):
+                if not u.startswith("U_"):
+                    backdoor_g.remove_edge(u, v)
+                    
+            try:
+                # NetworkX 3.6+ safe version checking
+                if hasattr(nx, 'is_d_separator'):
+                    return nx.is_d_separator(backdoor_g, {exposure}, {outcome}, s_set)
+                else:
+                    return nx.d_separated(backdoor_g, {exposure}, {outcome}, s_set)
+            except Exception:
+                return False
 
-        try:
-            from rpy2.robjects import conversion, default_converter
-            from rpy2.robjects.packages import importr
-            from rpy2.robjects.vectors import StrVector
+        valid_sets = []
+        import itertools
+        for r in range(len(covariates) + 1):
+            for subset in itertools.combinations(covariates, r):
+                if is_valid_adjustment_set(subset):
+                    valid_sets.append(list(subset))
 
-            with conversion.localconverter(default_converter):
-                dagitty = importr("dagitty")
-
-                dag_syntax = self._dag_spec_to_dagitty(dag_spec)
-                dag_obj = dagitty.dagitty(dag_syntax)
-
-                exposure, outcome = self._resolve_endpoints(dag_spec)
-                if exposure is None or outcome is None:
-                    raise CausalError(
-                        "At least two nodes and exposure/outcome required "
-                        "for adjustment sets"
-                    )
-
-                exposure_vec = StrVector([exposure])
-                outcome_vec = StrVector([outcome])
-
-                adj_sets = dagitty.adjustmentSets(
-                    dag_obj,
-                    exposure=exposure_vec,
-                    outcome=outcome_vec,
-                    effect="total",
-                )
-
-                result: list[list[str]] = []
-                latent_nodes = self._latent_nodes(dag_spec)
-                for s in adj_sets:
-                    adjustment = list(s)
-                    if not latent_nodes.intersection(adjustment):
-                        result.append(adjustment)
-
-            return result
-        except Exception as e:
-            if isinstance(e, CausalError):
-                raise
-            raise CausalError(f"Failed to compute adjustment sets: {e}")
+        minimal_sets = []
+        for s in valid_sets:
+            s_set = set(s)
+            if not any(set(m).issubset(s_set) and set(m) != s_set for m in valid_sets):
+                minimal_sets.append(s)
+                
+        return minimal_sets
 
     def check_identification(self, dag_spec: dict) -> bool:
         try:
-            self._ensure_r()
-        except CausalError:
-            logger.warning("R/dagitty unavailable; assuming model not identified")
+            adj_sets = self.compute_adjustment_sets(dag_spec)
+            return len(adj_sets) > 0
+        except Exception:
             return False
 
-        try:
-            from rpy2.robjects import conversion, default_converter
-            from rpy2.robjects.packages import importr
-
-            with conversion.localconverter(default_converter):
-                dagitty = importr("dagitty")
-
-                dag_syntax = self._dag_spec_to_dagitty(dag_spec)
-                dag_obj = dagitty.dagitty(dag_syntax)
-
-                exposure, outcome = self._resolve_endpoints(dag_spec)
-                if exposure is None or outcome is None:
-                    return False
-
-                from rpy2.robjects.vectors import StrVector
-
-                adj_sets = dagitty.adjustmentSets(
-                    dag_obj,
-                    exposure=StrVector([exposure]),
-                    outcome=StrVector([outcome]),
-                )
-                return len(list(adj_sets)) > 0
-        except CausalError:
-            raise
-        except Exception as e:
-            logger.warning(f"Identification check failed: {e}")
-            return False
-
-    def compare_mas(
-        self,
-        mas_a: list[str] | list[list[str]] | None,
-        mas_b: list[str] | list[list[str]] | None,
-    ) -> dict:
+    def compare_mas(self, mas_a: list | None, mas_b: list | None) -> dict:
         if mas_a is None or mas_b is None:
             return {"compatible": None}
-
-        def _normalize(sets):
-            if not sets:
-                return set()
-            if all(isinstance(s, str) for s in sets):
-                return {frozenset(filter(None, sets))}
-            result = set()
-            for s in sets:
-                if isinstance(s, (list, tuple)):
-                    result.add(frozenset(s))
-                elif isinstance(s, str):
-                    result.add(frozenset({s}))
-            return result
-
-        sets_a = _normalize(mas_a)
-        sets_b = _normalize(mas_b)
-
-        if not sets_a and not sets_b:
-            compatible = False
-        elif not sets_a or not sets_b:
-            compatible = False
-        else:
-            compatible = bool(sets_a & sets_b)
-
-        return {"compatible": compatible}
+        sets_a = {frozenset(s) for s in mas_a} if any(isinstance(i, list) for i in mas_a) else {frozenset(mas_a)}
+        sets_b = {frozenset(s) for s in mas_b} if any(isinstance(i, list) for i in mas_b) else {frozenset(mas_b)}
+        return {"compatible": bool(sets_a & sets_b) if sets_a and sets_b else False}

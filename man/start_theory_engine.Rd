@@ -30,9 +30,3 @@ Launches the Python FastAPI server in the background and blocks until
 the health endpoint responds.  Call this once per R session before
 using any of the other theoRy functions that require the backend.
 }
-\examples{
-\dontrun{
-start_theory_engine()
-}
-
-}

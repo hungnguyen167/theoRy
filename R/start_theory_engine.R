@@ -79,13 +79,16 @@ start_theory_engine <- function(port = 8000L,
         python_path <- normalizePath(python, mustWork = FALSE)
     }
 
+    # Ensure pkg_dir path is normalized cleanly
+    pkg_dir_norm <- normalizePath(pkg_dir, mustWork = TRUE)
+
     # Build the argument vector cleanly for uvicorn
     args <- c(
         "-m", "uvicorn",
         "api.main:app",
         "--host", host,
         "--port", as.character(port),
-        "--app-dir", normalizePath(pkg_dir, mustWork = TRUE)
+        "--app-dir", pkg_dir_norm
     )
 
     message("Starting theory engine on ", url, " ...")
@@ -95,9 +98,16 @@ start_theory_engine <- function(port = 8000L,
         stop("The 'processx' package is required on Windows. Install via install.packages('processx')")
     }
 
+    # Pass PYTHONPATH to process environment so Python finds 'theory_engine'
+    env_vars <- c(
+        Sys.getenv(),
+        PYTHONPATH = pkg_dir_norm
+    )
+
     options(theory_engine_process = processx::process$new(
         command = normalizePath(python_path, mustWork = TRUE),
         args = args,
+        env = env_vars,
         stdout = "|",
         stderr = "|"
     ))
@@ -118,16 +128,18 @@ start_theory_engine <- function(port = 8000L,
         }
     }
 
-    # If it failed, let's peek at the error stream before crashing
+    # If it failed, pull error logs regardless of process status
     proc <- getOption("theory_engine_process")
-    if (!is.null(proc) && proc$is_alive() == FALSE) {
+    err_msg <- ""
+    if (!is.null(proc)) {
         err_logs <- proc$read_error_lines()
         if (length(err_logs) > 0) {
-            cat("\nPython Startup Errors:\n", paste(err_logs, collapse = "\n"), "\n")
+            err_msg <- paste0("\nPython Traceback:\n", paste(err_logs, collapse = "\n"))
         }
+        proc$kill()
     }
 
-    stop("Theory engine did not start within ", timeout, " seconds.")
+    stop("Theory engine did not start within ", timeout, " seconds.", err_msg)
 }
 
 

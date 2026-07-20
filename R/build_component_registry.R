@@ -19,6 +19,12 @@ build_component_registry <- function(n_x = NULL, time_orders = NULL, post_y = NU
         })
     }
 
+    format_pair_list <- function(pair_list) {
+        if (length(pair_list) == 0) return("list()")
+        items <- sapply(pair_list, function(p) sprintf("c(\"%s\", \"%s\")", p[1], p[2]))
+        sprintf("list(%s)", paste(items, collapse = ", "))
+    }
+
     # --- INTERACTIVE LOOP ---
     if (is.null(n_x)) {
         if (!interactive()) stop("Interactive mode requires an active R session.")
@@ -26,7 +32,8 @@ build_component_registry <- function(n_x = NULL, time_orders = NULL, post_y = NU
         cat("Welcome to the theoRy Component Registry Builder.\n")
         confirmed <- FALSE
         while (!confirmed) {
-            n_x_str <- readline("How many X variables are there in your theory or theories? (max 7): ")
+            cat("How many X variables are there in your theory or theories? (max 7):\n")
+            n_x_str <- readline("> ")
             n_x <- as.integer(trimws(n_x_str))
             if (is.na(n_x) || n_x < 1) { message("Invalid input."); next }
             if (n_x > 7) {
@@ -57,7 +64,8 @@ build_component_registry <- function(n_x = NULL, time_orders = NULL, post_y = NU
             y_time <- max(all_times) + 1
             time_orders[["Y"]] <- y_time
 
-            post_y_input <- trimws(readline("\nCan any variable potentially occur after Y? If so, please name it, if not hit enter: "))
+            cat("\nCan any variable potentially occur after Y?\nIf so, please name it; if not hit enter:\n")
+            post_y_input <- trimws(readline("> "))
             if (nzchar(post_y_input)) {
                 if (!post_y_input %in% paste0("X", 1:n_x)) { message("Invalid variable choice."); next }
                 post_y <- post_y_input
@@ -66,13 +74,22 @@ build_component_registry <- function(n_x = NULL, time_orders = NULL, post_y = NU
                 post_y <- NULL
             }
 
-            forced_str <- readline("\nWhich paths are known to be causal? (Pairs like (X1,X2),(X3,X4) or enter for none): ")
+            cat("\nWhich paths are known to be causal?\n(Note: X1 -> Y is automatically forced as the core exposure/outcome).\n(Pairs like (X1,X2),(X2,Y),(X3,X4) or enter for none):\n")
+            forced_str <- readline("> ")
             forced_edges <- tryCatch(parse_pairs(forced_str), error = function(e) { message(e$message); return(NULL) })
             if (is.null(forced_edges)) next
 
-            forbidden_str <- readline("\nWhich paths are known to not be causal? (Pairs like (X1,X2) or enter for none): ")
+            cat("\nWhich paths are known to not be causal?\n(Pairs like (X1,X2) or enter for none):\n")
+            forbidden_str <- readline("> ")
             forbidden_edges <- tryCatch(parse_pairs(forbidden_str), error = function(e) { message(e$message); return(NULL) })
             if (is.null(forbidden_edges)) next
+
+            # Check for forbidden X1 -> Y violation
+            has_forbidden_x1_y <- any(sapply(forbidden_edges, function(p) p[1] == "X1" && p[2] == "Y"))
+            if (has_forbidden_x1_y) {
+                message("Error: X1 -> Y cannot be marked non-causal. It is the primary focal exposure/outcome path.")
+                next
+            }
 
             if (length(forced_edges) > 0 && length(forbidden_edges) > 0) {
                 forced_char <- sapply(forced_edges, paste, collapse="->")
@@ -80,12 +97,13 @@ build_component_registry <- function(n_x = NULL, time_orders = NULL, post_y = NU
                 if (any(forced_char %in% forbidden_char)) { message("Conflict found between causal and non-causal paths. Restarting."); next }
             }
 
-            confounded_str <- readline("\nShould variables at the same time get a bi-directional arrow? (Pairs like (X1,X2) or enter): ")
+            cat("\nShould variables that are simultaneous in time get a bi-directional arrow?\n(Pairs like (X1,X2) or enter for none):\n")
+            confounded_str <- readline("> ")
             confounded_pairs <- tryCatch(parse_pairs(confounded_str), error = function(e) { message(e$message); return(NULL) })
             if (is.null(confounded_pairs)) next
 
-            # --- NEW NODE OMISSION PROMPT ---
-            opt_input <- trimws(readline("\nGenerate multiverse models where the following variables are removed (separate multiple with a comma), or hit enter to not allow any subset models: "))
+            cat("\nGenerate multiverse models where the following variables are removed\n(separate multiple with a comma), or hit enter to not allow any subset models:\n")
+            opt_input <- trimws(readline("> "))
             if (nzchar(opt_input)) {
                 clean_opt <- gsub("\\s+", "", opt_input)
                 optional_nodes <- strsplit(clean_opt, ",")[[1]]
@@ -100,6 +118,9 @@ build_component_registry <- function(n_x = NULL, time_orders = NULL, post_y = NU
                 optional_nodes <- character(0)
             }
 
+            # Enforce core path in display
+            display_forced <- unique(c(list(c("X1", "Y")), forced_edges))
+
             cat("\n--- THEORETICAL PARAMETERS REPORT ---\n")
             cat("Exposure: X1\nOutcome: Y\n\n")
             cat("Variables & Chronological Order:\n")
@@ -107,9 +128,8 @@ build_component_registry <- function(n_x = NULL, time_orders = NULL, post_y = NU
                 cat(sprintf("  %s: %s\n", v, paste(time_orders[[v]], collapse=", ")))
             }
             cat("\nCausal Paths (Forced Edges):\n")
-            if (length(forced_edges) == 0) cat("  None\n") else {
-                for (edge in forced_edges) cat(sprintf("  %s -> %s\n", edge[1], edge[2]))
-            }
+            for (edge in display_forced) cat(sprintf("  %s -> %s\n", edge[1], edge[2]))
+
             cat("\nNon-Causal Paths (Forbidden Edges):\n")
             if (length(forbidden_edges) == 0) cat("  None\n") else {
                 for (edge in forbidden_edges) cat(sprintf("  %s !-> %s\n", edge[1], edge[2]))
@@ -122,12 +142,41 @@ build_component_registry <- function(n_x = NULL, time_orders = NULL, post_y = NU
             if (length(optional_nodes) == 0) cat("  None\n") else {
                 cat(sprintf("  %s\n", paste(optional_nodes, collapse=", ")))
             }
+
+            # --- MANUAL REPRODUCTION COMMAND CODE BLOCK ---
+            cat("\n--- REPRODUCIBLE MANUAL CODE ---\n")
+            cat("To recreate this registry programmatically, run:\n\n")
+
+            time_orders_str <- sprintf(
+                "list(%s)",
+                paste(sapply(names(time_orders), function(k) {
+                    sprintf("%s = c(%s)", k, paste(time_orders[[k]], collapse = ", "))
+                }), collapse = ", ")
+            )
+
+            post_y_str <- if (is.null(post_y)) "NULL" else sprintf("\"%s\"", post_y)
+            opt_nodes_str <- if (length(optional_nodes) == 0) "character(0)" else sprintf("c(%s)", paste(sprintf("\"%s\"", optional_nodes), collapse = ", "))
+
+            cat(sprintf("registry_df <- build_component_registry(\n"))
+            cat(sprintf("  n_x = %d,\n", n_x))
+            cat(sprintf("  time_orders = %s,\n", time_orders_str))
+            cat(sprintf("  post_y = %s,\n", post_y_str))
+            cat(sprintf("  forced_edges = %s,\n", format_pair_list(forced_edges)))
+            cat(sprintf("  forbidden_edges = %s,\n", format_pair_list(forbidden_edges)))
+            cat(sprintf("  confounded_pairs = %s,\n", format_pair_list(confounded_pairs)))
+            cat(sprintf("  optional_nodes = %s\n", opt_nodes_str))
+            cat(")\n")
             cat("-------------------------------------\n\n")
 
-            confirm_str <- readline("Do you agree with these parameters? (Y/N): ")
+            cat("Do you agree with these parameters? (Y/N):\n")
+            confirm_str <- readline("> ")
             if (toupper(trimws(confirm_str)) == "Y") confirmed <- TRUE
         }
     }
+
+    # --- ALWAYS ENFORCE X1 -> Y AS A FORCED CAUSAL EDGE ---
+    forced_edges <- unique(c(list(c("X1", "Y")), forced_edges))
+
 
     # --- MAP TO PYTHON PYDANTIC SCHEMAS ---
     nodes_list <- list()
@@ -185,14 +234,20 @@ build_component_registry <- function(n_x = NULL, time_orders = NULL, post_y = NU
     raw_records <- registry_data$data$registry_data
 
     df_list <- lapply(raw_records, function(r) {
+        # Check if this edge is the primary exposure -> outcome path
+        is_exposure_edge <- !is.null(r$source) && !is.null(r$target) &&
+            r$source == "X1" && r$target == "Y" &&
+            r$type == "edge"
+
         data.frame(
-            comp_id     = r$comp_id %||% NA_character_,
-            type        = r$type %||% NA_character_,
-            source      = r$source %||% NA_character_,
-            target      = r$target %||% NA_character_,
-            direction   = r$direction %||% NA_character_,
-            description = r$description %||% NA_character_,
-            observed    = r$observed %||% TRUE,
+            comp_id      = r$comp_id %||% NA_character_,
+            type         = r$type %||% NA_character_,
+            source       = r$source %||% NA_character_,
+            target       = r$target %||% NA_character_,
+            direction    = r$direction %||% NA_character_,
+            description  = r$description %||% NA_character_,
+            fixed_status = if (is_exposure_edge) "causal" else (r$fixed_status %||% NA_character_),
+            observed     = r$observed %||% TRUE,
             stringsAsFactors = FALSE
         )
     })
@@ -203,6 +258,7 @@ build_component_registry <- function(n_x = NULL, time_orders = NULL, post_y = NU
     attr(registry_df, "outcome") <- "Y"
     attr(registry_df, "time_orders") <- time_orders
     attr(registry_df, "optional_nodes") <- optional_nodes
+    attr(registry_df, "constraints") <- constraints_list
 
     message("\nComponent registry built and locked successfully!")
     return(registry_df)

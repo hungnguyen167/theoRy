@@ -21,6 +21,7 @@ Useful links:
 
 Authors:
 \itemize{
+  \item Hung H. V. Nguyen \email{hunghvnguyen@gmail.com} (\href{https://orcid.org/0000-0001-9496-6217}{ORCID})
   \item Nate Breznau \email{breznau.nate@gmail.com} (\href{https://orcid.org/0000-0003-4983-3137}{ORCID})
 }
 

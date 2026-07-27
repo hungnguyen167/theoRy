@@ -16,7 +16,7 @@ Defaults to 3.}
 }
 \value{
 Invisibly returns \code{TRUE} if the engine was stopped
-  (or was not running).
+   (or was not running).
 }
 \description{
 Sends a graceful shutdown request to the running theory engine.

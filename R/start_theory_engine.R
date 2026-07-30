@@ -246,7 +246,7 @@
 #' Launches the Python FastAPI server and blocks until the health endpoint
 #' responds. The process is owned by the current R session and can be stopped
 #' with [stop_theory_engine()]. A compatible backend started outside this R
-#' session is left running. On Linux, it preloads the system
+#' session is stopped gracefully and replaced. On Linux, it preloads the system
 #' \file{libstdc++.so.6} to prevent Conda's C++ runtime from blocking the
 #' R/rpy2 bridge.
 #'
@@ -288,15 +288,25 @@ start_theory_engine <- function(port = 8000L,
 
   if (.theory_engine_is_healthy(base, timeout = 2)) {
     if (.theory_engine_is_compatible(base, timeout = 2)) {
-      message("Theory engine already running at ", base,
-              " (externally managed; leaving it running).")
-      return(invisible(TRUE))
+      message("Stopping externally managed theory engine at ", base, " ...")
+      if (!.theory_engine_request_shutdown(base, target$timeout)) {
+        stop("Could not request graceful shutdown from the externally managed ",
+             "theoRy engine at ", base, ". It was left running.", call. = FALSE)
+      }
+      if (!.theory_engine_wait_for_shutdown(base, target$timeout)) {
+        stop("The externally managed theory engine at ", base,
+             " accepted no shutdown within ", target$timeout,
+             " seconds. It was not force-killed.", call. = FALSE)
+      }
+      message("Externally managed theory engine stopped gracefully.")
     }
-    stop(
-      "A service at ", base,
-      " is not a compatible theoRy engine. It was not stopped.",
-      call. = FALSE
-    )
+    if (.theory_engine_is_healthy(base, timeout = 2)) {
+      stop(
+        "A service at ", base,
+        " is not a compatible theoRy engine. It was not stopped.",
+        call. = FALSE
+      )
+    }
   }
 
   engine_dir <- system.file("python", package = "theoRy")

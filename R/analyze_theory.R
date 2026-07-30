@@ -58,7 +58,9 @@
 #'   \item{delta_u_rankings}{Data frame from \code{\link{compute_delta_u}}.}
 #'   \item{ghost_clusters}{List from \code{\link{detect_ghost_clusters}} or
 #'     \code{NULL} when no prior model is supplied.}
-#'   \item{summary}{Character vector of human-readable key findings.}
+#'   \item{summary}{Character vector of human-readable key findings, including
+#'     model and non-outcome-node counts plus available-dyad compatibility
+#'     percentages and Herfindahl indices.}
 #'   \item{plots}{Named list of \code{ggplot} objects or \code{NULL} when
 #'     \code{plot = FALSE}.}
 #'
@@ -278,7 +280,21 @@ analyze_theory <- function(nodes = NULL,
   summary <- character(0)
   summary <- c(summary, sprintf("Models: %d",
                                  length(unique(states$model_id))))
+  x_variables <- unique(registry$source[
+    registry$type == "node" & registry$source != outcome
+  ])
+  summary <- c(summary, sprintf("X variables (non-outcome nodes): %d",
+                                 length(x_variables)))
   summary <- c(summary, sprintf("Components: %d", nrow(registry)))
+  summary <- c(
+    summary,
+    .analyze_theory_compatibility_summary(
+      dyads, "mas_compatible", "MAS"
+    ),
+    .analyze_theory_compatibility_summary(
+      dyads, "identified_compatible", "Identified"
+    )
+  )
 
   if (is.data.frame(delta_u) && nrow(delta_u) > 0) {
     top <- delta_u[1, ]
@@ -410,4 +426,27 @@ analyze_theory <- function(nodes = NULL,
   }
 
   c("result <- analyze_theory(", unlist(lines, use.names = FALSE), ")")
+}
+
+
+.analyze_theory_compatibility_summary <- function(dyads, column, label) {
+  if (!is.data.frame(dyads) || !column %in% names(dyads)) {
+    return(sprintf("%s compatibility: unavailable", label))
+  }
+
+  values <- dyads[[column]]
+  available <- !is.na(values)
+  available_count <- sum(available)
+  if (available_count == 0L) {
+    return(sprintf("%s compatibility: unavailable (0/%d dyads)",
+                   label, length(values)))
+  }
+
+  compatible_rate <- mean(values[available])
+  hhi <- compatible_rate^2 + (1 - compatible_rate)^2
+  c(
+    sprintf("%s compatibility: %.1f%% (%d/%d available dyads)",
+            label, 100 * compatible_rate, sum(values[available]), available_count),
+    sprintf("%s compatibility Herfindahl index: %.4f", label, hhi)
+  )
 }

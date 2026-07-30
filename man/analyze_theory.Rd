@@ -98,7 +98,9 @@ A list with components:
   \item{delta_u_rankings}{Data frame from \code{\link{compute_delta_u}}.}
   \item{ghost_clusters}{List from \code{\link{detect_ghost_clusters}} or
     \code{NULL} when no prior model is supplied.}
-  \item{summary}{Character vector of human-readable key findings.}
+  \item{summary}{Character vector of human-readable key findings, including
+    model and non-outcome-node counts plus available-dyad compatibility
+    percentages and Herfindahl indices.}
   \item{plots}{Named list of \code{ggplot} objects or \code{NULL} when
     \code{plot = FALSE}.}
 }

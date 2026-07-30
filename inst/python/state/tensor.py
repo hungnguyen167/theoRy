@@ -17,6 +17,8 @@ VALID_STATUSES = set(STATUS_ENCODING.keys())
 
 VALID_NODE_STATUSES = frozenset({"present", "absent"})
 VALID_EDGE_STATUSES = frozenset({"causal", "unknown", "non-causal"})
+VALID_BIDIRECTED_STATUSES = frozenset({"present", "absent"})
+VALID_BIDIRECTED_INPUT_STATUSES = VALID_BIDIRECTED_STATUSES | VALID_EDGE_STATUSES
 
 
 class StateError(Exception):
@@ -51,6 +53,7 @@ class StateTensor:
         node_comp_ids: set[str] | None = None,
         edge_comp_ids: set[str] | None = None,
         edge_to_nodes: dict[str, tuple[str, str]] | None = None,
+        bidirected_edge_comp_ids: set[str] | None = None,
     ):
         self.tensor = tensor
         self.model_index = model_index
@@ -66,6 +69,7 @@ class StateTensor:
         self._node_comp_ids = node_comp_ids or set()
         self._edge_comp_ids = edge_comp_ids or set()
         self._edge_to_nodes = edge_to_nodes or {}
+        self._bidirected_edge_comp_ids = bidirected_edge_comp_ids or set()
 
         if node_present is not None:
             self.node_present_mask = node_present
@@ -130,11 +134,14 @@ class StateTensor:
             node_map[row["source"]] = row["comp_id"]
 
         edge_to_nodes = {}
+        bidirected_edge_comp_ids = set()
         for _, row in registry.data[registry.data["type"] == "edge"].iterrows():
             src_cid = node_map.get(row["source"])
             tgt_cid = node_map.get(row["target"])
             if src_cid and tgt_cid:
                 edge_to_nodes[row["comp_id"]] = (src_cid, tgt_cid)
+            if row["direction"] == "<->":
+                bidirected_edge_comp_ids.add(row["comp_id"])
 
         return cls(
             tensor=tensor,
@@ -146,6 +153,7 @@ class StateTensor:
             node_comp_ids=node_comp_ids,
             edge_comp_ids=edge_comp_ids,
             edge_to_nodes=edge_to_nodes,
+            bidirected_edge_comp_ids=bidirected_edge_comp_ids,
         )
 
     @classmethod
@@ -210,11 +218,21 @@ class StateTensor:
                         "'non-causal' are accepted for dense inputs."
                     )
             elif cid in state._edge_comp_ids:
-                if status not in VALID_EDGE_STATUSES:
+                valid_statuses = (
+                    VALID_BIDIRECTED_INPUT_STATUSES
+                    if cid in state._bidirected_edge_comp_ids
+                    else VALID_EDGE_STATUSES
+                )
+                if status not in valid_statuses:
                     raise StateError(
                         f"Invalid status for edge {cid}: {status!r}. "
-                        f"Must be one of {sorted(VALID_EDGE_STATUSES)}"
+                        f"Must be one of {sorted(valid_statuses)}"
                     )
+                if cid in state._bidirected_edge_comp_ids:
+                    if status == "present":
+                        status = "causal"
+                    elif status == "absent":
+                        status = "non-causal"
                 edge_records.append((mid, cid, status))
                 updates.append((mid, cid, status))
             else:
@@ -287,6 +305,17 @@ class StateTensor:
             elif status == "absent":
                 status = "unknown"
         else:
+            if comp_id in self._bidirected_edge_comp_ids:
+                if status in VALID_BIDIRECTED_INPUT_STATUSES:
+                    if status == "present":
+                        status = "causal"
+                    elif status == "absent":
+                        status = "non-causal"
+                else:
+                    raise StateError(
+                        f"Invalid status for bidirected edge {comp_id}: {status!r}. "
+                        f"Must be one of {sorted(VALID_BIDIRECTED_STATUSES)}"
+                    )
             if status not in VALID_STATUSES:
                 raise StateError(
                     f"Invalid status: {status!r}. Must be one of {sorted(VALID_STATUSES)}"
@@ -323,7 +352,18 @@ class StateTensor:
                         f"Invalid status: {status!r}. Must be one of {sorted(VALID_STATUSES)}"
                     )
             else:
-                if status not in VALID_STATUSES:
+                if comp_id in self._bidirected_edge_comp_ids:
+                    if status in VALID_BIDIRECTED_INPUT_STATUSES:
+                        if status == "present":
+                            resolve_status = "causal"
+                        elif status == "absent":
+                            resolve_status = "non-causal"
+                    else:
+                        raise StateError(
+                            f"Invalid status for bidirected edge {comp_id}: {status!r}. "
+                            f"Must be one of {sorted(VALID_BIDIRECTED_STATUSES)}"
+                        )
+                if resolve_status not in VALID_STATUSES:
                     raise StateError(
                         f"Invalid status: {status!r}. Must be one of {sorted(VALID_STATUSES)}"
                     )
@@ -478,6 +518,8 @@ class StateTensor:
                 elif cid in self._edge_comp_ids:
                     if self.edge_applicable(mid, cid):
                         status = self.get_status(mid, cid)
+                        if cid in self._bidirected_edge_comp_ids:
+                            status = "present" if status == "causal" else "absent"
                         records.append(
                             {
                                 "model_id": mid,

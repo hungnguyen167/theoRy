@@ -177,11 +177,15 @@ async def expand_model_states_endpoint(request: ExpandModelStatesRequest):
             mode=request.mode,
             seed_claims=seed_claims,
             node_timing=request.node_timing,
+            timing_options=request.timing_options,
+            optional_nodes=request.optional_nodes,
             max_models=request.max_models,
             n_models=request.n_models,
             seed=request.seed,
             edge_statuses=request.edge_statuses,
+            bidirected_statuses=request.bidirected_statuses,
             node_policy=request.node_policy,
+            allow_large=request.allow_large,
             exposure=exposure,
             outcome=outcome,
         )
@@ -196,6 +200,7 @@ async def expand_model_states_endpoint(request: ExpandModelStatesRequest):
                 "model_count": len(model_ids),
                 "component_count": len(registry.data),
                 "seeded_model_ids": seeded_model_ids,
+                "pruning_report": state_records.pruning_report,
             },
         }
     except StateError as e:
@@ -272,7 +277,7 @@ async def dyad_matrix(request: DyadMatrixRequest):
     identification_wrapper = None
     if request.mode in ("full", "two-stage"):
         try:
-            causal_wrapper = CausalWrapper()
+            causal_wrapper = CausalWrapper(causal_backend=request.causal_backend)
         except CausalError as e:
             raise HTTPException(
                 status_code=400,
@@ -280,7 +285,9 @@ async def dyad_matrix(request: DyadMatrixRequest):
             )
         if exposure is not None and outcome is not None:
             try:
-                identification_wrapper = IdentificationWrapper()
+                identification_wrapper = IdentificationWrapper(
+                    causal_backend=request.causal_backend
+                )
             except IdentificationError as e:
                 raise HTTPException(
                     status_code=400,
@@ -344,6 +351,7 @@ async def dyad_matrix(request: DyadMatrixRequest):
                 registry,
                 top_k=top_k,
                 causal_wrapper=causal_wrapper,
+                identification_wrapper=identification_wrapper,
                 exposure=exposure,
                 outcome=outcome,
             )
@@ -366,6 +374,12 @@ async def dyad_matrix(request: DyadMatrixRequest):
         raise HTTPException(
             status_code=500,
             detail={"code": "CAUSAL_ERROR", "message": str(e)},
+        )
+    except IdentificationError as e:
+        logger.error(f"Identification error: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail={"code": "IDENTIFICATION_ERROR", "message": str(e)},
         )
     except HTTPException:
         raise
@@ -401,6 +415,7 @@ async def dyad_matrix(request: DyadMatrixRequest):
         cached_dyads = dyads
 
     if request.mode in ("full", "two-stage"):
+        response_data["causal_backend"] = request.causal_backend
         if exposure:
             response_data["exposure"] = exposure
         if outcome:

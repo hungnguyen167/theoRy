@@ -18,6 +18,8 @@ EDGE_NON_CAUSAL = "non-causal"
 
 VALID_NODE_STATUSES = frozenset({NODE_PRESENT, NODE_ABSENT})
 VALID_EDGE_STATUSES = frozenset({EDGE_UNKNOWN, EDGE_CAUSAL, EDGE_NON_CAUSAL})
+VALID_BIDIRECTED_STATUSES = frozenset({NODE_PRESENT, NODE_ABSENT})
+VALID_BIDIRECTED_INPUT_STATUSES = VALID_BIDIRECTED_STATUSES | VALID_EDGE_STATUSES
 
 
 # ---------------------------------------------------------------------------
@@ -118,6 +120,10 @@ def normalize_sparse_records(
     Dictionary mapping ``model_id -> NormalizedState``.
     """
     edge_endpoints = edge_endpoint_components(registry)
+    edge_directions = {
+        row["comp_id"]: row["direction"]
+        for _, row in registry.data[registry.data["type"] == "edge"].iterrows()
+    }
     node_map = node_component_map(registry)
     node_comp_ids = set(node_map.values())
     valid_comp_ids = set(registry.data["comp_id"].tolist())
@@ -153,10 +159,21 @@ def normalize_sparse_records(
                     ns.timing[comp_id] = timing_val
             else:
                 if comp_id in edge_endpoints:
-                    if status not in VALID_EDGE_STATUSES:
+                    valid_statuses = (
+                        VALID_BIDIRECTED_INPUT_STATUSES
+                        if edge_directions.get(comp_id) == "<->"
+                        else VALID_EDGE_STATUSES
+                    )
+                    if status not in valid_statuses:
                         raise StateError(
                             f"Invalid status for edge {comp_id}: {status!r}"
                         )
+                    if edge_directions.get(comp_id) == "<->":
+                        r = dict(r)
+                        if status == NODE_PRESENT:
+                            r["status"] = EDGE_CAUSAL
+                        elif status == NODE_ABSENT:
+                            r["status"] = EDGE_NON_CAUSAL
                     edge_records.append(r)
 
         for r in edge_records:

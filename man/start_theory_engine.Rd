@@ -12,23 +12,24 @@ start_theory_engine(
 )
 }
 \arguments{
-\item{port}{Port number.  Defaults to \code{8000}.}
+\item{port}{Port number. Defaults to \code{8000}.}
 
-\item{host}{Host address.  Defaults to \code{"127.0.0.1"}.}
+\item{host}{Host address. Defaults to \code{"127.0.0.1"}.}
 
-\item{timeout}{Maximum seconds to wait for the server to become
-ready.  Defaults to 30.}
+\item{timeout}{Maximum seconds to wait for the server to become ready.
+Defaults to 30.}
 
-\item{python}{Path to the Python interpreter to use.  Defaults to
-\code{"python"} (on the system \code{PATH}).}
+\item{python}{Path to the Python interpreter to use. Defaults to
+\code{"python"} on the system \code{PATH}.}
 }
 \value{
 Invisibly returns \code{TRUE} when the server is ready.
 }
 \description{
-Launches the Python FastAPI server in the background and blocks until
-the health endpoint responds.  Call this once per R session before
-using any of the other theoRy functions that require the backend.
+Launches the Python FastAPI server and blocks until the health endpoint
+responds. The process is owned by the current R session and can be stopped
+with [stop_theory_engine()]. A compatible backend started outside this R
+session is left running.
 }
 \examples{
 \dontrun{

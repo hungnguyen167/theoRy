@@ -2,7 +2,7 @@
 % Please edit documentation in R/build_component_registry.R
 \name{build_component_registry}
 \alias{build_component_registry}
-\title{Build a component registry from nodes and timing}
+\title{Build a component registry from a causal theory specification}
 \usage{
 build_component_registry(
   nodes,
@@ -13,6 +13,9 @@ build_component_registry(
   constraints = NULL,
   exposure = NULL,
   outcome = NULL,
+  time_points = NULL,
+  timing_options = NULL,
+  optional_nodes = character(),
   url = getOption("theoRy.engine_url", "http://localhost:8000"),
   output_path = NULL
 )
@@ -22,79 +25,68 @@ build_component_registry(
 columns \code{name}, \code{timing} (integer), and optionally
 \code{description}.}
 
-\item{timing}{Integer vector of chronological positions, parallel to
-\code{nodes}.  Ignored when \code{nodes} is a data frame.}
+\item{timing}{Integer vector of fixed chronological positions parallel to
+\code{nodes}. Use \code{NA} for a non-focal node whose possible positions
+are supplied by \code{time_points}. Ignored when \code{nodes} is a data
+frame.}
 
-\item{descriptions}{Optional character vector of human-readable
-descriptions, parallel to \code{nodes}.  Ignored when \code{nodes} is
-a data frame.}
+\item{descriptions}{Optional character vector of descriptions parallel to
+\code{nodes}. Ignored when \code{nodes} is a data frame.}
 
-\item{respect_timing}{When \code{TRUE} (default), only generate directed
-edges where \code{timing(source) < timing(target)}.}
+\item{respect_timing}{When \code{TRUE} (default), directed candidates must
+be temporally possible.}
 
-\item{include_bidirectional}{When \code{TRUE}, also generate \verb{<->}
-bidirectional edge components for unordered node pairs.}
+\item{include_bidirectional}{When \code{TRUE}, generate candidate
+bidirected edges for every unordered node pair. Prefer explicit
+\code{<->} \code{"allow"} constraints for selected possible confounding.}
 
-\item{constraints}{Optional data frame or list of edge constraints with
-columns \code{source}, \code{target}, \code{direction}, and
-\code{rule} (\code{"allow"}, \code{"forbid"}, \code{"require"}).}
+\item{constraints}{Optional data frame or list with \code{source},
+\code{target}, \code{direction}, and \code{rule}. Directed
+\code{"require"} edges are fixed causal paths, \code{"forbid"} removes a
+path, and \code{"allow"} permits a selected candidate.}
 
-\item{exposure}{Optional name of the exposure (cause) variable. Must be
-a node name in \code{nodes} if provided.}
+\item{exposure}{Name of the focal exposure. Must be a node with exactly one
+allowed time.}
 
-\item{outcome}{Optional name of the outcome variable. Must be a node name
-in \code{nodes} if provided. Both or neither of \code{exposure} and
-\code{outcome} must be given.}
+\item{outcome}{Name of the focal outcome. Must be a node with exactly one
+allowed time later than \code{exposure}.}
 
-\item{url}{Base URL of the theoRy Python backend.  Defaults to
-\code{getOption("theoRy.engine_url", "http://localhost:8000")}.}
+\item{time_points}{Finite integer vector available to non-focal nodes whose
+\code{timing} is \code{NA}. Required whenever timing is unspecified.}
 
-\item{output_path}{If supplied, write the generated registry to this
-Parquet file path in addition to returning it as a data frame.}
+\item{timing_options}{Optional named list of allowed integer positions. It
+overrides \code{timing} for named nodes. Each model chooses one position
+from each present node's options.}
+
+\item{optional_nodes}{Node names that may be absent in subset models.
+Exposure, outcome, and endpoints of required directed paths cannot be
+optional.}
+
+\item{url}{Base URL of the theoRy Python backend.}
+
+\item{output_path}{Optional Parquet path for the registry table. Timing and
+theory metadata are R attributes and are not retained by Parquet.}
 }
 \value{
-A data frame with columns: \code{comp_id}, \code{type},
-  \code{source}, \code{target}, \code{direction}, \code{description}.
-  Additionally, \code{fixed_status} column (\code{"causal"} or \code{NA})
-  marks components whose status is immutable across all models; currently
-  only set when \code{exposure} and \code{outcome} are provided with no
-  timing, in which case \code{exposure -> outcome} is fixed as causal.
-  The returned data frame also has optional \code{exposure} and
-  \code{outcome} attributes that are forwarded to downstream functions.
+A registry data frame. It retains \code{exposure}, \code{outcome},
+  \code{node_timing}, \code{timing_options}, \code{optional_nodes}, and
+  \code{constraints} attributes for downstream expansion.
 }
 \description{
-Provides a compact list of variable names, optional timing values, and
-optional descriptions.  The Python backend generates the full component
-registry containing node components and all admissible directed (and
-optionally bidirectional) edge components under temporal constraints.
-}
-\details{
-The builder assigns deterministic \code{C{NNNN}} component IDs.
-Nodes are assigned first (sorted by name), followed by directed edges
-(sorted by source, target), then bidirectional edges if requested.
-
-When \code{exposure} and \code{outcome} are provided, they are attached
-as attributes on the returned data frame. These are used by
-\code{\link{build_dyad_matrix}} when its own \code{exposure}/\code{outcome}
-arguments are omitted.
-
-When all node timings are missing and both \code{exposure} and
-\code{outcome} are supplied, the registry enforces an implicit
-exposure-before-outcome ordering: the \code{exposure -> outcome} directed
-edge is created and marked with \code{fixed_status = "causal"} (immutable
-in every model), while the reverse \code{outcome -> exposure} and
-bidirectional \code{exposure <-> outcome} candidates are excluded. No
-synthetic timestamps are assigned to any node.
+Builds a registry programmatically from named variables and their temporal
+positions. An exposure and outcome are always required; their directed path
+is fixed as causal in every generated model. Use
+\code{build_component_registry_interactive()} for a guided alternative.
 }
 \examples{
 \dontrun{
 start_theory_engine()
-
-reg <- build_component_registry(
-  nodes = c("SolarRad", "Temp", "Precip"),
-  timing = c(1, 2, 3)
+registry <- build_component_registry(
+  nodes = c("Education", "Income", "Health"),
+  timing = c(1, 2, 3),
+  exposure = "Education",
+  outcome = "Health"
 )
-head(reg)
 }
 
 }

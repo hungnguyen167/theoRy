@@ -27,7 +27,8 @@ class ComponentRegistryBuilder:
         ----------
         nodes:
             List of dicts with keys ``name`` (required), ``timing`` (int or
-            None), and ``description`` (str, optional).
+            None), ``timing_options`` (list[int], optional), and
+            ``description`` (str, optional).
         respect_timing:
             When ``True``, only generate directed edges where
             ``timing(source) < timing(target)``.
@@ -38,9 +39,8 @@ class ComponentRegistryBuilder:
             Optional list of dicts with ``source``, ``target``, ``direction``,
             and ``rule`` (one of ``allow``, ``forbid``, ``require``).
         exposure, outcome:
-            Optional causal target nodes. When both are provided and all nodes
-            have no timing, an implicit ``exposure -> outcome`` edge is created
-            with ``fixed_status = "causal"``.
+            Optional causal target nodes. When both are provided,
+            ``exposure -> outcome`` is created with ``fixed_status = "causal"``.
         """
         if not nodes:
             raise RegistryError("At least one node is required to build a registry")
@@ -63,13 +63,17 @@ class ComponentRegistryBuilder:
             if exposure == outcome:
                 raise RegistryError("Exposure and outcome must be distinct nodes")
 
-            all_timing_none = all(n.get("timing") is None for n in nodes)
+            all_timing_none = all(
+                n.get("timing") is None and n.get("timing_options") is None
+                for n in nodes
+            )
             if all_timing_none:
                 implicit_exposure_outcome_order = True
 
         forbidden_set: set[tuple[str, str, str]] = set()
         required_set: set[tuple[str, str, str]] = set()
-        allowed_set: set[tuple[str, str, str]] | None = None
+        allowed_directed: set[tuple[str, str, str]] = set()
+        allowed_bidirectional: set[tuple[str, str, str]] = set()
 
         if constraints:
             allowed_pairs: set[tuple[str, str, str]] = set()
@@ -106,23 +110,23 @@ class ComponentRegistryBuilder:
                     required_set.add(triplet)
                 elif rule == "allow":
                     allowed_pairs.add(triplet)
-            if allowed_pairs:
-                allowed_set = allowed_pairs
+            allowed_directed = {
+                triplet for triplet in allowed_pairs if triplet[2] == "->"
+            }
+            allowed_bidirectional = {
+                triplet for triplet in allowed_pairs if triplet[2] == "<->"
+            }
 
-        if implicit_exposure_outcome_order:
+        if exposure is not None and outcome is not None:
             exp_out = (exposure, outcome, "->")
-            out_exp = (outcome, exposure, "->")
-            exp_out_bi = (min(exposure, outcome), max(exposure, outcome), "<->")
             if exp_out in forbidden_set:
                 raise RegistryError(
                     f"Cannot forbid {exposure} -> {outcome}: "
-                    f"exposure must precede outcome when no timing is supplied"
+                    "exposure -> outcome is fixed as causal"
                 )
-            if allowed_set is not None and exp_out not in allowed_set:
-                raise RegistryError(
-                    f"Cannot exclude {exposure} -> {outcome} from allow list: "
-                    f"exposure must precede outcome when no timing is supplied"
-                )
+        if implicit_exposure_outcome_order:
+            out_exp = (outcome, exposure, "->")
+            exp_out_bi = (min(exposure, outcome), max(exposure, outcome), "<->")
             if out_exp in required_set:
                 raise RegistryError(
                     f"Cannot require {outcome} -> {exposure}: "
@@ -166,31 +170,42 @@ class ComponentRegistryBuilder:
                     ):
                         continue
 
+                triplet = (source_node["name"], target_node["name"], "->")
+                is_exposure_outcome = (
+                    source_node["name"] == exposure and target_node["name"] == outcome
+                )
                 if respect_timing:
-                    s_t = source_node.get("timing")
-                    t_t = target_node.get("timing")
-                    if s_t is None or t_t is None:
+                    s_options = source_node.get("timing_options")
+                    t_options = target_node.get("timing_options")
+                    if s_options is None:
+                        s_t = source_node.get("timing")
+                        s_options = [s_t] if s_t is not None else None
+                    if t_options is None:
+                        t_t = target_node.get("timing")
+                        t_options = [t_t] if t_t is not None else None
+                    if s_options is None or t_options is None:
                         if not implicit_exposure_outcome_order:
                             warnings.warn(
                                 "Temporal integrity cannot be fully enforced: "
                                 "some nodes have missing timing values"
                             )
-                    elif s_t >= t_t:
+                    elif (
+                        not any(s_t < t_t for s_t in s_options for t_t in t_options)
+                        and not is_exposure_outcome
+                    ):
                         continue
-
-                triplet = (source_node["name"], target_node["name"], "->")
 
                 if triplet in forbidden_set:
                     continue
 
-                if allowed_set is not None and triplet not in allowed_set:
+                if (
+                    allowed_directed
+                    and triplet not in allowed_directed
+                    and not is_exposure_outcome
+                ):
                     continue
 
-                is_fixed = (
-                    implicit_exposure_outcome_order
-                    and source_node["name"] == exposure
-                    and target_node["name"] == outcome
-                )
+                is_fixed = (is_exposure_outcome) or triplet in required_set
 
                 registry_records.append(
                     {
@@ -207,7 +222,7 @@ class ComponentRegistryBuilder:
                 next_id += 1
 
         # --- bidirectional edges ---------------------------------------------
-        if include_bidirectional:
+        if include_bidirectional or allowed_bidirectional:
             seen: set[tuple[str, str]] = set()
             for source_node in nodes:
                 for target_node in nodes:
@@ -227,10 +242,15 @@ class ComponentRegistryBuilder:
                     }:
                         continue
 
-                    triplet = (source_node["name"], target_node["name"], "<->")
+                    triplet = (pair[0], pair[1], "<->")
+                    if (
+                        not include_bidirectional
+                        and triplet not in allowed_bidirectional
+                    ):
+                        continue
                     if triplet in forbidden_set:
                         continue
-                    if allowed_set is not None and triplet not in allowed_set:
+                    if allowed_bidirectional and triplet not in allowed_bidirectional:
                         continue
 
                     registry_records.append(
@@ -266,11 +286,22 @@ class ComponentRegistryBuilder:
                         f"implicit exposure-before-outcome ordering"
                     )
 
-            # Check temporal validity for required edges
-            if respect_timing:
+            # Legacy fixed timings fail at build time. Flexible timing options
+            # are deferred to state expansion, where invalid assignments are pruned.
+            if respect_timing and req[2] == "->":
                 s_t = node_timing_map.get(req[0])
                 t_t = node_timing_map.get(req[1])
-                if s_t is not None and t_t is not None and s_t >= t_t:
+                has_timing_options = any(
+                    n.get("timing_options") is not None
+                    for n in nodes
+                    if n["name"] in {req[0], req[1]}
+                )
+                if (
+                    not has_timing_options
+                    and s_t is not None
+                    and t_t is not None
+                    and s_t >= t_t
+                ):
                     raise RegistryError(
                         f"Required edge {req[0]} {req[1]} violates timing: "
                         f"timing({req[0]})={s_t} >= timing({req[1]})={t_t}"
@@ -283,7 +314,7 @@ class ComponentRegistryBuilder:
                     "target": req[1],
                     "direction": req[2],
                     "description": f"{req[0]} {req[2]} {req[1]} (required)",
-                    "fixed_status": None,
+                    "fixed_status": "causal" if req[2] == "->" else None,
                     "observed": True,
                 }
             )

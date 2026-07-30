@@ -9,13 +9,17 @@ expand_model_states(
   mode = c("sampled", "exhaustive"),
   seed_claims = NULL,
   node_timing = NULL,
+  timing_options = NULL,
+  optional_nodes = NULL,
   max_models = 10000L,
   n_models = NULL,
   seed = NULL,
   edge_statuses = c("causal", "unknown", "non-causal"),
+  bidirected_statuses = c("present", "absent"),
   node_policy = c("all-present", "vary"),
   exposure = NULL,
   outcome = NULL,
+  allow_large = FALSE,
   url = getOption("theoRy.engine_url", "http://localhost:8000")
 )
 }
@@ -37,13 +41,22 @@ or \code{"exhaustive"} (all valid edge-status combinations).}
 
   Seed claims use sparse semantics: node statuses may be \code{"present"}
   or \code{"absent"}; edge statuses may be \code{"causal"}, \code{"unknown"},
-  or \code{"non-causal"}.  Edge claims infer endpoint node presence.
+  or \code{"non-causal"}; bidirected-edge claims use \code{"present"} or
+  \code{"absent"}. Edge claims infer endpoint node presence.
   Omitted nodes default to absent; omitted edges among present nodes
   default to unknown.}
 
 \item{node_timing}{Optional named integer vector mapping node names to
 chronological positions, e.g. \code{c(SolarRad = 1, Temp = 2)}.
 Used for temporal validation in exhaustive / sampled modes.}
+
+\item{timing_options}{Optional named list of allowed integer positions per
+node. When supplied, each generated model selects one allowed position
+for every present node. This overrides \code{node_timing} for named nodes.}
+
+\item{optional_nodes}{Optional names of nodes that may be absent. When
+supplied, this takes precedence over \code{node_policy}; all other nodes
+remain present.}
 
 \item{max_models}{Safety cap for exhaustive mode (default 10,000).
 Expansion fails if the projected model count exceeds this.}
@@ -56,6 +69,9 @@ Expansion fails if the projected model count exceeds this.}
 or sample over in exhaustive and sampled modes.  Defaults to
 \code{c("causal", "unknown", "non-causal")}.  Pass
 \code{c("causal", "unknown")} for binary (old) behavior.}
+
+\item{bidirected_statuses}{Character vector of possible states for
+\code{<->} components. Defaults to \code{c("present", "absent")}.}
 
 \item{node_policy}{Controls node-subset generation:
 \code{"all-present"} (default, backward-compatible) includes all
@@ -70,19 +86,25 @@ registry outcome metadata is inherited when available. Both or neither
 of \code{exposure} and \code{outcome} must be given. When supplied with
 \code{node_policy = "vary"}, generated models must include both nodes.}
 
+\item{allow_large}{Whether to proceed with an exhaustive expansion larger
+than the backend warning threshold but still within \code{max_models}.}
+
 \item{url}{Base URL of the theoRy Python backend.
 Defaults to \code{getOption("theoRy.engine_url", "http://localhost:8000")}.}
 }
 \value{
 A data frame with columns: \code{model_id}, \code{comp_id},
   \code{status}, \code{timing}, \code{seeded} (logical).  Under sparse
-  semantics, node components use \code{"present"} status, and edge
-  components use \code{"causal"}, \code{"unknown"}, or \code{"non-causal"}.
+  semantics, node components use \code{"present"} status, directed edges
+  use \code{"causal"}, \code{"unknown"}, or \code{"non-causal"}, and
+  bidirected edges use \code{"present"} or \code{"absent"}.
   Only present nodes and applicable edges are emitted.  The returned
   data frame also carries a \code{seeded_model_ids} attribute (character
   vector of model IDs flagged as seeded, empty when no seed claims are
   provided) and optional \code{exposure}/\code{outcome} attributes
   forwarded to downstream functions like \code{\link{build_dyad_matrix}}.
+  A \code{pruning_report} attribute records timing assignments excluded by
+  required paths or temporal constraints.
 }
 \description{
 Takes a component registry (from \code{\link{build_component_registry}}
@@ -124,7 +146,8 @@ the seeded block.
 \dontrun{
 start_theory_engine()
 
-reg <- build_component_registry(c("X", "Y", "Z"), c(1, 2, 3))
+reg <- build_component_registry(c("X", "Y", "Z"), c(1, 2, 3),
+  exposure = "X", outcome = "Z")
 
 # Exhaustive tri-state (default): causal, unknown, non-causal
 states <- expand_model_states(reg, mode = "exhaustive",

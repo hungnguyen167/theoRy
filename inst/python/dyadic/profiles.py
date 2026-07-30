@@ -288,8 +288,7 @@ class CausalProfileBuilder:
                 identified, formula = self._identify(dag_spec)
                 method = "general_id"
             except IdentificationError:
-                identified = None
-                formula = None
+                raise
 
         return _ProfilePayload(
             mas=mas,

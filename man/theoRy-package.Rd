@@ -6,7 +6,7 @@
 \alias{theoRy-package}
 \title{theoRy: An R package for meta-analyzing theoretical uncertainty}
 \description{
-This package helps researchers build all possible causal models from variables and efficiently compare them. The package is built on top of the "dagitty" and "ggdag" packages, which are already widely used in causal inferences.
+This package helps researchers build and compare causal-theory multiverses. It provides an R client and a Python computation engine with native backdoor analysis and optional R-backed general identification.
 }
 \seealso{
 Useful links:

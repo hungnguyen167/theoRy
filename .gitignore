@@ -6,8 +6,10 @@ _bmad/
 .github/
 .roo/
 _bmad-output/
-docs/internal
+docs/internal/*
 tests/
 .lavish/
 AGENTS.md
 inst/python/theory_engine.egg-info/*
+__pycache__/
+*.py[cod]

@@ -20,12 +20,19 @@
 #'
 #'   Seed claims use sparse semantics: node statuses may be \code{"present"}
 #'   or \code{"absent"}; edge statuses may be \code{"causal"}, \code{"unknown"},
-#'   or \code{"non-causal"}.  Edge claims infer endpoint node presence.
+#'   or \code{"non-causal"}; bidirected-edge claims use \code{"present"} or
+#'   \code{"absent"}. Edge claims infer endpoint node presence.
 #'   Omitted nodes default to absent; omitted edges among present nodes
 #'   default to unknown.
 #' @param node_timing Optional named integer vector mapping node names to
 #'   chronological positions, e.g. \code{c(SolarRad = 1, Temp = 2)}.
 #'   Used for temporal validation in exhaustive / sampled modes.
+#' @param timing_options Optional named list of allowed integer positions per
+#'   node. When supplied, each generated model selects one allowed position
+#'   for every present node. This overrides \code{node_timing} for named nodes.
+#' @param optional_nodes Optional names of nodes that may be absent. When
+#'   supplied, this takes precedence over \code{node_policy}; all other nodes
+#'   remain present.
 #' @param max_models Safety cap for exhaustive mode (default 10,000).
 #'   Expansion fails if the projected model count exceeds this.
 #' @param n_models Number of models to sample in \code{"sampled"} mode.
@@ -34,6 +41,8 @@
 #'   or sample over in exhaustive and sampled modes.  Defaults to
 #'   \code{c("causal", "unknown", "non-causal")}.  Pass
 #'   \code{c("causal", "unknown")} for binary (old) behavior.
+#' @param bidirected_statuses Character vector of possible states for
+#'   \code{<->} components. Defaults to \code{c("present", "absent")}.
 #' @param node_policy Controls node-subset generation:
 #'   \code{"all-present"} (default, backward-compatible) includes all
 #'   registry nodes in every model; \code{"vary"} enumerates over
@@ -46,16 +55,21 @@
 #'   \code{node_policy = "vary"}, generated models must include both nodes.
 #' @param url Base URL of the theoRy Python backend.
 #'   Defaults to \code{getOption("theoRy.engine_url", "http://localhost:8000")}.
+#' @param allow_large Whether to proceed with an exhaustive expansion larger
+#'   than the backend warning threshold but still within \code{max_models}.
 #'
 #' @return A data frame with columns: \code{model_id}, \code{comp_id},
 #'   \code{status}, \code{timing}, \code{seeded} (logical).  Under sparse
-#'   semantics, node components use \code{"present"} status, and edge
-#'   components use \code{"causal"}, \code{"unknown"}, or \code{"non-causal"}.
+#'   semantics, node components use \code{"present"} status, directed edges
+#'   use \code{"causal"}, \code{"unknown"}, or \code{"non-causal"}, and
+#'   bidirected edges use \code{"present"} or \code{"absent"}.
 #'   Only present nodes and applicable edges are emitted.  The returned
 #'   data frame also carries a \code{seeded_model_ids} attribute (character
 #'   vector of model IDs flagged as seeded, empty when no seed claims are
 #'   provided) and optional \code{exposure}/\code{outcome} attributes
 #'   forwarded to downstream functions like \code{\link{build_dyad_matrix}}.
+#'   A \code{pruning_report} attribute records timing assignments excluded by
+#'   required paths or temporal constraints.
 #'
 #' @details
 #' \describe{
@@ -91,7 +105,8 @@
 #' \dontrun{
 #' start_theory_engine()
 #'
-#' reg <- build_component_registry(c("X", "Y", "Z"), c(1, 2, 3))
+#' reg <- build_component_registry(c("X", "Y", "Z"), c(1, 2, 3),
+#'   exposure = "X", outcome = "Z")
 #'
 #' # Exhaustive tri-state (default): causal, unknown, non-causal
 #' states <- expand_model_states(reg, mode = "exhaustive",
@@ -119,18 +134,22 @@
 #'
 #' @export
 expand_model_states <- function(registry,
-                                  mode = c("sampled", "exhaustive"),
-                                  seed_claims = NULL,
-                                  node_timing = NULL,
-                                  max_models = 10000L,
-                                  n_models = NULL,
-                                  seed = NULL,
-                                  edge_statuses = c("causal", "unknown", "non-causal"),
-                                  node_policy = c("all-present", "vary"),
-                                  exposure = NULL,
-                                  outcome = NULL,
-                                  url = getOption("theoRy.engine_url",
-                                                  "http://localhost:8000")) {
+                                   mode = c("sampled", "exhaustive"),
+                                   seed_claims = NULL,
+                                   node_timing = NULL,
+                                   timing_options = NULL,
+                                   optional_nodes = NULL,
+                                   max_models = 10000L,
+                                   n_models = NULL,
+                                   seed = NULL,
+                                   edge_statuses = c("causal", "unknown", "non-causal"),
+                                   bidirected_statuses = c("present", "absent"),
+                                   node_policy = c("all-present", "vary"),
+                                   exposure = NULL,
+                                   outcome = NULL,
+                                   allow_large = FALSE,
+                                   url = getOption("theoRy.engine_url",
+                                                   "http://localhost:8000")) {
   mode <- match.arg(mode)
   node_policy <- match.arg(node_policy)
   `%||%` <- function(x, y) if (is.null(x)) y else x
@@ -151,6 +170,12 @@ expand_model_states <- function(registry,
   if (is.null(node_timing) && !is.null(attr(registry_df, "node_timing"))) {
     node_timing <- attr(registry_df, "node_timing")
   }
+  if (is.null(timing_options) && !is.null(attr(registry_df, "timing_options"))) {
+    timing_options <- attr(registry_df, "timing_options")
+  }
+  if (is.null(optional_nodes) && !is.null(attr(registry_df, "optional_nodes"))) {
+    optional_nodes <- attr(registry_df, "optional_nodes")
+  }
 
   rg_exposure <- attr(registry_df, "exposure") %||% NULL
   rg_outcome <- attr(registry_df, "outcome") %||% NULL
@@ -169,6 +194,11 @@ expand_model_states <- function(registry,
       ") differ from registry metadata (", rg_exposure, "/", rg_outcome,
       "). Using explicit values.", call. = FALSE
     )
+  }
+
+  if (is.null(exposure) || is.null(outcome)) {
+    stop("exposure and outcome are required. Supply them or use a registry ",
+         "created by build_component_registry().", call. = FALSE)
   }
 
   if (!is.null(exposure) && !is.null(outcome)) {
@@ -213,14 +243,31 @@ expand_model_states <- function(registry,
   }
 
   if (!is.null(node_timing)) {
-    payload$node_timing <- as.list(as.integer(node_timing))
-    names(payload$node_timing) <- names(node_timing)
+    known_timing <- node_timing[!is.na(node_timing)]
+    if (length(known_timing)) {
+      payload$node_timing <- as.list(as.integer(known_timing))
+      names(payload$node_timing) <- names(known_timing)
+    }
+  }
+
+  if (!is.null(timing_options)) {
+    if (!is.list(timing_options) || is.null(names(timing_options))) {
+      stop("timing_options must be a named list.", call. = FALSE)
+    }
+    payload$timing_options <- lapply(timing_options, function(values) {
+      unname(as.list(as.integer(values)))
+    })
+  }
+  if (!is.null(optional_nodes)) {
+    payload$optional_nodes <- as.list(as.character(optional_nodes))
   }
 
   if (!is.null(n_models)) payload$n_models <- as.integer(n_models)
   if (!is.null(seed)) payload$seed <- as.integer(seed)
   payload$edge_statuses <- as.list(edge_statuses)
+  payload$bidirected_statuses <- as.list(bidirected_statuses)
   payload$node_policy <- node_policy
+  payload$allow_large <- isTRUE(allow_large)
   if (!is.null(exposure) && !is.null(outcome)) {
     payload$exposure <- exposure
     payload$outcome <- outcome
@@ -273,6 +320,7 @@ expand_model_states <- function(registry,
     attr(df, "exposure") <- exposure
     attr(df, "outcome") <- outcome
   }
+  attr(df, "pruning_report") <- body$data$pruning_report %||% list()
 
   df
 }

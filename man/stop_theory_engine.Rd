@@ -4,25 +4,34 @@
 \alias{stop_theory_engine}
 \title{Stop the theoRy Python backend engine}
 \usage{
-stop_theory_engine(port = 8000L, host = "127.0.0.1", timeout = 3)
+stop_theory_engine(
+  port = 8000L,
+  host = "127.0.0.1",
+  timeout = 3,
+  stop_external = FALSE
+)
 }
 \arguments{
-\item{port}{Port number.  Defaults to \code{8000}.}
+\item{port}{Port number. Defaults to \code{8000}.}
 
-\item{host}{Host address.  Defaults to \code{"127.0.0.1"}.}
+\item{host}{Host address. Defaults to \code{"127.0.0.1"}.}
 
 \item{timeout}{Maximum seconds to wait for graceful shutdown.
 Defaults to 3.}
+
+\item{stop_external}{Whether to also request graceful shutdown of a
+compatible engine not launched by this R session. Defaults to
+\code{FALSE}.}
 }
 \value{
-Invisibly returns \code{TRUE} if the engine was stopped
-  (or was not running).
+Invisibly returns \code{TRUE} if the managed engine was stopped
+  (or no managed engine was running).
 }
 \description{
-Sends a graceful shutdown request to the running theory engine.
-If the backend is unreachable or the shutdown endpoint is
-unavailable, it falls back to killing the process bound to the
-given port.
+Sends a graceful shutdown request to an engine started by the current R
+session. Set \code{stop_external = TRUE} to request graceful shutdown of a
+compatible externally managed theoRy engine. This never kills a process by
+port, so an unresponsive external engine remains protected.
 }
 \examples{
 \dontrun{

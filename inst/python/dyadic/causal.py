@@ -1,6 +1,10 @@
 from __future__ import annotations
 
 import logging
+from itertools import combinations
+from typing import Literal
+
+import networkx as nx
 
 logger = logging.getLogger(__name__)
 
@@ -9,8 +13,155 @@ class CausalError(Exception):
     pass
 
 
+class NativeCausalUnsupportedError(CausalError):
+    """Raised when a query falls outside the native backdoor solver's scope."""
+
+
+_NATIVE_MAX_ADJUSTMENT_CANDIDATES = 12
+
+
+def _latent_nodes(dag_spec: dict) -> set[str]:
+    nodes = set(dag_spec.get("nodes", []))
+    latent = set(dag_spec.get("latent_nodes", []))
+    observed = dag_spec.get("observed_nodes")
+    if observed is not None:
+        latent.update(nodes - set(observed))
+    return latent & nodes
+
+
+def _resolve_endpoints(dag_spec: dict) -> tuple[str | None, str | None]:
+    nodes = dag_spec.get("nodes", [])
+    exposure = dag_spec.get("exposure")
+    outcome = dag_spec.get("outcome")
+
+    if exposure is None and len(nodes) >= 2:
+        exposure = nodes[0]
+    if outcome is None and len(nodes) >= 2:
+        outcome = nodes[-1]
+
+    return exposure, outcome
+
+
+def _native_graph(dag_spec: dict) -> tuple[nx.DiGraph, set[str], str, str]:
+    nodes = dag_spec.get("nodes", [])
+    directed_edges = dag_spec.get("edges", [])
+    bidirected_edges = dag_spec.get("bidirected_edges", [])
+
+    if not isinstance(nodes, list) or not nodes:
+        raise CausalError("DAG spec must contain at least one node")
+    if not all(isinstance(node, str) and node for node in nodes):
+        raise CausalError("DAG spec nodes must be non-empty strings")
+    if len(nodes) != len(set(nodes)):
+        raise CausalError("DAG spec nodes must be unique")
+    if not isinstance(directed_edges, list) or not isinstance(bidirected_edges, list):
+        raise CausalError("DAG spec edges and bidirected_edges must be lists")
+
+    exposure, outcome = _resolve_endpoints(dag_spec)
+    if exposure is None or outcome is None:
+        raise CausalError(
+            "At least two nodes and exposure/outcome required for adjustment sets"
+        )
+    if exposure not in nodes or outcome not in nodes:
+        raise CausalError("Exposure and outcome must be present in DAG spec nodes")
+    if exposure == outcome:
+        raise CausalError("Exposure and outcome must be distinct")
+
+    latent_nodes = _latent_nodes(dag_spec)
+    if exposure in latent_nodes or outcome in latent_nodes:
+        raise CausalError("Exposure and outcome must be observed nodes")
+
+    graph = nx.DiGraph()
+    graph.add_nodes_from(nodes)
+
+    def add_directed_edges(edges: list, *, bidirected: bool = False) -> None:
+        for edge in edges:
+            if not isinstance(edge, (list, tuple)) or len(edge) != 2:
+                raise CausalError("Each DAG edge must be a source-target pair")
+            source, target = edge
+            if source not in graph or target not in graph:
+                raise CausalError(
+                    f"DAG edge ({source!r}, {target!r}) references an unknown node"
+                )
+            if source == target:
+                raise CausalError("DAG edges must not be self-loops")
+            if bidirected:
+                latent_name = f"__theory_bidirected_latent_{len(graph)}"
+                while latent_name in graph:
+                    latent_name += "_"
+                graph.add_edge(latent_name, source)
+                graph.add_edge(latent_name, target)
+            else:
+                graph.add_edge(source, target)
+
+    add_directed_edges(directed_edges)
+    add_directed_edges(bidirected_edges, bidirected=True)
+
+    if not nx.is_directed_acyclic_graph(graph):
+        raise CausalError(
+            "Native backdoor adjustment requires a directed acyclic graph"
+        )
+
+    return graph, set(nodes) - latent_nodes, exposure, outcome
+
+
+def _is_d_separated(
+    graph: nx.DiGraph, exposure: str, outcome: str, adjustment: set[str]
+) -> bool:
+    """Use ancestral moralization to test d-separation in a DAG."""
+    ancestors = {exposure, outcome, *adjustment}
+    for node in tuple(ancestors):
+        ancestors.update(nx.ancestors(graph, node))
+
+    ancestral_graph = graph.subgraph(ancestors)
+    moral_graph = nx.Graph()
+    moral_graph.add_nodes_from(ancestral_graph)
+    moral_graph.add_edges_from(ancestral_graph.edges)
+    for node in ancestral_graph:
+        parents = list(ancestral_graph.predecessors(node))
+        moral_graph.add_edges_from(combinations(parents, 2))
+
+    moral_graph.remove_nodes_from(adjustment)
+    return not nx.has_path(moral_graph, exposure, outcome)
+
+
+def native_backdoor_adjustment_sets(dag_spec: dict) -> list[list[str]]:
+    """Return all minimal observed adjustment sets for a total-effect query.
+
+    The native backend supports single-treatment, single-outcome DAG queries.
+    Bidirected edges are represented as a fresh latent common cause before
+    applying the backdoor criterion. General ID cases, such as front-door
+    identification, are deliberately outside this solver's scope.
+    """
+    graph, observed_nodes, exposure, outcome = _native_graph(dag_spec)
+    treatment_descendants = nx.descendants(graph, exposure)
+    graph.remove_edges_from(list(graph.out_edges(exposure)))
+
+    eligible = sorted(observed_nodes - {exposure, outcome} - treatment_descendants)
+    if len(eligible) > _NATIVE_MAX_ADJUSTMENT_CANDIDATES:
+        raise NativeCausalUnsupportedError(
+            "Native backdoor adjustment supports at most "
+            f"{_NATIVE_MAX_ADJUSTMENT_CANDIDATES} eligible observed covariates"
+        )
+
+    adjustment_sets: list[list[str]] = []
+    for size in range(len(eligible) + 1):
+        for candidate in combinations(eligible, size):
+            candidate_set = set(candidate)
+            if any(
+                set(existing).issubset(candidate_set) for existing in adjustment_sets
+            ):
+                continue
+            if _is_d_separated(graph, exposure, outcome, candidate_set):
+                adjustment_sets.append(list(candidate))
+
+    return adjustment_sets
+
+
 class CausalWrapper:
-    def __init__(self):
+    def __init__(self, causal_backend: Literal["auto", "native", "r"] = "r"):
+        if causal_backend not in {"auto", "native", "r"}:
+            raise ValueError("causal_backend must be one of: auto, native, r")
+        self.causal_backend = causal_backend
         self._r_available: bool | None = None
 
     def _ensure_r(self) -> bool:
@@ -88,26 +239,22 @@ class CausalWrapper:
 
     @staticmethod
     def _latent_nodes(dag_spec: dict) -> set[str]:
-        nodes = set(dag_spec.get("nodes", []))
-        latent = set(dag_spec.get("latent_nodes", []))
-        observed = dag_spec.get("observed_nodes")
-        if observed is not None:
-            latent.update(nodes - set(observed))
-        return latent & nodes
+        return _latent_nodes(dag_spec)
 
     def _resolve_endpoints(self, dag_spec: dict) -> tuple[str | None, str | None]:
-        nodes = dag_spec.get("nodes", [])
-        exposure = dag_spec.get("exposure")
-        outcome = dag_spec.get("outcome")
-
-        if exposure is None and len(nodes) >= 2:
-            exposure = nodes[0]
-        if outcome is None and len(nodes) >= 2:
-            outcome = nodes[-1]
-
-        return exposure, outcome
+        return _resolve_endpoints(dag_spec)
 
     def compute_adjustment_sets(self, dag_spec: dict) -> list[list[str]]:
+        if self.causal_backend == "native":
+            return native_backdoor_adjustment_sets(dag_spec)
+        if self.causal_backend == "auto":
+            try:
+                return native_backdoor_adjustment_sets(dag_spec)
+            except NativeCausalUnsupportedError:
+                return self._compute_adjustment_sets_r(dag_spec)
+        return self._compute_adjustment_sets_r(dag_spec)
+
+    def _compute_adjustment_sets_r(self, dag_spec: dict) -> list[list[str]]:
         self._ensure_r()
 
         try:
@@ -152,6 +299,16 @@ class CausalWrapper:
             raise CausalError(f"Failed to compute adjustment sets: {e}")
 
     def check_identification(self, dag_spec: dict) -> bool:
+        if self.causal_backend == "native":
+            return bool(native_backdoor_adjustment_sets(dag_spec))
+        if self.causal_backend == "auto":
+            try:
+                return bool(native_backdoor_adjustment_sets(dag_spec))
+            except NativeCausalUnsupportedError:
+                return self._check_identification_r(dag_spec)
+        return self._check_identification_r(dag_spec)
+
+    def _check_identification_r(self, dag_spec: dict) -> bool:
         try:
             self._ensure_r()
         except CausalError:

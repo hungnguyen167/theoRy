@@ -12,6 +12,7 @@ build_dyad_matrix(
   top_k = NULL,
   exposure = NULL,
   outcome = NULL,
+  causal_backend = c("auto", "native", "r"),
   url = getOption("theoRy.engine_url", "http://localhost:8000")
 )
 }
@@ -46,6 +47,11 @@ first node in the registry.}
 Must be a node in the registry. When omitted, defaults to the last node
 in the registry. Both or neither of \code{exposure} and \code{outcome}
 must be provided.}
+
+\item{causal_backend}{Causal-identification backend: \code{"auto"}
+(default) uses the native NetworkX implementation when it supports the
+model and falls back to the R stack when available; \code{"native"}
+never loads R; \code{"r"} requires the Dagitty/CausalEffect stack.}
 
 \item{url}{Base URL of the theoRy Python backend API. Defaults to
 \code{getOption("theoRy.engine_url", "http://localhost:8000")}.}

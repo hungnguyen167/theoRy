@@ -27,6 +27,10 @@
 #'   Must be a node in the registry. When omitted, defaults to the last node
 #'   in the registry. Both or neither of \code{exposure} and \code{outcome}
 #'   must be provided.
+#' @param causal_backend Causal-identification backend: \code{"auto"}
+#'   (default) uses the native NetworkX implementation when it supports the
+#'   model and falls back to the R stack when available; \code{"native"}
+#'   never loads R; \code{"r"} requires the Dagitty/CausalEffect stack.
 #' @param url Base URL of the theoRy Python backend API. Defaults to
 #'   \code{getOption("theoRy.engine_url", "http://localhost:8000")}.
 #'
@@ -126,13 +130,15 @@ build_dyad_matrix <- function(registry,
                                states,
                                mode = c("basic", "full", "single-ref", "two-stage", "symbolic"),
                                reference_id = NULL,
-                               top_k = NULL,
-                               exposure = NULL,
-                               outcome = NULL,
-                               url = getOption("theoRy.engine_url",
-                                               "http://localhost:8000")) {
+                                top_k = NULL,
+                                exposure = NULL,
+                                outcome = NULL,
+                                causal_backend = c("auto", "native", "r"),
+                                url = getOption("theoRy.engine_url",
+                                                "http://localhost:8000")) {
 
   mode <- match.arg(mode)
+  causal_backend <- match.arg(causal_backend)
   `%||%` <- function(x, y) if (is.null(x)) y else x
 
   if (xor(is.null(exposure), is.null(outcome))) {
@@ -276,7 +282,8 @@ build_dyad_matrix <- function(registry,
       registry_data = registry_data,
       state_data = state_list,
       model_ids = I(model_ids),
-      mode = mode
+      mode = mode,
+      causal_backend = causal_backend
     )
 
     if (!is.null(reference_id)) {

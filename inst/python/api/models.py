@@ -38,6 +38,7 @@ class DyadMatrixRequest(BaseModel):
     top_k: int | None = None
     exposure: str | None = None
     outcome: str | None = None
+    causal_backend: Literal["auto", "native", "r"] = "auto"
 
 
 class DyadMatrixResponse(BaseModel):
@@ -62,6 +63,7 @@ class ApiErrorResponse(BaseModel):
 class NodeSpec(BaseModel):
     name: str
     timing: int | None = None
+    timing_options: list[int] | None = None
     description: str | None = None
     observed: bool = True
 
@@ -78,21 +80,18 @@ class BuildRegistryRequest(BaseModel):
     respect_timing: bool = True
     include_bidirectional: bool = False
     constraints: list[EdgeConstraint] | None = None
-    exposure: str | None = None
-    outcome: str | None = None
+    exposure: str
+    outcome: str
 
     @model_validator(mode="after")
     def validate_exposure_outcome(self):
-        if (self.exposure is None) != (self.outcome is None):
-            raise ValueError("Both or neither of exposure and outcome must be provided")
-        if self.exposure is not None:
-            node_names = {n.name for n in self.nodes}
-            if self.exposure == self.outcome:
-                raise ValueError("Exposure and outcome must be distinct nodes")
-            if self.exposure not in node_names:
-                raise ValueError(f"Exposure '{self.exposure}' is not in the node list")
-            if self.outcome not in node_names:
-                raise ValueError(f"Outcome '{self.outcome}' is not in the node list")
+        node_names = {n.name for n in self.nodes}
+        if self.exposure == self.outcome:
+            raise ValueError("Exposure and outcome must be distinct nodes")
+        if self.exposure not in node_names:
+            raise ValueError(f"Exposure '{self.exposure}' is not in the node list")
+        if self.outcome not in node_names:
+            raise ValueError(f"Outcome '{self.outcome}' is not in the node list")
         return self
 
 
@@ -101,11 +100,15 @@ class ExpandModelStatesRequest(BaseModel):
     mode: Literal["sampled", "exhaustive"] = "sampled"
     seed_claims: list[StateRecord] | None = None
     node_timing: dict[str, int] | None = None
+    timing_options: dict[str, list[int]] | None = None
+    optional_nodes: list[str] | None = None
     max_models: int = 10000
     n_models: int | None = None
     seed: int | None = None
     edge_statuses: list[str] | None = None
+    bidirected_statuses: list[Literal["present", "absent"]] | None = None
     node_policy: Literal["all-present", "vary"] = "all-present"
+    allow_large: bool = False
     exposure: str | None = None
     outcome: str | None = None
 

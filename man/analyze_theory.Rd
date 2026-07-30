@@ -5,34 +5,45 @@
 \title{Run the full theoRy analysis pipeline in one call}
 \usage{
 analyze_theory(
-  nodes,
-  timing,
+  nodes = NULL,
+  timing = NULL,
   exposure = NULL,
   outcome = NULL,
   prior_model = NULL,
   mode = c("sampled", "exhaustive", "symbolic"),
   n_models = 200L,
   seed = 42L,
+  node_policy = c("all-present", "vary"),
   top_k = 10L,
   plot = FALSE,
   eps = 0.5,
   min_samples = 5L,
-  url = getOption("theoRy.engine_url", "http://localhost:8000")
+  url = getOption("theoRy.engine_url", "http://localhost:8000"),
+  input_mode = c("programmatic", "interactive"),
+  constraints = NULL,
+  include_bidirectional = FALSE,
+  time_points = NULL,
+  timing_options = NULL,
+  optional_nodes = character(),
+  max_models = 10000L,
+  allow_large = FALSE,
+  causal_backend = c("auto", "native", "r")
 )
 }
 \arguments{
-\item{nodes}{Character vector of variable names.}
+\item{nodes}{Character vector of variable names in \code{"programmatic"}
+input mode. Omit it in \code{"interactive"} mode.}
 
 \item{timing}{Integer vector of chronological positions, parallel to
 \code{nodes}. When \code{NULL} and both \code{exposure} and
-\code{outcome} are supplied, an implicit exposure-before-outcome
-ordering is enforced: the \code{exposure -> outcome} edge is fixed as
-causal in every model. No synthetic timestamps are assigned to nodes.}
+\code{outcome} are supplied, programmatic mode requires
+\code{time_points} for unspecified non-focal nodes.}
 
-\item{exposure}{Optional name of the exposure variable. When provided
-together with \code{outcome}, enables causal compatibility metrics.}
+\item{exposure}{Name of the exposure variable. Required in programmatic
+mode and collected in interactive mode.}
 
-\item{outcome}{Optional name of the outcome variable.}
+\item{outcome}{Name of the outcome variable. Required in programmatic mode
+and collected in interactive mode.}
 
 \item{prior_model}{Optional model ID (e.g. \code{"M0001"}) for ghost
 cluster detection contrast analysis. When \code{NULL} (default),
@@ -45,6 +56,12 @@ ghost detection is skipped.}
 Defaults to 200.}
 
 \item{seed}{Random seed for reproducible sampling. Defaults to 42.}
+
+\item{node_policy}{Controls node-subset generation: \code{"all-present"}
+(default) includes every node in every model; \code{"vary"} generates
+models with variable node scope. With \code{"vary"}, both
+\code{exposure} and \code{outcome} must be present. Ignored in
+\code{"symbolic"} mode.}
 
 \item{top_k}{Maximum number of components to return in the Delta-U
 ranking. Defaults to 10.}
@@ -59,6 +76,18 @@ Defaults to \code{FALSE}.}
 
 \item{url}{Base URL of the theoRy Python backend. Defaults to
 \code{getOption("theoRy.engine_url", "http://localhost:8000")}.}
+
+\item{input_mode}{Either \code{"programmatic"} (default) or
+\code{"interactive"}. Interactive mode runs the guided registry
+questionnaire before the analysis.}
+
+\item{constraints, include_bidirectional, time_points, timing_options, }{optional_nodes Registry options forwarded to
+\code{build_component_registry()} in programmatic mode.}
+
+\item{max_models, allow_large}{Expansion safety controls forwarded to
+\code{expand_model_states()}.}
+
+\item{causal_backend}{Causal backend passed to \code{build_dyad_matrix()}.}
 }
 \value{
 A list with components:

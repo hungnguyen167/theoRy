@@ -126,6 +126,7 @@ class HybridDyadicEngine:
         model_ids: list[str] | None = None,
         *,
         causal_wrapper=None,
+        identification_wrapper=None,
         exposure: str | None = None,
         outcome: str | None = None,
     ) -> dict:
@@ -148,6 +149,7 @@ class HybridDyadicEngine:
                 result = self._base_engine.compare(
                     d["ego_id"], d["alter_id"], state, registry,
                     mode="full", causal_wrapper=causal_wrapper,
+                    identification_wrapper=identification_wrapper,
                     exposure=exposure, outcome=outcome,
                 )
             detailed.append(result)

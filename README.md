@@ -24,23 +24,28 @@ install.packages("remotes")
 remotes::install_github("hungnguyen167/theoRy")
 ```
 
-Install the Python engine dependencies from a source checkout:
+Install the cross-platform Python engine dependencies from a source checkout:
 
 ```bash
 python -m pip install -e inst/python
 ```
 
-The backend calls R through `rpy2`. Dagitty computes minimal adjustment sets,
-while `causaleffect` implements general causal identification for ADMGs. Install
-the R dependencies in the same R library visible to `rpy2`:
+The default engine has a native NetworkX backdoor-adjustment implementation and
+does not need a Python-to-R bridge. For Dagitty adjustment sets and broader
+`causaleffect` identification, install the optional R backend and its R
+packages:
+
+```bash
+python -m pip install -e 'inst/python[rpy2]'
+```
 
 ```r
 install.packages(c("dagitty", "causaleffect"))
 ```
 
-`causaleffect` is listed in `DESCRIPTION` under `Suggests`, not `Imports`,
-because it is invoked by the Python/rpy2 process rather than directly by R
-package code.
+Select `causal_backend = "native"`, `"auto"`, or `"r"` in
+`build_dyad_matrix()`. `"auto"` is the default: it uses native backdoor
+identification where supported and otherwise uses the optional R backend.
 
 ## Engine Lifecycle
 
@@ -56,9 +61,12 @@ stop_theory_engine()
 ```
 
 The default URL is `http://localhost:8000`; override it with
-`options(theoRy.engine_url = "https://engine.example.org")`. On supported Linux
-systems, `start_theory_engine()` applies the `libstdc++.so.6` preload needed by
-the R/rpy2 bridge.
+`options(theoRy.engine_url = "https://engine.example.org")`. The launcher uses
+`processx` and works the same way on Linux, macOS, and Windows. It only stops
+backend processes launched by the current R session. To deliberately shut down
+a compatible engine started elsewhere, use
+`stop_theory_engine(stop_external = TRUE)`; this uses the engine's HTTP
+shutdown endpoint and never kills a process merely because it occupies a port.
 
 ## Modern Workflow
 
@@ -102,6 +110,42 @@ stop_theory_engine()
 For a one-call concrete pipeline, use `analyze_theory()`. The explicit steps
 above are preferable when selecting a causal compatibility metric for Delta-U
 or simulations.
+
+### Interactive Workflow
+
+Use `build_component_registry_interactive()` to answer a guided questionnaire,
+or run the complete pipeline with:
+
+```r
+result <- analyze_theory(input_mode = "interactive")
+```
+
+The questionnaire requires named variables, exposure, outcome, and a time for
+every variable. The focal exposure and outcome each have one fixed time, while
+up to two other variables may have two allowed positions. The resulting
+multiverse contains one timing assignment per model. It can also collect
+required/forbidden directed paths, possible latent-confounding pairs, and
+variables eligible to be absent.
+
+### Programmatic Timing Uncertainty
+
+Exposure and outcome must always be declared and have one fixed time. For
+non-focal variables, `NA` timing values require an explicit finite
+`time_points` vector; `timing_options` can give a node a smaller allowed set.
+The engine reports timing assignments pruned by required paths and applies a
+global model-count limit before exhaustive expansion.
+
+```r
+registry <- build_component_registry(
+  nodes = c("Education", "Income", "Health"),
+  timing = c(1, NA, 4),
+  time_points = 1:4,
+  timing_options = list(Income = c(2, 3)),
+  exposure = "Education",
+  outcome = "Health",
+  optional_nodes = "Income"
+)
+```
 
 ## Compatibility Metrics
 
@@ -151,9 +195,12 @@ exposure `X1` and outcome `Y`. The causal query is the total effect
 `P(Y | do(X = x))` in an observed ADMG. A query node absent from one model
 makes that model's profile unavailable rather than non-identified.
 
-Dagitty remains responsible for minimal adjustment sets. General
-identification, including effects identifiable beyond adjustment such as the
-front-door case, is delegated to R `causaleffect` through `rpy2`.
+The native backend supports tested backdoor-adjustment queries, including
+declared bidirected latent-confounding relations. General identification,
+including effects identifiable beyond adjustment such as front-door cases,
+uses the optional R `causaleffect` backend. Native-only requests outside that
+scope return an explicit unsupported result rather than silently using a
+structural comparison.
 
 ## Simulations
 

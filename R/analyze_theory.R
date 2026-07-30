@@ -8,15 +8,16 @@
 #' (optionally) ghost cluster detection - with sensible defaults and
 #' progress messages. Optionally generates standard visualizations.
 #'
-#' @param nodes Character vector of variable names.
+#' @param nodes Character vector of variable names in \code{"programmatic"}
+#'   input mode. Omit it in \code{"interactive"} mode.
 #' @param timing Integer vector of chronological positions, parallel to
 #'   \code{nodes}. When \code{NULL} and both \code{exposure} and
-#'   \code{outcome} are supplied, an implicit exposure-before-outcome
-#'   ordering is enforced: the \code{exposure -> outcome} edge is fixed as
-#'   causal in every model. No synthetic timestamps are assigned to nodes.
-#' @param exposure Optional name of the exposure variable. When provided
-#'   together with \code{outcome}, enables causal compatibility metrics.
-#' @param outcome Optional name of the outcome variable.
+#'   \code{outcome} are supplied, programmatic mode requires
+#'   \code{time_points} for unspecified non-focal nodes.
+#' @param exposure Name of the exposure variable. Required in programmatic
+#'   mode and collected in interactive mode.
+#' @param outcome Name of the outcome variable. Required in programmatic mode
+#'   and collected in interactive mode.
 #' @param prior_model Optional model ID (e.g. \code{"M0001"}) for ghost
 #'   cluster detection contrast analysis. When \code{NULL} (default),
 #'   ghost detection is skipped.
@@ -25,6 +26,11 @@
 #' @param n_models Number of models to sample in \code{"sampled"} mode.
 #'   Defaults to 200.
 #' @param seed Random seed for reproducible sampling. Defaults to 42.
+#' @param node_policy Controls node-subset generation: \code{"all-present"}
+#'   (default) includes every node in every model; \code{"vary"} generates
+#'   models with variable node scope. With \code{"vary"}, both
+#'   \code{exposure} and \code{outcome} must be present. Ignored in
+#'   \code{"symbolic"} mode.
 #' @param top_k Maximum number of components to return in the Delta-U
 #'   ranking. Defaults to 10.
 #' @param plot Logical. When \code{TRUE}, generate standard plots
@@ -34,6 +40,15 @@
 #' @param min_samples DBSCAN min_samples parameter. Defaults to 5.
 #' @param url Base URL of the theoRy Python backend. Defaults to
 #'   \code{getOption("theoRy.engine_url", "http://localhost:8000")}.
+#' @param input_mode Either \code{"programmatic"} (default) or
+#'   \code{"interactive"}. Interactive mode runs the guided registry
+#'   questionnaire before the analysis.
+#' @param constraints,include_bidirectional,time_points,timing_options,
+#'   optional_nodes Registry options forwarded to
+#'   \code{build_component_registry()} in programmatic mode.
+#' @param max_models,allow_large Expansion safety controls forwarded to
+#'   \code{expand_model_states()}.
+#' @param causal_backend Causal backend passed to \code{build_dyad_matrix()}.
 #'
 #' @return A list with components:
 #'   \item{registry}{Data frame from \code{\link{build_component_registry}}.}
@@ -65,21 +80,34 @@
 #' }
 #'
 #' @export
-analyze_theory <- function(nodes,
-                            timing,
-                            exposure = NULL,
-                            outcome = NULL,
-                            prior_model = NULL,
-                            mode = c("sampled", "exhaustive", "symbolic"),
-                            n_models = 200L,
-                            seed = 42L,
-                            top_k = 10L,
-                            plot = FALSE,
+analyze_theory <- function(nodes = NULL,
+                             timing = NULL,
+                             exposure = NULL,
+                             outcome = NULL,
+                             prior_model = NULL,
+                             mode = c("sampled", "exhaustive", "symbolic"),
+                             n_models = 200L,
+                             seed = 42L,
+                             node_policy = c("all-present", "vary"),
+                             top_k = 10L,
+                             plot = FALSE,
                             eps = 0.5,
-                            min_samples = 5L,
-                            url = getOption("theoRy.engine_url",
-                                             "http://localhost:8000")) {
+                             min_samples = 5L,
+                             url = getOption("theoRy.engine_url",
+                                              "http://localhost:8000"),
+                             input_mode = c("programmatic", "interactive"),
+                             constraints = NULL,
+                             include_bidirectional = FALSE,
+                             time_points = NULL,
+                             timing_options = NULL,
+                             optional_nodes = character(),
+                             max_models = 10000L,
+                             allow_large = FALSE,
+                             causal_backend = c("auto", "native", "r")) {
   mode <- match.arg(mode)
+  node_policy <- match.arg(node_policy)
+  input_mode <- match.arg(input_mode)
+  causal_backend <- match.arg(causal_backend)
 
   # ── 0. Health check ──────────────────────────────────────────────────────────
   alive <- tryCatch(
@@ -94,7 +122,14 @@ analyze_theory <- function(nodes,
          ". Call start_theory_engine() first.", call. = FALSE)
   }
 
+  if (identical(input_mode, "interactive") && identical(mode, "symbolic")) {
+    stop("input_mode = 'interactive' is not available in symbolic mode.",
+         call. = FALSE)
+  }
   if (identical(mode, "symbolic")) {
+    if (is.null(exposure) || is.null(outcome)) {
+      stop("exposure and outcome are required.", call. = FALSE)
+    }
     message("Step 1/5: Building symbolic multiverse...")
     symbolic <- build_symbolic_multiverse(
       nodes = data.frame(name = nodes, timing = timing, stringsAsFactors = FALSE),
@@ -155,18 +190,40 @@ analyze_theory <- function(nodes,
 
   # ── 1. Build registry ────────────────────────────────────────────────────────
   message("Step 1/5: Building component registry...")
-  registry <- build_component_registry(
-    nodes = nodes,
-    timing = timing,
-    exposure = exposure,
-    outcome = outcome,
-    url = url
-  )
+  if (identical(input_mode, "interactive")) {
+    registry <- build_component_registry_interactive(url = url)
+    exposure <- attr(registry, "exposure")
+    outcome <- attr(registry, "outcome")
+    timing_options <- attr(registry, "timing_options")
+    optional_nodes <- attr(registry, "optional_nodes")
+  } else {
+    registry <- build_component_registry(
+      nodes = nodes,
+      timing = timing,
+      exposure = exposure,
+      outcome = outcome,
+      constraints = constraints,
+      include_bidirectional = include_bidirectional,
+      time_points = time_points,
+      timing_options = timing_options,
+      optional_nodes = optional_nodes,
+      url = url
+    )
+  }
 
   # ── 2. Expand model states ───────────────────────────────────────────────────
   message("Step 2/5: Expanding model states...")
   if (identical(mode, "exhaustive")) {
-    states <- expand_model_states(registry, mode = "exhaustive", url = url)
+    states <- expand_model_states(
+      registry,
+      mode = "exhaustive",
+      node_policy = node_policy,
+      timing_options = timing_options,
+      optional_nodes = optional_nodes,
+      max_models = max_models,
+      allow_large = allow_large,
+      url = url
+    )
     model_count <- length(unique(states$model_id))
     if (model_count > 10000) {
       warning("Exhaustive expansion produced ", model_count,
@@ -177,18 +234,23 @@ analyze_theory <- function(nodes,
       registry, mode = "sampled",
       n_models = as.integer(n_models),
       seed = as.integer(seed),
+      node_policy = node_policy,
+      timing_options = timing_options,
+      optional_nodes = optional_nodes,
+      max_models = max_models,
+      allow_large = allow_large,
       url = url
     )
   }
 
   # ── 3. Build dyad matrix ─────────────────────────────────────────────────────
   message("Step 3/5: Computing dyad matrix...")
-  dyad_mode <- if (!is.null(exposure) && !is.null(outcome)) "full" else "basic"
   dyads <- build_dyad_matrix(
     registry, states,
-    mode = dyad_mode,
+    mode = "full",
     exposure = exposure,
     outcome = outcome,
+    causal_backend = causal_backend,
     url = url
   )
 

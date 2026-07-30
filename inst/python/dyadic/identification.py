@@ -1,6 +1,13 @@
 from __future__ import annotations
 
 import logging
+from typing import Literal
+
+from dyadic.causal import (
+    CausalError,
+    NativeCausalUnsupportedError,
+    native_backdoor_adjustment_sets,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -9,8 +16,15 @@ class IdentificationError(Exception):
     pass
 
 
+class NativeIdentificationUnsupportedError(IdentificationError):
+    """Raised when general identification exceeds the native backdoor scope."""
+
+
 class IdentificationWrapper:
-    def __init__(self):
+    def __init__(self, causal_backend: Literal["auto", "native", "r"] = "r"):
+        if causal_backend not in {"auto", "native", "r"}:
+            raise ValueError("causal_backend must be one of: auto, native, r")
+        self.causal_backend = causal_backend
         self._r_available: bool | None = None
 
     def _ensure_r(self) -> bool:
@@ -61,8 +75,6 @@ class IdentificationWrapper:
         exposure: str,
         outcome: str,
     ) -> tuple[bool, str | None]:
-        self._ensure_r()
-
         if exposure not in nodes:
             raise IdentificationError(
                 f"Exposure {exposure!r} not present in model nodes {nodes}"
@@ -75,6 +87,75 @@ class IdentificationWrapper:
             raise IdentificationError(
                 f"Exposure and outcome must be distinct, got both {exposure!r}"
             )
+
+        if self.causal_backend == "native":
+            return self._identify_total_effect_native(
+                nodes, directed_edges, bidirected_edges, exposure, outcome
+            )
+        if self.causal_backend == "auto":
+            try:
+                return self._identify_total_effect_native(
+                    nodes, directed_edges, bidirected_edges, exposure, outcome
+                )
+            except NativeIdentificationUnsupportedError:
+                return self._identify_total_effect_r(
+                    nodes, directed_edges, bidirected_edges, exposure, outcome
+                )
+        return self._identify_total_effect_r(
+            nodes, directed_edges, bidirected_edges, exposure, outcome
+        )
+
+    def _identify_total_effect_native(
+        self,
+        nodes: list[str],
+        directed_edges: list[tuple[str, str]],
+        bidirected_edges: list[tuple[str, str]],
+        exposure: str,
+        outcome: str,
+    ) -> tuple[bool, str | None]:
+        try:
+            adjustment_sets = native_backdoor_adjustment_sets(
+                {
+                    "nodes": nodes,
+                    "edges": directed_edges,
+                    "bidirected_edges": bidirected_edges,
+                    "exposure": exposure,
+                    "outcome": outcome,
+                }
+            )
+        except NativeCausalUnsupportedError as e:
+            raise NativeIdentificationUnsupportedError(str(e)) from e
+        except CausalError as e:
+            raise IdentificationError(
+                f"Native backdoor identification failed: {e}"
+            ) from e
+
+        if not adjustment_sets:
+            raise NativeIdentificationUnsupportedError(
+                "Native identification supports total effects with a valid "
+                "backdoor adjustment set; use causal_backend='r' for general ID"
+            )
+
+        adjustment = adjustment_sets[0]
+        if adjustment:
+            covariates = ", ".join(adjustment)
+            formula = (
+                f"P({outcome} | do({exposure})) = sum_{{{covariates}}} "
+                f"P({outcome} | {exposure}, {covariates}) P({covariates})"
+            )
+        else:
+            formula = f"P({outcome} | do({exposure})) = P({outcome} | {exposure})"
+        return True, formula
+
+    def _identify_total_effect_r(
+        self,
+        nodes: list[str],
+        directed_edges: list[tuple[str, str]],
+        bidirected_edges: list[tuple[str, str]],
+        exposure: str,
+        outcome: str,
+    ) -> tuple[bool, str | None]:
+        self._ensure_r()
 
         import rpy2.robjects as ro
         from rpy2.robjects import conversion, default_converter

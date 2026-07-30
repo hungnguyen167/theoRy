@@ -8,6 +8,16 @@ from registry.schema import ComponentRegistry
 from state.tensor import StateError
 
 VALID_EDGE_STATUSES = ("causal", "unknown", "non-causal")
+VALID_BIDIRECTED_STATUSES = ("present", "absent")
+LARGE_EXPANSION_THRESHOLD = 10_000
+
+
+class ExpansionResult(list):
+    """List-compatible expansion output with its pruning diagnostics."""
+
+    def __init__(self, records: list[dict], pruning_report: dict):
+        super().__init__(records)
+        self.pruning_report = pruning_report
 
 
 def _has_cycle(directed_edges: set[tuple[str, str]]) -> bool:
@@ -46,88 +56,64 @@ class ModelStateExpander:
         mode: str = "sampled",
         seed_claims: list[dict] | None = None,
         node_timing: dict[str, int] | None = None,
+        timing_options: dict[str, list[int]] | None = None,
+        optional_nodes: list[str] | None = None,
         max_models: int = 10_000,
         n_models: int | None = None,
         seed: int | None = None,
         edge_statuses: list[str] | None = None,
+        bidirected_statuses: list[str] | None = None,
         node_policy: str = "all-present",
+        allow_large: bool = False,
         exposure: str | None = None,
         outcome: str | None = None,
-    ) -> list[dict]:
-        """Expand registry components into model-state records.
+    ) -> ExpansionResult:
+        """Expand registry components into temporally valid model states.
 
-        Parameters
-        ----------
-        registry:
-            The component registry defining the universe of components.
-        mode:
-            ``sampled`` or ``exhaustive``.
-        seed_claims:
-            Optional list of ``{model_id, comp_id, status, timing}`` dicts.
-            When provided, the engine searches for each seeded model in the
-            generated multiverse.  Found models are promoted to the top and
-            flagged ``seeded=True``.  Models not found in the multiverse are
-            appended at the top with ``seeded=True``.
-        node_timing:
-            Optional mapping of ``node_name -> timing_int`` used for temporal
-            validation in exhaustive / sampled modes.
-        max_models:
-            Safety cap for exhaustive mode.  Expansion fails fast if the
-            projected count exceeds this value.
-        n_models:
-            Number of models to sample in ``sampled`` mode (default 100).
-        seed:
-            Random seed for reproducible ``sampled`` expansion.
-        edge_statuses:
-            Statuses to enumerate/sample over for edge components in
-            exhaustive and sampled modes.  Defaults to
-            ``["causal", "unknown", "non-causal"]``.  Pass
-            ``["causal", "unknown"]`` for binary expansion.
-        node_policy:
-            Controls how node subsets are generated:
-            - ``"all-present"`` (default): all registry nodes are present
-              in every model (backward-compatible).
-            - ``"vary"``: enumerate/sample over non-empty node subsets.
-        exposure, outcome:
-            Optional causal target nodes. When supplied, every generated model
-            must contain both nodes, including when ``node_policy="vary"``.
+        ``node_timing`` and ``node_policy`` retain the legacy single-timing,
+        node-subset behavior. Supplying ``timing_options`` selects one timing
+        per present node in every model. ``optional_nodes`` then limits subset
+        variation to those nodes only.
         """
         if edge_statuses is None:
             edge_statuses = list(VALID_EDGE_STATUSES)
+        if bidirected_statuses is None:
+            bidirected_statuses = list(VALID_BIDIRECTED_STATUSES)
 
-        invalid = [s for s in edge_statuses if s not in VALID_EDGE_STATUSES]
-        if invalid:
-            raise StateError(
-                f"Invalid edge status(es): {invalid}. "
-                f"Choose from {list(VALID_EDGE_STATUSES)}."
-            )
-
-        if len(set(edge_statuses)) != len(edge_statuses):
-            raise StateError("Duplicate values in edge_statuses are not allowed.")
-
-        if not edge_statuses:
-            raise StateError("edge_statuses must contain at least one status.")
-
+        ModelStateExpander._validate_statuses(
+            edge_statuses,
+            VALID_EDGE_STATUSES,
+            "edge_statuses",
+        )
+        ModelStateExpander._validate_statuses(
+            bidirected_statuses,
+            VALID_BIDIRECTED_STATUSES,
+            "bidirected_statuses",
+        )
         if node_policy not in ("all-present", "vary"):
             raise StateError(
-                f"Unknown node_policy: {node_policy!r}. "
-                f"Use 'all-present' or 'vary'."
+                f"Unknown node_policy: {node_policy!r}. " "Use 'all-present' or 'vary'."
             )
+        if max_models < 1:
+            raise StateError("max_models must be a positive integer.")
 
         df = registry.data
         node_comps = df[df["type"] == "node"]
         edge_comps = df[df["type"] == "edge"]
+        node_names = dict(zip(node_comps["source"], node_comps["comp_id"]))
+        node_names_by_cid = {cid: name for name, cid in node_names.items()}
 
-        node_names: dict[str, str] = {}
-        for _, row in node_comps.iterrows():
-            node_names[row["source"]] = row["comp_id"]
-
+        edge_ids = edge_comps["comp_id"].tolist()
+        edge_sources = edge_comps.set_index("comp_id")["source"].to_dict()
+        edge_targets = edge_comps.set_index("comp_id")["target"].to_dict()
+        edge_directions = edge_comps.set_index("comp_id")["direction"].to_dict()
         fixed_causal_edge_ids: set[str] = set()
-        if "fixed_status" in df.columns:
-            fixed_rows = df[
-                (df["type"] == "edge") & (df["fixed_status"] == "causal")
-            ]
-            fixed_causal_edge_ids = set(fixed_rows["comp_id"].tolist())
+        if "fixed_status" in edge_comps.columns:
+            fixed_causal_edge_ids = set(
+                edge_comps.loc[
+                    edge_comps["fixed_status"] == "causal", "comp_id"
+                ].tolist()
+            )
 
         if fixed_causal_edge_ids and "causal" not in edge_statuses:
             raise StateError(
@@ -150,56 +136,94 @@ class ModelStateExpander:
             required_node_cids = {node_names[exposure], node_names[outcome]}
 
         for cid in fixed_causal_edge_ids:
-            src = edge_comps.set_index("comp_id").loc[cid, "source"]
-            tgt = edge_comps.set_index("comp_id").loc[cid, "target"]
-            if src in node_names:
-                required_node_cids.add(node_names[src])
-            if tgt in node_names:
-                required_node_cids.add(node_names[tgt])
+            source = edge_sources[cid]
+            target = edge_targets[cid]
+            required_node_cids.add(node_names[source])
+            required_node_cids.add(node_names[target])
 
-        edge_ids = edge_comps["comp_id"].tolist()
-        edge_sources = edge_comps.set_index("comp_id")["source"].to_dict()
-        edge_targets = edge_comps.set_index("comp_id")["target"].to_dict()
-        edge_directions = edge_comps.set_index("comp_id")["direction"].to_dict()
+        normalized_timing_options = ModelStateExpander._validate_timing_options(
+            timing_options,
+            node_names,
+        )
+        optional_node_cids = ModelStateExpander._optional_node_cids(
+            optional_nodes,
+            node_names,
+            required_node_cids,
+        )
+        node_subsets = ModelStateExpander._node_subsets(
+            node_names,
+            required_node_cids,
+            node_policy,
+            optional_node_cids,
+        )
+
+        report = {
+            "timing_assignments_considered": 0,
+            "timing_assignments_pruned": 0,
+            "required_edge_assignments_pruned": 0,
+            "temporal_edge_assignments_pruned": 0,
+            "cycle_models_pruned": 0,
+            "projected_model_count": 0,
+            "generated_model_count": 0,
+            "warnings": [],
+        }
+        spaces = ModelStateExpander._build_spaces(
+            node_subsets=node_subsets,
+            node_names=node_names,
+            node_names_by_cid=node_names_by_cid,
+            node_timing=node_timing or {},
+            timing_options=normalized_timing_options,
+            strict_timing=timing_options is not None,
+            edge_ids=edge_ids,
+            edge_sources=edge_sources,
+            edge_targets=edge_targets,
+            edge_directions=edge_directions,
+            edge_statuses=edge_statuses,
+            bidirected_statuses=bidirected_statuses,
+            fixed_causal_edge_ids=fixed_causal_edge_ids,
+            report=report,
+        )
+        projected = sum(space["combination_count"] for space in spaces)
+        report["projected_model_count"] = projected
 
         if mode == "exhaustive":
+            if projected > max_models:
+                raise StateError(
+                    f"Exhaustive expansion projected {projected} models, "
+                    f"exceeding max_models={max_models}. "
+                    "Use mode='sampled' or raise max_models."
+                )
+            if projected > LARGE_EXPANSION_THRESHOLD:
+                if not allow_large:
+                    raise StateError(
+                        f"Exhaustive expansion projected {projected} models. "
+                        "Set allow_large=True to proceed; max_models remains a hard cap."
+                    )
+                message = (
+                    f"Allowing large exhaustive expansion of {projected} models "
+                    f"within max_models={max_models}."
+                )
+                warnings.warn(message)
+                report["warnings"].append(message)
             records = ModelStateExpander._expand_exhaustive(
-                registry=registry,
-                node_names=node_names,
-                node_timing=node_timing or {},
-                edge_ids=edge_ids,
-                edge_sources=edge_sources,
-                edge_targets=edge_targets,
-                edge_directions=edge_directions,
-                max_models=max_models,
-                edge_statuses=edge_statuses,
-                node_policy=node_policy,
-                required_node_cids=required_node_cids,
-                fixed_causal_edge_ids=fixed_causal_edge_ids,
+                spaces,
+                edge_directions,
+                report,
+                projected,
             )
         elif mode == "sampled":
             records = ModelStateExpander._expand_sampled(
-                registry=registry,
-                node_names=node_names,
-                node_timing=node_timing or {},
-                edge_ids=edge_ids,
-                edge_sources=edge_sources,
-                edge_targets=edge_targets,
-                edge_directions=edge_directions,
-                n_models=n_models or 100,
-                seed=seed,
-                max_models=max_models,
-                edge_statuses=edge_statuses,
-                node_policy=node_policy,
-                required_node_cids=required_node_cids,
-                fixed_causal_edge_ids=fixed_causal_edge_ids,
+                spaces,
+                edge_directions,
+                report,
+                n_models or 100,
+                seed,
             )
         else:
             raise StateError(
                 f"Unknown expansion mode: {mode!r}. "
-                f"Use 'sampled' or 'exhaustive'. "
-                f"To inject user theories, pass seed_claims alongside "
-                f"either mode."
+                "Use 'sampled' or 'exhaustive'. "
+                "To inject user theories, pass seed_claims alongside either mode."
             )
 
         if seed_claims:
@@ -208,13 +232,358 @@ class ModelStateExpander:
                 seed_claims=seed_claims,
                 registry=registry,
                 node_timing=node_timing or {},
+                timing_options=normalized_timing_options,
                 required_node_cids=required_node_cids,
                 fixed_causal_edge_ids=fixed_causal_edge_ids,
             )
         else:
-            for r in records:
-                r["seeded"] = False
+            for record in records:
+                record["seeded"] = False
 
+        report["generated_model_count"] = len({r["model_id"] for r in records})
+        return ExpansionResult(records, report)
+
+    @staticmethod
+    def _validate_statuses(
+        statuses: list[str], valid: tuple[str, ...], field: str
+    ) -> None:
+        invalid = [status for status in statuses if status not in valid]
+        if invalid:
+            label = "edge status(es)" if field == "edge_statuses" else field
+            raise StateError(f"Invalid {label}: {invalid}. Choose from {list(valid)}.")
+        if len(set(statuses)) != len(statuses):
+            raise StateError(f"Duplicate values in {field} are not allowed.")
+        if not statuses:
+            raise StateError(f"{field} must contain at least one status.")
+
+    @staticmethod
+    def _validate_timing_options(
+        timing_options: dict[str, list[int]] | None,
+        node_names: dict[str, str],
+    ) -> dict[str, list[int]]:
+        if timing_options is None:
+            return {}
+        unknown = sorted(set(timing_options) - set(node_names))
+        if unknown:
+            raise StateError(f"timing_options references unknown node(s): {unknown}")
+
+        normalized: dict[str, list[int]] = {}
+        for name, values in timing_options.items():
+            if not values:
+                raise StateError(f"timing_options[{name!r}] must not be empty.")
+            if any(
+                not isinstance(value, int) or isinstance(value, bool)
+                for value in values
+            ):
+                raise StateError(
+                    f"timing_options[{name!r}] must contain integers only."
+                )
+            if len(set(values)) != len(values):
+                raise StateError(
+                    f"Duplicate values in timing_options[{name!r}] are not allowed."
+                )
+            normalized[name] = list(values)
+        return normalized
+
+    @staticmethod
+    def _optional_node_cids(
+        optional_nodes: list[str] | None,
+        node_names: dict[str, str],
+        required_node_cids: set[str],
+    ) -> set[str] | None:
+        if optional_nodes is None:
+            return None
+        unknown = sorted(set(optional_nodes) - set(node_names))
+        if unknown:
+            raise StateError(f"optional_nodes references unknown node(s): {unknown}")
+        if len(set(optional_nodes)) != len(optional_nodes):
+            raise StateError("Duplicate values in optional_nodes are not allowed.")
+        # Focal and fixed-edge endpoints are structural requirements, even if
+        # a caller also places them in optional_nodes.
+        return {node_names[name] for name in optional_nodes} - required_node_cids
+
+    @staticmethod
+    def _node_subsets(
+        node_names: dict[str, str],
+        required_node_cids: set[str],
+        node_policy: str,
+        optional_node_cids: set[str] | None,
+    ) -> list[set[str]]:
+        node_cids = set(node_names.values())
+        if optional_node_cids is not None:
+            fixed_nodes = node_cids - optional_node_cids
+            return [
+                fixed_nodes | set(choice)
+                for size in range(len(optional_node_cids) + 1)
+                for choice in itertools.combinations(sorted(optional_node_cids), size)
+            ]
+        if node_policy == "all-present":
+            return [node_cids]
+        return [
+            set(choice)
+            for size in range(1, len(node_cids) + 1)
+            for choice in itertools.combinations(sorted(node_cids), size)
+            if required_node_cids.issubset(choice)
+        ]
+
+    @staticmethod
+    def _timing_assignments(
+        subset: set[str],
+        node_names_by_cid: dict[str, str],
+        node_timing: dict[str, int],
+        timing_options: dict[str, list[int]],
+    ):
+        ordered_cids = sorted(subset)
+        choices = [
+            timing_options.get(
+                node_names_by_cid[cid],
+                [node_timing.get(node_names_by_cid[cid])],
+            )
+            for cid in ordered_cids
+        ]
+        for values in itertools.product(*choices):
+            yield dict(zip(ordered_cids, values))
+
+    @staticmethod
+    def _build_spaces(
+        *,
+        node_subsets: list[set[str]],
+        node_names: dict[str, str],
+        node_names_by_cid: dict[str, str],
+        node_timing: dict[str, int],
+        timing_options: dict[str, list[int]],
+        strict_timing: bool,
+        edge_ids: list[str],
+        edge_sources: dict[str, str],
+        edge_targets: dict[str, str],
+        edge_directions: dict[str, str],
+        edge_statuses: list[str],
+        bidirected_statuses: list[str],
+        fixed_causal_edge_ids: set[str],
+        report: dict,
+    ) -> list[dict]:
+        spaces: list[dict] = []
+        for subset in node_subsets:
+            for timing in ModelStateExpander._timing_assignments(
+                subset,
+                node_names_by_cid,
+                node_timing,
+                timing_options,
+            ):
+                report["timing_assignments_considered"] += 1
+                fixed_edges: list[str] = []
+                choices: list[tuple[str, list[str]]] = []
+                valid = True
+
+                for cid in edge_ids:
+                    source_cid = node_names[edge_sources[cid]]
+                    target_cid = node_names[edge_targets[cid]]
+                    if source_cid not in subset or target_cid not in subset:
+                        continue
+
+                    directed = edge_directions[cid] == "->"
+                    temporally_eligible = not directed or ModelStateExpander._eligible(
+                        timing[source_cid],
+                        timing[target_cid],
+                    )
+                    if cid in fixed_causal_edge_ids:
+                        if not temporally_eligible:
+                            report["timing_assignments_pruned"] += 1
+                            report["required_edge_assignments_pruned"] += 1
+                            valid = False
+                            break
+                        fixed_edges.append(cid)
+                        continue
+
+                    if directed and strict_timing and not temporally_eligible:
+                        report["temporal_edge_assignments_pruned"] += 1
+                        continue
+
+                    statuses = (
+                        list(edge_statuses) if directed else list(bidirected_statuses)
+                    )
+                    if directed and not strict_timing and not temporally_eligible:
+                        statuses = [status for status in statuses if status != "causal"]
+                    if not statuses:
+                        report["temporal_edge_assignments_pruned"] += 1
+                        valid = False
+                        break
+                    choices.append((cid, statuses))
+
+                if not valid:
+                    continue
+
+                combination_count = 1
+                for _, statuses in choices:
+                    combination_count *= len(statuses)
+                spaces.append(
+                    {
+                        "subset": subset,
+                        "timing": timing,
+                        "fixed_edges": fixed_edges,
+                        "choices": choices,
+                        "combination_count": combination_count,
+                        "edge_sources": edge_sources,
+                        "edge_targets": edge_targets,
+                    }
+                )
+        return spaces
+
+    @staticmethod
+    def _eligible(source_timing: int | None, target_timing: int | None) -> bool:
+        return (
+            source_timing is None
+            or target_timing is None
+            or source_timing < target_timing
+        )
+
+    @staticmethod
+    def _record_model(
+        records: list[dict],
+        model_id: str,
+        subset: set[str],
+        timing: dict[str, int | None],
+        edge_statuses: dict[str, str],
+        fixed_edges: list[str],
+    ) -> None:
+        for cid in sorted(subset):
+            records.append(
+                {
+                    "model_id": model_id,
+                    "comp_id": cid,
+                    "status": "present",
+                    "timing": timing[cid],
+                }
+            )
+        for cid in sorted(edge_statuses):
+            records.append(
+                {
+                    "model_id": model_id,
+                    "comp_id": cid,
+                    "status": edge_statuses[cid],
+                    "timing": None,
+                }
+            )
+        for cid in sorted(fixed_edges):
+            records.append(
+                {
+                    "model_id": model_id,
+                    "comp_id": cid,
+                    "status": "causal",
+                    "timing": None,
+                }
+            )
+
+    @staticmethod
+    def _choice_statuses(space: dict, selection: tuple[str, ...]) -> dict[str, str]:
+        return {cid: status for (cid, _), status in zip(space["choices"], selection)}
+
+    @staticmethod
+    def _is_acyclic(
+        space: dict,
+        edge_statuses: dict[str, str],
+        edge_directions: dict[str, str],
+    ) -> bool:
+        edge_sources = space["edge_sources"]
+        edge_targets = space["edge_targets"]
+        directed_edges = {
+            (edge_sources[cid], edge_targets[cid])
+            for cid in space["fixed_edges"]
+            if edge_directions[cid] == "->"
+        }
+        directed_edges.update(
+            (edge_sources[cid], edge_targets[cid])
+            for cid, status in edge_statuses.items()
+            if edge_directions[cid] == "->" and status == "causal"
+        )
+        return not _has_cycle(directed_edges)
+
+    @staticmethod
+    def _expand_exhaustive(
+        spaces: list[dict],
+        edge_directions: dict[str, str],
+        report: dict,
+        projected: int,
+    ) -> list[dict]:
+        records: list[dict] = []
+        model_counter = 0
+        width = max(4, len(str(projected)))
+        for space in spaces:
+            selections = itertools.product(
+                *(statuses for _, statuses in space["choices"])
+            )
+            for selection in selections:
+                statuses = ModelStateExpander._choice_statuses(space, selection)
+                if not ModelStateExpander._is_acyclic(
+                    space,
+                    statuses,
+                    edge_directions,
+                ):
+                    report["cycle_models_pruned"] += 1
+                    continue
+                model_counter += 1
+                ModelStateExpander._record_model(
+                    records,
+                    f"M{model_counter:0{width}d}",
+                    space["subset"],
+                    space["timing"],
+                    statuses,
+                    space["fixed_edges"],
+                )
+        return records
+
+    @staticmethod
+    def _expand_sampled(
+        spaces: list[dict],
+        edge_directions: dict[str, str],
+        report: dict,
+        n_models: int,
+        seed: int | None,
+    ) -> list[dict]:
+        records: list[dict] = []
+        if not spaces:
+            return records
+        rng = random.Random(seed)
+        width = max(4, len(str(n_models)))
+        seen_keys: set[tuple] = set()
+        attempts = 0
+        model_counter = 0
+        max_attempts = n_models * 50
+
+        while model_counter < n_models and attempts < max_attempts:
+            attempts += 1
+            space = rng.choice(spaces)
+            selection = tuple(rng.choice(statuses) for _, statuses in space["choices"])
+            key = (
+                tuple(sorted(space["subset"])),
+                tuple(sorted(space["timing"].items())),
+                selection,
+            )
+            if key in seen_keys:
+                continue
+            seen_keys.add(key)
+            statuses = ModelStateExpander._choice_statuses(space, selection)
+            if not ModelStateExpander._is_acyclic(space, statuses, edge_directions):
+                report["cycle_models_pruned"] += 1
+                continue
+
+            model_counter += 1
+            ModelStateExpander._record_model(
+                records,
+                f"M{model_counter:0{width}d}",
+                space["subset"],
+                space["timing"],
+                statuses,
+                space["fixed_edges"],
+            )
+
+        if model_counter < n_models:
+            message = (
+                f"Only generated {model_counter} models; requested {n_models}. "
+                "Not enough valid model combinations exist."
+            )
+            warnings.warn(message)
+            report["warnings"].append(message)
         return records
 
     # ------------------------------------------------------------------
@@ -228,644 +597,277 @@ class ModelStateExpander:
         seed_claims: list[dict],
         registry: ComponentRegistry,
         node_timing: dict[str, int],
-        required_node_cids: set[str] | None = None,
-        fixed_causal_edge_ids: set[str] | None = None,
+        timing_options: dict[str, list[int]],
+        required_node_cids: set[str],
+        fixed_causal_edge_ids: set[str],
     ) -> list[dict]:
-        """Find or append seeded models, add 'seeded' flag, reorder to top.
-
-        Uses sparse semantic vectors: present node set + applicable edge statuses.
-        """
-        if required_node_cids is None:
-            required_node_cids = set()
-        if fixed_causal_edge_ids is None:
-            fixed_causal_edge_ids = set()
-
-        all_comp_ids = sorted(registry.data["comp_id"].tolist())
-        valid_comp_ids = set(all_comp_ids)
-        valid_node_statuses = {"present", "absent", "causal", "unknown", "non-causal"}
-        valid_edge_statuses = set(VALID_EDGE_STATUSES)
-
+        """Find or append seeded models using statuses and claimed timings."""
         component_types = registry.data.set_index("comp_id")["type"].to_dict()
-
-        node_map: dict[str, str] = {}
-        node_names_by_cid: dict[str, str] = {}
-        for _, row in registry.data[registry.data["type"] == "node"].iterrows():
-            node_map[row["source"]] = row["comp_id"]
-            node_names_by_cid[row["comp_id"]] = row["source"]
-        node_comp_ids = set(node_map.values())
-
-        edge_endpoints: dict[str, tuple[str | None, str | None]] = {}
-        edge_endpoint_names: dict[str, tuple[str, str]] = {}
-        for _, row in registry.data[registry.data["type"] == "edge"].iterrows():
-            edge_endpoints[row["comp_id"]] = (
-                node_map.get(row["source"]),
-                node_map.get(row["target"]),
+        valid_comp_ids = set(component_types)
+        node_map = dict(
+            zip(
+                registry.data.loc[registry.data["type"] == "node", "source"],
+                registry.data.loc[registry.data["type"] == "node", "comp_id"],
             )
-            edge_endpoint_names[row["comp_id"]] = (row["source"], row["target"])
+        )
+        node_names_by_cid = {cid: name for name, cid in node_map.items()}
+        node_comp_ids = set(node_map.values())
+        edge_rows = registry.data[registry.data["type"] == "edge"].set_index("comp_id")
+        edge_endpoints = {
+            cid: (node_map.get(row["source"]), node_map.get(row["target"]))
+            for cid, row in edge_rows.iterrows()
+        }
+        edge_endpoint_names = {
+            cid: (row["source"], row["target"]) for cid, row in edge_rows.iterrows()
+        }
+        edge_directions = edge_rows["direction"].to_dict()
 
-        for c in seed_claims:
-            if c.get("comp_id") not in valid_comp_ids:
-                raise StateError(
-                    f"Unknown component ID in seed claim: {c.get('comp_id')!r}"
+        for claim in seed_claims:
+            cid = claim.get("comp_id")
+            if cid not in valid_comp_ids:
+                raise StateError(f"Unknown component ID in seed claim: {cid!r}")
+            status = claim.get("status")
+            if component_types[cid] == "node":
+                if status not in {"present", "absent", *VALID_EDGE_STATUSES}:
+                    raise StateError(
+                        f"Invalid node status in seed claim for {cid}: {status!r}"
+                    )
+            else:
+                valid_statuses = (
+                    VALID_BIDIRECTED_STATUSES
+                    if edge_directions[cid] == "<->"
+                    else VALID_EDGE_STATUSES
                 )
-            cid = c.get("comp_id")
-            status = c.get("status")
-            comp_type = component_types[cid]
-            if comp_type == "node" and status not in valid_node_statuses:
-                raise StateError(
-                    f"Invalid node status in seed claim for {cid}: {status!r}"
-                )
-            if comp_type == "edge" and status not in valid_edge_statuses:
-                raise StateError(
-                    f"Invalid edge status in seed claim for {cid}: {status!r}"
-                )
+                if status not in valid_statuses:
+                    raise StateError(
+                        f"Invalid edge status in seed claim for {cid}: {status!r}"
+                    )
+            timing = claim.get("timing")
+            if timing is not None and cid in node_names_by_cid:
+                name = node_names_by_cid[cid]
+                if name in timing_options and timing not in timing_options[name]:
+                    raise StateError(
+                        f"Seed timing for node {name!r} is not in its timing_options."
+                    )
 
         for cid in fixed_causal_edge_ids:
-            for c in seed_claims:
-                if c.get("comp_id") == cid and c.get("status") in (
-                    "unknown",
-                    "non-causal",
-                ):
+            for claim in seed_claims:
+                if claim.get("comp_id") == cid and claim.get("status") != "causal":
                     raise StateError(
-                        f"Seed claim sets fixed edge {cid} to {c.get('status')!r}, "
-                        f"but this edge is fixed as causal in the registry"
+                        f"Seed claim sets fixed edge {cid} to {claim.get('status')!r}, "
+                        "but this edge is fixed as causal in the registry"
                     )
 
         seed_models: dict[str, dict[str, str]] = {}
+        seed_timing: dict[str, dict[str, int]] = {}
         seed_order: list[str] = []
-        seed_timing: dict[str, dict[str, int | None]] = {}
-        for c in seed_claims:
-            mid = c["model_id"]
-            if mid not in seed_models:
-                seed_models[mid] = {}
-                seed_timing[mid] = {}
-                seed_order.append(mid)
-            seed_models[mid][c["comp_id"]] = c["status"]
-            if c.get("timing") is not None:
-                seed_timing[mid][c["comp_id"]] = c["timing"]
+        for claim in seed_claims:
+            model_id = claim["model_id"]
+            if model_id not in seed_models:
+                seed_models[model_id] = {}
+                seed_timing[model_id] = {}
+                seed_order.append(model_id)
+            seed_models[model_id][claim["comp_id"]] = claim["status"]
+            if claim.get("timing") is not None:
+                seed_timing[model_id][claim["comp_id"]] = claim["timing"]
 
-        def _node_status_is_present(status: str) -> bool:
-            # Legacy dense inputs used causal for node presence. Treat unknown
-            # and non-causal as absent to keep old state-data ingestion explicit.
+        def node_present(status: str) -> bool:
             return status in ("present", "causal")
 
-        def _normalize_seed_model(mid: str) -> dict:
-            claims = seed_models[mid]
-            present_nodes: set[str] = set()
-            explicit_absent_nodes: set[str] = set()
-            edge_statuses: dict[str, str] = {}
+        def default_edge_status(cid: str) -> str:
+            return "absent" if edge_directions[cid] == "<->" else "unknown"
 
+        def normalize(model_id: str) -> dict:
+            claims = seed_models[model_id]
+            present_nodes: set[str] = set()
+            absent_nodes: set[str] = set()
+            statuses: dict[str, str] = {}
             for cid, status in claims.items():
-                comp_type = component_types[cid]
-                if comp_type == "node":
-                    if _node_status_is_present(status):
-                        if cid in explicit_absent_nodes:
+                if component_types[cid] == "node":
+                    if node_present(status):
+                        if cid in absent_nodes:
                             raise StateError(
-                                f"Seed model {mid} marks node {cid} both present and absent"
+                                f"Seed model {model_id} marks node {cid} both present and absent"
                             )
                         present_nodes.add(cid)
                     else:
                         if cid in present_nodes:
                             raise StateError(
-                                f"Seed model {mid} marks node {cid} both present and absent"
+                                f"Seed model {model_id} marks node {cid} both present and absent"
                             )
-                        explicit_absent_nodes.add(cid)
-                elif comp_type == "edge":
-                    if cid in fixed_causal_edge_ids and status != "causal":
-                        raise StateError(
-                            f"Seed model {mid} sets fixed edge {cid} to {status!r}, "
-                            f"but it is fixed as causal"
-                        )
-                    edge_statuses[cid] = status
+                        absent_nodes.add(cid)
+                else:
+                    statuses[cid] = status
 
-            for edge_cid in edge_statuses:
-                src_cid, tgt_cid = edge_endpoints[edge_cid]
-                src_name, tgt_name = edge_endpoint_names[edge_cid]
-                if src_cid is None or tgt_cid is None:
+            for cid in statuses:
+                source_cid, target_cid = edge_endpoints[cid]
+                source_name, target_name = edge_endpoint_names[cid]
+                if source_cid is None or target_cid is None:
                     raise StateError(
-                        f"Seed edge {edge_cid} references unknown endpoint "
-                        f"{src_name!r} or {tgt_name!r}"
+                        f"Seed edge {cid} references unknown endpoint "
+                        f"{source_name!r} or {target_name!r}"
                     )
-                for node_cid in (src_cid, tgt_cid):
-                    if node_cid in explicit_absent_nodes:
+                for node_cid in (source_cid, target_cid):
+                    if node_cid in absent_nodes:
                         raise StateError(
-                            f"Seed model {mid} claims edge {edge_cid}, but endpoint "
+                            f"Seed model {model_id} claims edge {cid}, but endpoint "
                             f"node {node_cid} is explicitly absent"
                         )
                     present_nodes.add(node_cid)
 
-            for fixed_cid in fixed_causal_edge_ids:
-                if fixed_cid not in edge_statuses:
-                    edge_statuses[fixed_cid] = "causal"
-                fixed_src, fixed_tgt = edge_endpoints[fixed_cid]
-                if fixed_src in explicit_absent_nodes or fixed_tgt in explicit_absent_nodes:
+            for cid in fixed_causal_edge_ids:
+                statuses.setdefault(cid, "causal")
+                source_cid, target_cid = edge_endpoints[cid]
+                if source_cid in absent_nodes or target_cid in absent_nodes:
                     raise StateError(
-                        f"Seed model {mid} omits endpoint(s) of fixed edge {fixed_cid}. "
-                        f"Fixed edge endpoints cannot be absent."
+                        f"Seed model {model_id} omits endpoint(s) of fixed edge {cid}. "
+                        "Fixed edge endpoints cannot be absent."
                     )
-                if fixed_src is not None:
-                    present_nodes.add(fixed_src)
-                if fixed_tgt is not None:
-                    present_nodes.add(fixed_tgt)
+                present_nodes.update((source_cid, target_cid))
 
             return {
                 "present_nodes": present_nodes,
-                "edge_statuses": edge_statuses,
-                "timing": seed_timing[mid],
+                "edge_statuses": statuses,
+                "timing": seed_timing[model_id],
             }
 
-        def _semantic_vector(
-            present_nodes: set[str],
-            statuses: dict[str, str],
-        ) -> tuple:
+        def semantic_vector(present_nodes: set[str], statuses: dict[str, str]) -> tuple:
             items: list[tuple[str, str]] = [
                 (cid, "present") for cid in sorted(present_nodes)
             ]
-            for edge_cid in sorted(edge_endpoints):
-                src_cid, tgt_cid = edge_endpoints[edge_cid]
-                if src_cid in present_nodes and tgt_cid in present_nodes:
-                    items.append((edge_cid, statuses.get(edge_cid, "unknown")))
+            for cid, (source_cid, target_cid) in sorted(edge_endpoints.items()):
+                if source_cid in present_nodes and target_cid in present_nodes:
+                    items.append((cid, statuses.get(cid, default_edge_status(cid))))
             return tuple(items)
 
-        normalized_seeds: dict[str, dict] = {}
-        seed_vectors: dict[str, tuple] = {}
-        for mid in seed_order:
-            normalized = _normalize_seed_model(mid)
-            missing_required = required_node_cids - normalized["present_nodes"]
-            if missing_required:
-                missing = ", ".join(sorted(missing_required))
+        normalized_seeds = {model_id: normalize(model_id) for model_id in seed_order}
+        for model_id, normalized in normalized_seeds.items():
+            missing = required_node_cids - normalized["present_nodes"]
+            if missing:
                 raise StateError(
-                    f"Seed model {mid} omits required exposure/outcome node(s): "
-                    f"{missing}"
+                    f"Seed model {model_id} omits required exposure/outcome node(s): "
+                    + ", ".join(sorted(missing))
                 )
-            normalized_seeds[mid] = normalized
-            seed_vectors[mid] = _semantic_vector(
-                normalized["present_nodes"],
-                normalized["edge_statuses"],
+
+        seed_vectors = {
+            model_id: semantic_vector(
+                normalized["present_nodes"], normalized["edge_statuses"]
             )
+            for model_id, normalized in normalized_seeds.items()
+        }
+        generated_statuses: dict[str, dict[str, str]] = {}
+        generated_timing: dict[str, dict[str, int]] = {}
+        for record in generated_records:
+            generated_statuses.setdefault(record["model_id"], {})[record["comp_id"]] = (
+                record["status"]
+            )
+            if record["comp_id"] in node_comp_ids and record.get("timing") is not None:
+                generated_timing.setdefault(record["model_id"], {})[
+                    record["comp_id"]
+                ] = record["timing"]
 
-        gen_by_model: dict[str, dict[str, str]] = {}
-        for r in generated_records:
-            mid = r["model_id"]
-            gen_by_model.setdefault(mid, {})[r["comp_id"]] = r["status"]
-
-        gen_vectors: dict[str, tuple] = {}
-        for mid, statuses in gen_by_model.items():
+        generated_vectors = {}
+        for model_id, statuses in generated_statuses.items():
             present_nodes = {
                 cid
                 for cid, status in statuses.items()
-                if cid in node_comp_ids and _node_status_is_present(status)
+                if cid in node_comp_ids and node_present(status)
             }
-            gen_vectors[mid] = _semantic_vector(present_nodes, statuses)
+            generated_vectors[model_id] = semantic_vector(present_nodes, statuses)
 
-        matched_gen_ids: set[str] = set()
-        seed_to_gen: dict[str, str] = {}
-        for seed_id, seed_vec in seed_vectors.items():
-            for gen_id, gen_vec in gen_vectors.items():
-                if gen_id in matched_gen_ids:
+        matched_generated: set[str] = set()
+        seed_to_generated: dict[str, str] = {}
+        for seed_id, vector in seed_vectors.items():
+            timing_claims = normalized_seeds[seed_id]["timing"]
+            for generated_id, generated_vector in generated_vectors.items():
+                if generated_id in matched_generated or vector != generated_vector:
                     continue
-                if seed_vec == gen_vec:
-                    seed_to_gen[seed_id] = gen_id
-                    matched_gen_ids.add(gen_id)
+                if all(
+                    generated_timing.get(generated_id, {}).get(cid) == value
+                    for cid, value in timing_claims.items()
+                    if cid in node_comp_ids
+                ):
+                    seed_to_generated[seed_id] = generated_id
+                    matched_generated.add(generated_id)
                     break
 
         result: list[dict] = []
-
         for seed_id in seed_order:
-            if seed_id in seed_to_gen:
-                gen_id = seed_to_gen[seed_id]
-                for r in generated_records:
-                    if r["model_id"] == gen_id:
-                        result.append(
-                            {
-                                "model_id": seed_id,
-                                "comp_id": r["comp_id"],
-                                "status": r["status"],
-                                "timing": r.get("timing"),
-                                "seeded": True,
-                            }
-                        )
-            else:
-                normalized = normalized_seeds[seed_id]
-                present_nodes = normalized["present_nodes"]
-                edge_statuses = normalized["edge_statuses"]
-                timing_claims = normalized["timing"]
+            if seed_id in seed_to_generated:
+                generated_id = seed_to_generated[seed_id]
+                result.extend(
+                    {
+                        "model_id": seed_id,
+                        "comp_id": record["comp_id"],
+                        "status": record["status"],
+                        "timing": record.get("timing"),
+                        "seeded": True,
+                    }
+                    for record in generated_records
+                    if record["model_id"] == generated_id
+                )
+                continue
 
-                for cid in sorted(present_nodes):
-                    timing_val = timing_claims.get(cid)
-                    if timing_val is None:
-                        node_name = node_names_by_cid.get(cid)
-                        timing_val = node_timing.get(node_name) if node_name else None
+            normalized = normalized_seeds[seed_id]
+            for cid in sorted(normalized["present_nodes"]):
+                name = node_names_by_cid[cid]
+                timing = normalized["timing"].get(cid)
+                if timing is None:
+                    timing = node_timing.get(name)
+                if timing is None and name in timing_options:
+                    timing = timing_options[name][0]
+                result.append(
+                    {
+                        "model_id": seed_id,
+                        "comp_id": cid,
+                        "status": "present",
+                        "timing": timing,
+                        "seeded": True,
+                    }
+                )
+            for cid, (source_cid, target_cid) in sorted(edge_endpoints.items()):
+                if (
+                    source_cid in normalized["present_nodes"]
+                    and target_cid in normalized["present_nodes"]
+                ):
                     result.append(
                         {
                             "model_id": seed_id,
                             "comp_id": cid,
-                            "status": "present",
-                            "timing": timing_val,
+                            "status": normalized["edge_statuses"].get(
+                                cid,
+                                default_edge_status(cid),
+                            ),
+                            "timing": None,
                             "seeded": True,
                         }
                     )
 
-                for cid in sorted(edge_endpoints):
-                    src_cid, tgt_cid = edge_endpoints[cid]
-                    if src_cid in present_nodes and tgt_cid in present_nodes:
-                        result.append(
-                            {
-                                "model_id": seed_id,
-                                "comp_id": cid,
-                                "status": edge_statuses.get(cid, "unknown"),
-                                "timing": None,
-                                "seeded": True,
-                            }
-                        )
-
-        non_seeded_gen_ids: list[str] = []
-        seen_non_seeded_gen_ids: set[str] = set()
-        for r in generated_records:
-            gen_id = r["model_id"]
-            if gen_id in matched_gen_ids or gen_id in seen_non_seeded_gen_ids:
-                continue
-            seen_non_seeded_gen_ids.add(gen_id)
-            non_seeded_gen_ids.append(gen_id)
-
-        if non_seeded_gen_ids:
-            width = max(4, len(str(len(seed_order) + len(non_seeded_gen_ids))))
-            used_model_ids = set(seed_order)
-            gen_id_to_new_id: dict[str, str] = {}
-            next_model_num = len(seed_order) + 1
-
-            for gen_id in non_seeded_gen_ids:
-                while True:
-                    new_mid = f"M{next_model_num:0{width}d}"
-                    next_model_num += 1
-                    if new_mid not in used_model_ids:
-                        break
-                used_model_ids.add(new_mid)
-                gen_id_to_new_id[gen_id] = new_mid
-
-            for r in generated_records:
-                gen_id = r["model_id"]
-                if gen_id in matched_gen_ids:
-                    continue
-                result.append(
-                    {
-                        "model_id": gen_id_to_new_id[gen_id],
-                        "comp_id": r["comp_id"],
-                        "status": r["status"],
-                        "timing": r.get("timing"),
-                        "seeded": False,
-                    }
-                )
-
+        remaining_ids = [
+            model_id
+            for model_id in generated_statuses
+            if model_id not in matched_generated
+        ]
+        width = max(4, len(str(len(seed_order) + len(remaining_ids))))
+        used_ids = set(seed_order)
+        remapped_ids: dict[str, str] = {}
+        next_number = len(seed_order) + 1
+        for generated_id in remaining_ids:
+            while f"M{next_number:0{width}d}" in used_ids:
+                next_number += 1
+            remapped = f"M{next_number:0{width}d}"
+            used_ids.add(remapped)
+            remapped_ids[generated_id] = remapped
+            next_number += 1
+        result.extend(
+            {
+                "model_id": remapped_ids[record["model_id"]],
+                "comp_id": record["comp_id"],
+                "status": record["status"],
+                "timing": record.get("timing"),
+                "seeded": False,
+            }
+            for record in generated_records
+            if record["model_id"] in remapped_ids
+        )
         return result
-
-    # ------------------------------------------------------------------
-    # Exhaustive expansion
-    # ------------------------------------------------------------------
-
-    @staticmethod
-    def _expand_exhaustive(
-        *,
-        registry: ComponentRegistry,
-        node_names: dict[str, str],
-        node_timing: dict[str, int],
-        edge_ids: list[str],
-        edge_sources: dict[str, str],
-        edge_targets: dict[str, str],
-        edge_directions: dict[str, str] | None = None,
-        max_models: int,
-        edge_statuses: list[str],
-        node_policy: str = "all-present",
-        required_node_cids: set[str] | None = None,
-        fixed_causal_edge_ids: set[str] | None = None,
-    ) -> list[dict]:
-        if required_node_cids is None:
-            required_node_cids = set()
-        if fixed_causal_edge_ids is None:
-            fixed_causal_edge_ids = set()
-        if edge_directions is None:
-            edge_directions = {}
-
-        node_cids = list(node_names.values())
-
-        temporally_valid: set[str] = set()
-        for cid in edge_ids:
-            if edge_directions.get(cid) == "<->":
-                temporally_valid.add(cid)
-                continue
-            src = edge_sources[cid]
-            tgt = edge_targets[cid]
-            s_t = node_timing.get(src)
-            t_t = node_timing.get(tgt)
-            if s_t is None or t_t is None or s_t < t_t:
-                temporally_valid.add(cid)
-
-        if node_policy == "all-present":
-            node_subsets = [set(node_cids)]
-        else:
-            all_subsets: list[set[str]] = []
-            for r in range(1, len(node_cids) + 1):
-                for combo in itertools.combinations(node_cids, r):
-                    subset = set(combo)
-                    if required_node_cids.issubset(subset):
-                        all_subsets.append(subset)
-            node_subsets = all_subsets
-
-        E = len(edge_ids)
-        mutable_E = E - len(fixed_causal_edge_ids)
-        S = len(edge_statuses)
-
-        if node_policy == "all-present":
-            projected = S**mutable_E
-        else:
-            projected = 0
-            for subset in node_subsets:
-                applicable_count = 0
-                for cid in edge_ids:
-                    if cid in fixed_causal_edge_ids:
-                        continue
-                    src_name = edge_sources[cid]
-                    tgt_name = edge_targets[cid]
-                    src_cid = node_names.get(src_name)
-                    tgt_cid = node_names.get(tgt_name)
-                    if src_cid in subset and tgt_cid in subset:
-                        applicable_count += 1
-                projected += S**applicable_count if applicable_count > 0 else 1
-
-        if projected > max_models:
-            raise StateError(
-                f"Exhaustive expansion projected {projected} models, "
-                f"exceeding max_models={max_models}. "
-                f"Use mode='sampled' or raise max_models."
-            )
-
-        model_id_fmt = f"M{{:0{max(4, len(str(projected)))}d}}"
-
-        records: list[dict] = []
-        model_counter = 0
-
-        for subset in node_subsets:
-            applicable_edges = []
-            fixed_applicable_edges = []
-            for cid in edge_ids:
-                src_name = edge_sources[cid]
-                tgt_name = edge_targets[cid]
-                src_cid = node_names.get(src_name)
-                tgt_cid = node_names.get(tgt_name)
-                if src_cid in subset and tgt_cid in subset:
-                    if cid in fixed_causal_edge_ids:
-                        fixed_applicable_edges.append(cid)
-                    else:
-                        applicable_edges.append(cid)
-
-            applicable_count = len(applicable_edges)
-            combos = S**applicable_count if applicable_count > 0 else 1
-
-            for combo_num in range(combos):
-                edge_status: dict[str, str] = {}
-                directed_edges: set[tuple[str, str]] = set()
-                valid = True
-
-                for cid in fixed_applicable_edges:
-                    edge_status[cid] = "causal"
-                    if edge_directions.get(cid) == "->":
-                        src_name = edge_sources[cid]
-                        tgt_name = edge_targets[cid]
-                        directed_edges.add((src_name, tgt_name))
-
-                for i, cid in enumerate(applicable_edges):
-                    digit = (combo_num // (S**i)) % S
-                    status = edge_statuses[digit]
-                    if status == "causal":
-                        if edge_directions.get(cid) == "->":
-                            if cid not in temporally_valid:
-                                valid = False
-                                break
-                            directed_edges.add(
-                                (edge_sources[cid], edge_targets[cid])
-                            )
-                        edge_status[cid] = "causal"
-                    else:
-                        edge_status[cid] = status
-
-                if not valid:
-                    continue
-
-                if _has_cycle(directed_edges):
-                    continue
-
-                model_counter += 1
-                mid = model_id_fmt.format(model_counter)
-
-                for cid in subset:
-                    timing_val = None
-                    comp_row = registry.data[registry.data["comp_id"] == cid]
-                    if not comp_row.empty:
-                        node_name = comp_row.iloc[0]["source"]
-                        timing_val = node_timing.get(node_name) if node_timing else None
-
-                    records.append(
-                        {
-                            "model_id": mid,
-                            "comp_id": cid,
-                            "status": "present",
-                            "timing": timing_val,
-                        }
-                    )
-
-                for cid in applicable_edges:
-                    status = edge_status.get(cid, "unknown")
-                    records.append(
-                        {
-                            "model_id": mid,
-                            "comp_id": cid,
-                            "status": status,
-                            "timing": None,
-                        }
-                    )
-
-                for cid in fixed_applicable_edges:
-                    records.append(
-                        {
-                            "model_id": mid,
-                            "comp_id": cid,
-                            "status": "causal",
-                            "timing": None,
-                        }
-                    )
-
-        return records
-
-    # ------------------------------------------------------------------
-    # Sampled expansion
-    # ------------------------------------------------------------------
-
-    @staticmethod
-    def _expand_sampled(
-        *,
-        registry: ComponentRegistry,
-        node_names: dict[str, str],
-        node_timing: dict[str, int],
-        edge_ids: list[str],
-        edge_sources: dict[str, str],
-        edge_targets: dict[str, str],
-        edge_directions: dict[str, str] | None = None,
-        n_models: int,
-        seed: int | None,
-        max_models: int,
-        edge_statuses: list[str],
-        node_policy: str = "all-present",
-        required_node_cids: set[str] | None = None,
-        fixed_causal_edge_ids: set[str] | None = None,
-    ) -> list[dict]:
-        if required_node_cids is None:
-            required_node_cids = set()
-        if fixed_causal_edge_ids is None:
-            fixed_causal_edge_ids = set()
-        if edge_directions is None:
-            edge_directions = {}
-
-        node_cids = list(node_names.values())
-
-        temporally_valid: set[str] = set()
-        for cid in edge_ids:
-            if edge_directions.get(cid) == "<->":
-                temporally_valid.add(cid)
-                continue
-            src = edge_sources[cid]
-            tgt = edge_targets[cid]
-            s_t = node_timing.get(src)
-            t_t = node_timing.get(tgt)
-            if s_t is None or t_t is None or s_t < t_t:
-                temporally_valid.add(cid)
-
-        if node_policy == "all-present":
-            node_subsets = [set(node_cids)]
-        else:
-            all_subsets: list[set[str]] = []
-            for r in range(1, len(node_cids) + 1):
-                for combo in itertools.combinations(node_cids, r):
-                    subset = set(combo)
-                    if required_node_cids.issubset(subset):
-                        all_subsets.append(subset)
-            node_subsets = all_subsets
-
-        S = len(edge_statuses)
-
-        rng = random.Random(seed)
-        model_id_fmt = f"M{{:0{max(4, len(str(n_models)))}d}}"
-
-        records: list[dict] = []
-        model_counter = 0
-        seen_keys: set[tuple] = set()
-        attempts = 0
-        max_attempts = n_models * 50
-
-        while model_counter < n_models and attempts < max_attempts:
-            attempts += 1
-
-            subset = rng.choice(node_subsets)
-
-            applicable_edges = []
-            fixed_applicable_edges = []
-            for cid in edge_ids:
-                src_name = edge_sources[cid]
-                tgt_name = edge_targets[cid]
-                src_cid = node_names.get(src_name)
-                tgt_cid = node_names.get(tgt_name)
-                if src_cid in subset and tgt_cid in subset:
-                    if cid in fixed_causal_edge_ids:
-                        fixed_applicable_edges.append(cid)
-                    else:
-                        applicable_edges.append(cid)
-
-            applicable_count = len(applicable_edges)
-            combos = S**applicable_count if applicable_count > 0 else 1
-            if combos == 0:
-                continue
-
-            combo = rng.randint(0, combos - 1)
-            sort_key = (frozenset(subset), combo)
-            if sort_key in seen_keys:
-                continue
-            seen_keys.add(sort_key)
-
-            edge_status: dict[str, str] = {}
-            directed_edges: set[tuple[str, str]] = set()
-            valid = True
-
-            for cid in fixed_applicable_edges:
-                edge_status[cid] = "causal"
-                if edge_directions.get(cid) == "->":
-                    src_name = edge_sources[cid]
-                    tgt_name = edge_targets[cid]
-                    directed_edges.add((src_name, tgt_name))
-
-            for i, cid in enumerate(applicable_edges):
-                digit = (combo // (S**i)) % S
-                status = edge_statuses[digit]
-                if status == "causal":
-                    if edge_directions.get(cid) == "->":
-                        if cid not in temporally_valid:
-                            valid = False
-                            break
-                        directed_edges.add(
-                            (edge_sources[cid], edge_targets[cid])
-                        )
-                    edge_status[cid] = "causal"
-                else:
-                    edge_status[cid] = status
-
-            if not valid:
-                continue
-
-            if _has_cycle(directed_edges):
-                continue
-
-            model_counter += 1
-            mid = model_id_fmt.format(model_counter)
-
-            for cid in subset:
-                timing_val = None
-                comp_row = registry.data[registry.data["comp_id"] == cid]
-                if not comp_row.empty:
-                    node_name = comp_row.iloc[0]["source"]
-                    timing_val = node_timing.get(node_name) if node_timing else None
-
-                records.append(
-                    {
-                        "model_id": mid,
-                        "comp_id": cid,
-                        "status": "present",
-                        "timing": timing_val,
-                    }
-                )
-
-            for cid in applicable_edges:
-                status = edge_status.get(cid, "unknown")
-                records.append(
-                    {
-                        "model_id": mid,
-                        "comp_id": cid,
-                        "status": status,
-                        "timing": None,
-                    }
-                )
-
-            for cid in fixed_applicable_edges:
-                records.append(
-                    {
-                        "model_id": mid,
-                        "comp_id": cid,
-                        "status": "causal",
-                        "timing": None,
-                    }
-                )
-
-        if model_counter < n_models:
-            warnings.warn(
-                f"Only generated {model_counter} models; "
-                f"requested {n_models}. Not enough valid model combinations exist."
-            )
-
-        return records

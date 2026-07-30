@@ -20,8 +20,8 @@ A component registry data frame.
 }
 \description{
 Collects named variables, a required exposure/outcome pair, chronological
-positions, theory constraints, possible latent confounding, and optional
-nodes. The answers are validated and delegated to
+positions, theory constraints, required or possible latent confounding, and
+optional nodes. The answers are validated and delegated to
 \code{build_component_registry()}, so interactive and programmatic results
 share the same backend contract.
 }

@@ -79,7 +79,8 @@ Defaults to \code{FALSE}.}
 
 \item{input_mode}{Either \code{"programmatic"} (default) or
 \code{"interactive"}. Interactive mode runs the guided registry
-questionnaire before the analysis.}
+questionnaire before the analysis and prints a programmatic call that
+recreates the selected multiverse.}
 
 \item{constraints, include_bidirectional, time_points, timing_options, }{optional_nodes Registry options forwarded to
 \code{build_component_registry()} in programmatic mode.}

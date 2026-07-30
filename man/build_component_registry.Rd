@@ -38,12 +38,14 @@ be temporally possible.}
 
 \item{include_bidirectional}{When \code{TRUE}, generate candidate
 bidirected edges for every unordered node pair. Prefer explicit
-\code{<->} \code{"allow"} constraints for selected possible confounding.}
+\code{<->} \code{"allow"} constraints for selected possible confounding,
+or \code{"require"} constraints to enforce named confounding pairs.}
 
 \item{constraints}{Optional data frame or list with \code{source},
 \code{target}, \code{direction}, and \code{rule}. Directed
-\code{"require"} edges are fixed causal paths, \code{"forbid"} removes a
-path, and \code{"allow"} permits a selected candidate.}
+and bidirected \code{"require"} edges are fixed causal paths or
+confounding pairs, \code{"forbid"} removes a path or pair, and
+\code{"allow"} permits a selected candidate.}
 
 \item{exposure}{Name of the focal exposure. Must be a node with exactly one
 allowed time.}
@@ -59,8 +61,7 @@ overrides \code{timing} for named nodes. Each model chooses one position
 from each present node's options.}
 
 \item{optional_nodes}{Node names that may be absent in subset models.
-Exposure, outcome, and endpoints of required directed paths cannot be
-optional.}
+Exposure, outcome, and endpoints of required paths cannot be optional.}
 
 \item{url}{Base URL of the theoRy Python backend.}
 

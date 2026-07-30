@@ -20,6 +20,10 @@ class NativeIdentificationUnsupportedError(IdentificationError):
     """Raised when general identification exceeds the native backdoor scope."""
 
 
+class IdentificationBackendUnavailableError(IdentificationError):
+    """Raised when the optional R/CausalEffect backend cannot be used."""
+
+
 class IdentificationWrapper:
     def __init__(self, causal_backend: Literal["auto", "native", "r"] = "r"):
         if causal_backend not in {"auto", "native", "r"}:
@@ -31,23 +35,28 @@ class IdentificationWrapper:
         if self._r_available is True:
             return True
         if self._r_available is False:
-            raise IdentificationError(
+            raise IdentificationBackendUnavailableError(
                 "R/causaleffect not available (already checked this session)"
             )
         try:
             import rpy2.robjects as ro  # noqa: F401
         except ImportError as e:
             self._r_available = False
-            raise IdentificationError(
+            raise IdentificationBackendUnavailableError(
                 "rpy2 is not installed. Install with: pip install rpy2"
             ) from e
         except OSError as e:
             self._r_available = False
-            raise IdentificationError(
-                "Cannot load R shared library via rpy2 (likely a "
-                "libstdc++ version mismatch). "
-                "Try: LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libstdc++.so.6\n"
+            raise IdentificationBackendUnavailableError(
+                "Cannot load the R shared library via rpy2. Ensure R is "
+                "installed and R_HOME is configured. On Linux with Conda, try: "
+                "LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libstdc++.so.6\n"
                 f"Underlying error: {e}"
+            ) from e
+        except Exception as e:
+            self._r_available = False
+            raise IdentificationBackendUnavailableError(
+                f"Unexpected error importing rpy2: {e}"
             ) from e
 
         try:
@@ -55,13 +64,13 @@ class IdentificationWrapper:
             from rpy2.robjects import conversion, default_converter
 
             with conversion.localconverter(default_converter):
-                ro.r('suppressMessages(library(causaleffect))')
+                ro.r("suppressMessages(library(causaleffect))")
 
             self._r_available = True
             return True
         except Exception as e:
             self._r_available = False
-            raise IdentificationError(
+            raise IdentificationBackendUnavailableError(
                 "Cannot load R package causaleffect. "
                 "Install in R with: install.packages('causaleffect')\n"
                 f"Underlying error: {e}"
@@ -74,7 +83,7 @@ class IdentificationWrapper:
         bidirected_edges: list[tuple[str, str]],
         exposure: str,
         outcome: str,
-    ) -> tuple[bool, str | None]:
+    ) -> tuple[bool | None, str | None]:
         if exposure not in nodes:
             raise IdentificationError(
                 f"Exposure {exposure!r} not present in model nodes {nodes}"
@@ -98,9 +107,17 @@ class IdentificationWrapper:
                     nodes, directed_edges, bidirected_edges, exposure, outcome
                 )
             except NativeIdentificationUnsupportedError:
-                return self._identify_total_effect_r(
-                    nodes, directed_edges, bidirected_edges, exposure, outcome
-                )
+                try:
+                    return self._identify_total_effect_r(
+                        nodes, directed_edges, bidirected_edges, exposure, outcome
+                    )
+                except IdentificationBackendUnavailableError as e:
+                    logger.warning(
+                        "R/CausalEffect is unavailable; general identification "
+                        "will be reported as unavailable: %s",
+                        e,
+                    )
+                    return None, None
         return self._identify_total_effect_r(
             nodes, directed_edges, bidirected_edges, exposure, outcome
         )
@@ -176,14 +193,16 @@ class IdentificationWrapper:
                     raise IdentificationError(
                         f"Outcome {outcome!r} not present in graph"
                     )
-                raise IdentificationError(
-                    f"Identification failed: {e}"
-                )
+                raise IdentificationError(f"Identification failed: {e}")
 
             if result is None or str(result) == "":
                 return False, None
 
-            result_str = str(result[0]) if hasattr(result, '__len__') and len(result) > 0 else str(result)
+            result_str = (
+                str(result[0])
+                if hasattr(result, "__len__") and len(result) > 0
+                else str(result)
+            )
 
             if result_str.startswith("not_identified"):
                 return False, None
@@ -233,18 +252,16 @@ class IdentificationWrapper:
         ]
 
         if graph_edges:
-            edge_vector = "c(" + ", ".join(
-                r_string(value) for edge in graph_edges for value in edge
-            ) + ")"
+            edge_vector = (
+                "c("
+                + ", ".join(r_string(value) for edge in graph_edges for value in edge)
+                + ")"
+            )
             lines.append(
                 f"edge_matrix <- matrix({edge_vector}, ncol = 2, byrow = TRUE)"
             )
-            lines.append(
-                "g <- graph_from_edgelist(edge_matrix, directed = TRUE)"
-            )
-            lines.append(
-                "missing_nodes <- setdiff(node_names, V(g)$name)"
-            )
+            lines.append("g <- graph_from_edgelist(edge_matrix, directed = TRUE)")
+            lines.append("missing_nodes <- setdiff(node_names, V(g)$name)")
             lines.append(
                 "if (length(missing_nodes)) g <- add_vertices(g, "
                 "length(missing_nodes), name = missing_nodes)"
@@ -269,7 +286,7 @@ class IdentificationWrapper:
             "result <- tryCatch({"
             f"  causal.effect(y = {r_string(outcome)}, x = {r_string(exposure)},"
             "                      z = NULL, G = g, expr = TRUE)"
-            '}, error = function(e) {'
+            "}, error = function(e) {"
             '  paste("not_identified:", e$message)'
             "})"
         )

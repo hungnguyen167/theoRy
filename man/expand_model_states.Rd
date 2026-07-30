@@ -130,8 +130,9 @@ emitted as state records.
 Registry components with \code{fixed_status = "causal"} are emitted as
 causal in every generated model and in every normalized seeded model.
 Fixed edges are not enumerated as mutable candidates; their status is
-immutable.  A seed that explicitly sets a fixed edge to \code{unknown}
-or \code{non-causal} is rejected.  Omitted fixed edges in a seed are
+immutable. For bidirected components, \code{"present"} is the external
+representation of a causal fixed edge. A seed that explicitly sets a fixed
+edge to an inactive status is rejected. Omitted fixed edges in a seed are
 normalized to \code{causal}.
 
 When \code{seed_claims} is provided alongside either mode, the engine

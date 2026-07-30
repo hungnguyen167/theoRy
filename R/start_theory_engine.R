@@ -61,6 +61,25 @@
   } else {
     engine_dir
   }
+
+  # Conda's older libstdc++ can prevent rpy2 from loading the system R library.
+  if (identical(Sys.info()[["sysname"]], "Linux")) {
+    system_libstdcpp <- "/usr/lib/x86_64-linux-gnu/libstdc++.so.6"
+    if (file.exists(system_libstdcpp)) {
+      preloaded <- trimws(Sys.getenv("LD_PRELOAD", unset = ""))
+      preload_paths <- if (nzchar(preloaded)) {
+        strsplit(preloaded, "[[:space:]]+")[[1]]
+      } else {
+        character()
+      }
+      if (!system_libstdcpp %in% preload_paths) {
+        env[["LD_PRELOAD"]] <- paste(
+          c(system_libstdcpp, if (nzchar(preloaded)) preloaded),
+          collapse = " "
+        )
+      }
+    }
+  }
   env
 }
 
@@ -227,7 +246,9 @@
 #' Launches the Python FastAPI server and blocks until the health endpoint
 #' responds. The process is owned by the current R session and can be stopped
 #' with [stop_theory_engine()]. A compatible backend started outside this R
-#' session is left running.
+#' session is left running. On Linux, it preloads the system
+#' \file{libstdc++.so.6} to prevent Conda's C++ runtime from blocking the
+#' R/rpy2 bridge.
 #'
 #' @param port Port number. Defaults to \code{8000}.
 #' @param host Host address. Defaults to \code{"127.0.0.1"}.

@@ -29,7 +29,9 @@ Invisibly returns \code{TRUE} when the server is ready.
 Launches the Python FastAPI server and blocks until the health endpoint
 responds. The process is owned by the current R session and can be stopped
 with [stop_theory_engine()]. A compatible backend started outside this R
-session is left running.
+session is left running. On Linux, it preloads the system
+\file{libstdc++.so.6} to prevent Conda's C++ runtime from blocking the
+R/rpy2 bridge.
 }
 \examples{
 \dontrun{

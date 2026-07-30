@@ -253,6 +253,7 @@ class ComponentRegistryBuilder:
                     if allowed_bidirectional and triplet not in allowed_bidirectional:
                         continue
 
+                    is_fixed = triplet in required_set
                     registry_records.append(
                         {
                             "comp_id": f"C{next_id:04d}",
@@ -261,7 +262,7 @@ class ComponentRegistryBuilder:
                             "target": pair[1],
                             "direction": "<->",
                             "description": f"{pair[0]} <-> {pair[1]}",
-                            "fixed_status": None,
+                            "fixed_status": "causal" if is_fixed else None,
                             "observed": True,
                         }
                     )
@@ -269,7 +270,7 @@ class ComponentRegistryBuilder:
 
         # --- required edges that were not generated -------------------------
         node_timing_map = {n["name"]: n.get("timing") for n in nodes}
-        for req in required_set:
+        for req in sorted(required_set):
             if req in {
                 (r["source"], r["target"], r["direction"]) for r in registry_records
             }:
@@ -314,7 +315,7 @@ class ComponentRegistryBuilder:
                     "target": req[1],
                     "direction": req[2],
                     "description": f"{req[0]} {req[2]} {req[1]} (required)",
-                    "fixed_status": "causal" if req[2] == "->" else None,
+                    "fixed_status": "causal",
                     "observed": True,
                 }
             )

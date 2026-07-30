@@ -651,11 +651,15 @@ class ModelStateExpander:
                     )
 
         for cid in fixed_causal_edge_ids:
+            expected_status = "present" if edge_directions[cid] == "<->" else "causal"
             for claim in seed_claims:
-                if claim.get("comp_id") == cid and claim.get("status") != "causal":
+                if (
+                    claim.get("comp_id") == cid
+                    and claim.get("status") != expected_status
+                ):
                     raise StateError(
                         f"Seed claim sets fixed edge {cid} to {claim.get('status')!r}, "
-                        "but this edge is fixed as causal in the registry"
+                        f"but this edge must be {expected_status!r} in the registry"
                     )
 
         seed_models: dict[str, dict[str, str]] = {}
@@ -716,7 +720,8 @@ class ModelStateExpander:
                     present_nodes.add(node_cid)
 
             for cid in fixed_causal_edge_ids:
-                statuses.setdefault(cid, "causal")
+                # State tensors encode active bidirected edges as causal.
+                statuses[cid] = "causal"
                 source_cid, target_cid = edge_endpoints[cid]
                 if source_cid in absent_nodes or target_cid in absent_nodes:
                     raise StateError(

@@ -17,6 +17,10 @@ class NativeCausalUnsupportedError(CausalError):
     """Raised when a query falls outside the native backdoor solver's scope."""
 
 
+class CausalBackendUnavailableError(CausalError):
+    """Raised when the optional R/DAGitty backend cannot be used."""
+
+
 _NATIVE_MAX_ADJUSTMENT_CANDIDATES = 12
 
 
@@ -168,26 +172,29 @@ class CausalWrapper:
         if self._r_available is True:
             return True
         if self._r_available is False:
-            raise CausalError("R/dagitty not available (already checked this session)")
+            raise CausalBackendUnavailableError(
+                "R/dagitty not available (already checked this session)"
+            )
         try:
             import rpy2.robjects as ro  # noqa: F401
         except ImportError as e:
             self._r_available = False
-            raise CausalError(
+            raise CausalBackendUnavailableError(
                 "rpy2 is not installed. Install with: pip install rpy2"
             ) from e
         except OSError as e:
             self._r_available = False
-            raise CausalError(
-                "Cannot load R shared library via rpy2 (likely a "
-                "libstdc++ version mismatch between your Python "
-                "environment and system R). "
-                "Try: LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libstdc++.so.6\n"
+            raise CausalBackendUnavailableError(
+                "Cannot load the R shared library via rpy2. Ensure R is "
+                "installed and R_HOME is configured. On Linux with Conda, try: "
+                "LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libstdc++.so.6\n"
                 f"Underlying error: {e}"
             ) from e
         except Exception as e:
             self._r_available = False
-            raise CausalError(f"Unexpected error importing rpy2: {e}") from e
+            raise CausalBackendUnavailableError(
+                f"Unexpected error importing rpy2: {e}"
+            ) from e
 
         try:
             from rpy2.robjects.packages import importr
@@ -200,15 +207,15 @@ class CausalWrapper:
             return True
         except OSError as e:
             self._r_available = False
-            raise CausalError(
-                "Cannot load R shared library when loading dagitty "
-                "(likely a libstdc++ version mismatch). "
-                "Try: LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libstdc++.so.6\n"
+            raise CausalBackendUnavailableError(
+                "Cannot load the R shared library when loading dagitty. "
+                "Ensure R is installed and R_HOME is configured. On Linux with "
+                "Conda, try: LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libstdc++.so.6\n"
                 f"Underlying error: {e}"
             ) from e
         except Exception as e:
             self._r_available = False
-            raise CausalError(
+            raise CausalBackendUnavailableError(
                 "Cannot load R package dagitty. "
                 "Install in R with: install.packages('dagitty')\n"
                 f"Underlying error: {e}"
@@ -244,14 +251,22 @@ class CausalWrapper:
     def _resolve_endpoints(self, dag_spec: dict) -> tuple[str | None, str | None]:
         return _resolve_endpoints(dag_spec)
 
-    def compute_adjustment_sets(self, dag_spec: dict) -> list[list[str]]:
+    def compute_adjustment_sets(self, dag_spec: dict) -> list[list[str]] | None:
         if self.causal_backend == "native":
             return native_backdoor_adjustment_sets(dag_spec)
         if self.causal_backend == "auto":
             try:
                 return native_backdoor_adjustment_sets(dag_spec)
             except NativeCausalUnsupportedError:
-                return self._compute_adjustment_sets_r(dag_spec)
+                try:
+                    return self._compute_adjustment_sets_r(dag_spec)
+                except CausalBackendUnavailableError as e:
+                    logger.warning(
+                        "R/DAGitty is unavailable; causal adjustment sets will be "
+                        "reported as unavailable: %s",
+                        e,
+                    )
+                    return None
         return self._compute_adjustment_sets_r(dag_spec)
 
     def _compute_adjustment_sets_r(self, dag_spec: dict) -> list[list[str]]:

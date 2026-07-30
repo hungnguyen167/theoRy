@@ -42,7 +42,8 @@
 #'   \code{getOption("theoRy.engine_url", "http://localhost:8000")}.
 #' @param input_mode Either \code{"programmatic"} (default) or
 #'   \code{"interactive"}. Interactive mode runs the guided registry
-#'   questionnaire before the analysis.
+#'   questionnaire before the analysis and prints a programmatic call that
+#'   recreates the selected multiverse.
 #' @param constraints,include_bidirectional,time_points,timing_options,
 #'   optional_nodes Registry options forwarded to
 #'   \code{build_component_registry()} in programmatic mode.
@@ -309,6 +310,30 @@ analyze_theory <- function(nodes = NULL,
     }
   }
 
+  if (identical(input_mode, "interactive")) {
+    cat("\n--- Recreate this multiverse programmatically ---\n")
+    cat(
+      .analyze_theory_programmatic_call(
+        registry = registry,
+        prior_model = prior_model,
+        mode = mode,
+        n_models = n_models,
+        seed = seed,
+        node_policy = node_policy,
+        top_k = top_k,
+        plot = plot,
+        eps = eps,
+        min_samples = min_samples,
+        url = url,
+        max_models = max_models,
+        allow_large = allow_large,
+        causal_backend = causal_backend
+      ),
+      sep = "\n"
+    )
+    cat("\n")
+  }
+
   # ── Return ───────────────────────────────────────────────────────────────────
   list(
     registry = registry,
@@ -319,4 +344,70 @@ analyze_theory <- function(nodes = NULL,
     summary = summary,
     plots = plots
   )
+}
+
+
+.analyze_theory_programmatic_call <- function(registry,
+                                               prior_model,
+                                               mode,
+                                               n_models,
+                                               seed,
+                                               node_policy,
+                                               top_k,
+                                               plot,
+                                               eps,
+                                               min_samples,
+                                               url,
+                                               max_models,
+                                               allow_large,
+                                               causal_backend) {
+  nodes <- as.character(registry$source[registry$type == "node"])
+  timing_options <- attr(registry, "timing_options")
+  timing <- unname(vapply(nodes, function(node) {
+    options <- timing_options[[node]]
+    if (length(options) == 1L) as.integer(options[[1]]) else NA_integer_
+  }, integer(1)))
+
+  arguments <- list(
+    list("nodes", nodes),
+    list("timing", timing),
+    list("exposure", attr(registry, "exposure")),
+    list("outcome", attr(registry, "outcome")),
+    list("constraints", attr(registry, "constraints")),
+    list("include_bidirectional", FALSE),
+    list("timing_options", timing_options),
+    list("optional_nodes", attr(registry, "optional_nodes")),
+    list("mode", mode),
+    list("node_policy", node_policy),
+    list("top_k", as.integer(top_k)),
+    list("plot", isTRUE(plot)),
+    list("eps", eps),
+    list("min_samples", as.integer(min_samples)),
+    list("url", url),
+    list("max_models", as.integer(max_models)),
+    list("allow_large", isTRUE(allow_large)),
+    list("causal_backend", causal_backend),
+    list("input_mode", "programmatic")
+  )
+  if (identical(mode, "sampled")) {
+    arguments <- append(
+      arguments,
+      list(list("n_models", as.integer(n_models)), list("seed", as.integer(seed))),
+      after = 9L
+    )
+  }
+  if (!is.null(prior_model)) {
+    arguments <- append(arguments, list(list("prior_model", prior_model)), after = 4L)
+  }
+
+  lines <- lapply(arguments, function(argument) {
+    value <- deparse(argument[[2]], width.cutoff = 80L)
+    value[[1]] <- paste0("  ", argument[[1]], " = ", value[[1]])
+    value
+  })
+  for (i in seq_len(length(lines) - 1L)) {
+    lines[[i]][[length(lines[[i]])]] <- paste0(lines[[i]][[length(lines[[i]])]], ",")
+  }
+
+  c("result <- analyze_theory(", unlist(lines, use.names = FALSE), ")")
 }

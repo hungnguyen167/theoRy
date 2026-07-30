@@ -50,7 +50,9 @@ must be provided.}
 
 \item{causal_backend}{Causal-identification backend: \code{"auto"}
 (default) uses the native NetworkX implementation when it supports the
-model and falls back to the R stack when available; \code{"native"}
+model and falls back to the R stack when available. If a query requires
+the R stack but it is unavailable, \code{"auto"} returns unavailable
+causal fields rather than failing the full analysis. \code{"native"}
 never loads R; \code{"r"} requires the Dagitty/CausalEffect stack.}
 
 \item{url}{Base URL of the theoRy Python backend API. Defaults to

@@ -18,11 +18,13 @@
 #'   be temporally possible.
 #' @param include_bidirectional When \code{TRUE}, generate candidate
 #'   bidirected edges for every unordered node pair. Prefer explicit
-#'   \code{<->} \code{"allow"} constraints for selected possible confounding.
+#'   \code{<->} \code{"allow"} constraints for selected possible confounding,
+#'   or \code{"require"} constraints to enforce named confounding pairs.
 #' @param constraints Optional data frame or list with \code{source},
 #'   \code{target}, \code{direction}, and \code{rule}. Directed
-#'   \code{"require"} edges are fixed causal paths, \code{"forbid"} removes a
-#'   path, and \code{"allow"} permits a selected candidate.
+#'   and bidirected \code{"require"} edges are fixed causal paths or
+#'   confounding pairs, \code{"forbid"} removes a path or pair, and
+#'   \code{"allow"} permits a selected candidate.
 #' @param exposure Name of the focal exposure. Must be a node with exactly one
 #'   allowed time.
 #' @param outcome Name of the focal outcome. Must be a node with exactly one
@@ -33,8 +35,7 @@
 #'   overrides \code{timing} for named nodes. Each model chooses one position
 #'   from each present node's options.
 #' @param optional_nodes Node names that may be absent in subset models.
-#'   Exposure, outcome, and endpoints of required directed paths cannot be
-#'   optional.
+#'   Exposure, outcome, and endpoints of required paths cannot be optional.
 #' @param url Base URL of the theoRy Python backend.
 #' @param output_path Optional Parquet path for the registry table. Timing and
 #'   theory metadata are R attributes and are not retained by Parquet.
@@ -135,7 +136,7 @@ build_component_registry <- function(nodes,
          paste(unknown_optional, collapse = ", "), call. = FALSE)
   }
   required_endpoints <- unique(unlist(lapply(constraint_list, function(x) {
-    if (identical(x$rule, "require") && identical(x$direction, "->")) {
+    if (identical(x$rule, "require")) {
       c(x$source, x$target)
     } else {
       character()
@@ -144,7 +145,7 @@ build_component_registry <- function(nodes,
   blocked_optional <- intersect(optional_nodes, required_endpoints)
   if (length(blocked_optional)) {
     stop("optional_nodes cannot contain exposure, outcome, or endpoints of ",
-         "required directed paths: ", paste(blocked_optional, collapse = ", "),
+         "required paths: ", paste(blocked_optional, collapse = ", "),
          call. = FALSE)
   }
 
@@ -223,8 +224,8 @@ build_component_registry <- function(nodes,
 #' Build a component registry through a guided questionnaire
 #'
 #' Collects named variables, a required exposure/outcome pair, chronological
-#' positions, theory constraints, possible latent confounding, and optional
-#' nodes. The answers are validated and delegated to
+#' positions, theory constraints, required or possible latent confounding, and
+#' optional nodes. The answers are validated and delegated to
 #' \code{build_component_registry()}, so interactive and programmatic results
 #' share the same backend contract.
 #'
@@ -282,6 +283,10 @@ build_component_registry_interactive <- function(
   forbidden_pairs <- .registry_parse_pairs(
     ask("Forbidden directed paths, e.g. (A,B), or Enter: "), nodes
   )
+  required_confounded_pairs <- .registry_parse_pairs(
+    ask("Required unmeasured-confounding pairs, e.g. (A,B),(C,D), or Enter: "),
+    nodes
+  )
   confounded_pairs <- .registry_parse_pairs(
     ask("Possible unmeasured-confounding pairs, e.g. (A,B), or Enter: "), nodes
   )
@@ -299,6 +304,9 @@ build_component_registry_interactive <- function(
     lapply(forbidden_pairs, function(pair) {
       list(source = pair[[1]], target = pair[[2]], direction = "->", rule = "forbid")
     }),
+    lapply(required_confounded_pairs, function(pair) {
+      list(source = pair[[1]], target = pair[[2]], direction = "<->", rule = "require")
+    }),
     lapply(confounded_pairs, function(pair) {
       list(source = pair[[1]], target = pair[[2]], direction = "<->", rule = "allow")
     })
@@ -311,6 +319,8 @@ build_component_registry_interactive <- function(
   }
   cat("Required paths:", .registry_format_pairs(required_pairs, " -> "), "\n")
   cat("Forbidden paths:", .registry_format_pairs(forbidden_pairs, " !-> "), "\n")
+  cat("Required confounding:",
+      .registry_format_pairs(required_confounded_pairs, " <-> "), "\n")
   cat("Possible confounding:", .registry_format_pairs(confounded_pairs, " <-> "), "\n")
   cat("Optional nodes:", if (length(optional_nodes)) {
     paste(optional_nodes, collapse = ", ")

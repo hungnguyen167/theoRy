@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from itertools import combinations
+from itertools import combinations, product
 
 import pandas as pd
 import torch
@@ -100,6 +100,30 @@ def _clone_state(state: StateTensor) -> StateTensor:
             dict(state._edge_to_nodes) if hasattr(state, "_edge_to_nodes") else None
         ),
     )
+
+
+def resolve_unknown_component(
+    state: StateTensor,
+    registry: ComponentRegistry,
+    component_id: str,
+    target_status: str,
+    model_ids: list[str] | None = None,
+) -> tuple[StateTensor, list[str]]:
+    """Resolve valid unknown edge instances without changing resolved claims."""
+    resolved = _clone_state(state)
+    updates = []
+    for model_id in model_ids or state.model_ids:
+        if state.get_status(model_id, component_id) != "unknown":
+            continue
+        if not edge_applicable(state, model_id, component_id, registry):
+            continue
+        if target_status == "causal" and not _edge_can_be_causal(
+            component_id, model_id, registry, state
+        ):
+            continue
+        updates.append((model_id, component_id, target_status))
+    resolved.set_status_batch(updates)
+    return resolved, [model_id for model_id, _, _ in updates]
 
 
 _NODE_COMP_CACHE: dict[int, dict[str, str]] = {}
@@ -213,6 +237,7 @@ class DeltaUEngine:
         outcome: str | None = None,
         identification_wrapper=None,
         model_ids: list[str] | None = None,
+        resolution_strategy: str = "update_unknowns",
     ):
         from dyadic.engine import DyadicEngine
         from simulation.scoring import CompatibilityScorer
@@ -227,8 +252,14 @@ class DeltaUEngine:
         self._outcome = outcome
         self._identification_wrapper = identification_wrapper
         self._model_ids = sorted(model_ids) if model_ids is not None else None
+        if resolution_strategy not in ("condition", "update_unknowns"):
+            raise DeltaUError(
+                "resolution_strategy must be 'condition' or 'update_unknowns'"
+            )
+        self._resolution_strategy = resolution_strategy
         self._resolved_device = resolve_device(device)
         self.used_tensor_engine = False
+        self._context_coverage_cache: dict[tuple[int, str, str], float] = {}
 
         self._scorer = CompatibilityScorer(
             compatibility_metric=compatibility_metric,
@@ -267,6 +298,7 @@ class DeltaUEngine:
                 "best_resolution": "none",
                 "dyads_improved": 0,
                 "dyads_worsened": 0,
+                "resolution_strategy": self._resolution_strategy,
             }
             return self._enrich_metadata([result], registry)[0]
 
@@ -277,27 +309,48 @@ class DeltaUEngine:
 
         baseline_scores = self._scorer.score_dyads(baseline_dyads)
         dyad_ids = [d["dyad_id"] for d in baseline_dyads]
+        baseline_compatibility = round(
+            float(baseline_scores.mean().item()), _ROUND_DECIMALS
+        )
 
-        pos = self._simulate_resolution(
-            component_id,
-            "causal",
-            unknown_models,
-            state,
-            registry,
-            baseline_scores,
-            dyad_ids,
-            baseline_dyads,
-        )
-        neg = self._simulate_resolution(
-            component_id,
-            "non-causal",
-            unknown_models,
-            state,
-            registry,
-            baseline_scores,
-            dyad_ids,
-            baseline_dyads,
-        )
+        if self._resolution_strategy == "condition":
+            pos = self._condition_resolution(
+                component_id,
+                "causal",
+                state,
+                registry,
+                baseline_dyads,
+                baseline_compatibility,
+            )
+            neg = self._condition_resolution(
+                component_id,
+                "non-causal",
+                state,
+                registry,
+                baseline_dyads,
+                baseline_compatibility,
+            )
+        else:
+            pos = self._simulate_resolution(
+                component_id,
+                "causal",
+                unknown_models,
+                state,
+                registry,
+                baseline_scores,
+                dyad_ids,
+                baseline_dyads,
+            )
+            neg = self._simulate_resolution(
+                component_id,
+                "non-causal",
+                unknown_models,
+                state,
+                registry,
+                baseline_scores,
+                dyad_ids,
+                baseline_dyads,
+            )
 
         delta_u = round(max(pos["delta"], neg["delta"], 0.0), _ROUND_DECIMALS)
         if delta_u <= _TOLERANCE:
@@ -321,8 +374,26 @@ class DeltaUEngine:
             "delta_u_negative": neg["delta"],
             "delta_u": delta_u,
             "best_resolution": best,
-            "dyads_improved": best_stats["improved"],
-            "dyads_worsened": best_stats["worsened"],
+            "dyads_improved": (
+                None
+                if self._resolution_strategy == "condition"
+                else best_stats["improved"]
+            ),
+            "dyads_worsened": (
+                None
+                if self._resolution_strategy == "condition"
+                else best_stats["worsened"]
+            ),
+            "baseline_compatibility": baseline_compatibility,
+            "post_compatibility_positive": pos.get("post_compatibility"),
+            "post_compatibility_negative": neg.get("post_compatibility"),
+            "models_retained_positive": pos.get("models_retained"),
+            "models_retained_negative": neg.get("models_retained"),
+            "dyads_retained_positive": pos.get("dyads_retained"),
+            "dyads_retained_negative": neg.get("dyads_retained"),
+            "context_coverage_positive": pos.get("context_coverage"),
+            "context_coverage_negative": neg.get("context_coverage"),
+            "resolution_strategy": self._resolution_strategy,
         }
         return self._enrich_metadata([result], registry)[0]
 
@@ -361,6 +432,7 @@ class DeltaUEngine:
                     device=self._device,
                     use_tensor_engine=self._use_tensor_engine,
                     model_ids=self._analysis_model_ids(state),
+                    resolution_strategy=self._resolution_strategy,
                 )
                 results = structural_engine._stage1_all(
                     uncertain,
@@ -643,6 +715,103 @@ class DeltaUEngine:
 
         return _merge_dyads(baseline_dyads, affected_dyads, mutated_set)
 
+    def _condition_resolution(
+        self,
+        component_id: str,
+        target_status: str,
+        state: StateTensor,
+        registry: ComponentRegistry,
+        baseline_dyads: list[dict],
+        baseline_compatibility: float,
+    ) -> dict:
+        """Score the existing submultiverse consistent with a resolution."""
+        model_ids = self._analysis_model_ids(state)
+        retained = {
+            model_id
+            for model_id in model_ids
+            if edge_applicable(state, model_id, component_id, registry)
+            and state.get_status(model_id, component_id) == target_status
+        }
+        conditioned_dyads = [
+            dyad
+            for dyad in baseline_dyads
+            if dyad["ego_id"] in retained and dyad["alter_id"] in retained
+        ]
+
+        context_coverage = self._resolution_context_coverage(
+            component_id,
+            target_status,
+            state,
+            registry,
+            model_ids,
+        )
+        if len(retained) < 2 or not conditioned_dyads:
+            return {
+                "improved": 0,
+                "worsened": 0,
+                "delta": 0.0,
+                "post_compatibility": None,
+                "models_retained": len(retained),
+                "dyads_retained": len(conditioned_dyads),
+                "context_coverage": context_coverage,
+            }
+
+        scores = self._scorer.score_dyads(conditioned_dyads)
+        post_compatibility = round(float(scores.mean().item()), _ROUND_DECIMALS)
+        return {
+            "improved": 0,
+            "worsened": 0,
+            "delta": round(
+                post_compatibility - baseline_compatibility, _ROUND_DECIMALS
+            ),
+            "post_compatibility": post_compatibility,
+            "models_retained": len(retained),
+            "dyads_retained": len(conditioned_dyads),
+            "context_coverage": context_coverage,
+        }
+
+    def _resolution_context_coverage(
+        self,
+        component_id: str,
+        target_status: str,
+        state: StateTensor,
+        registry: ComponentRegistry,
+        model_ids: list[str],
+    ) -> float:
+        """Return the share of represented contexts containing a target state."""
+        cache_key = (id(state), component_id, target_status)
+        if cache_key in self._context_coverage_cache:
+            return self._context_coverage_cache[cache_key]
+
+        all_contexts = set()
+        target_contexts = set()
+        for model_id in model_ids:
+            if not edge_applicable(state, model_id, component_id, registry):
+                continue
+            context = (
+                tuple(
+                    (other_id, state.get_status(model_id, other_id))
+                    for other_id in state.component_ids
+                    if other_id != component_id
+                ),
+                tuple(
+                    (node_id, state.node_present(model_id, node_id))
+                    for node_id in sorted(state._node_comp_ids)
+                ),
+                tuple(
+                    (node_id, state.get_timing(model_id, node_id))
+                    for node_id in sorted(state._node_comp_ids)
+                ),
+            )
+            all_contexts.add(context)
+            if state.get_status(model_id, component_id) == target_status:
+                target_contexts.add(context)
+        if not all_contexts:
+            return 0.0
+        coverage = round(len(target_contexts) / len(all_contexts), _ROUND_DECIMALS)
+        self._context_coverage_cache[cache_key] = coverage
+        return coverage
+
     def _simulate_resolution(
         self,
         component_id: str,
@@ -654,24 +823,26 @@ class DeltaUEngine:
         dyad_ids: list[str],
         baseline_dyads: list[dict],
     ) -> dict:
-        sim_state = _clone_state(state)
-
-        updates = []
-        for mid in unknown_models:
-            if target_status == "causal" and not _edge_can_be_causal(
-                component_id,
-                mid,
-                registry,
-                state,
-            ):
-                continue
-            updates.append((mid, component_id, target_status))
-
-        if not updates:
-            return {"improved": 0, "worsened": 0, "delta": 0.0}
-
-        sim_state.set_status_batch(updates)
-        mutated_models = [u[0] for u in updates]
+        sim_state, mutated_models = resolve_unknown_component(
+            state,
+            registry,
+            component_id,
+            target_status,
+            unknown_models,
+        )
+        if not mutated_models:
+            baseline_compatibility = round(
+                float(baseline_scores.mean().item()), _ROUND_DECIMALS
+            )
+            return {
+                "improved": 0,
+                "worsened": 0,
+                "delta": 0.0,
+                "post_compatibility": baseline_compatibility,
+                "models_retained": len(self._analysis_model_ids(state)),
+                "dyads_retained": len(baseline_dyads),
+                "context_coverage": 1.0,
+            }
 
         sim_dyads = self._compute_sim_dyads_incremental(
             sim_state,
@@ -699,7 +870,17 @@ class DeltaUEngine:
             aligned_baseline,
             sim_scores,
         )
-        return {"improved": improved, "worsened": worsened, "delta": delta}
+        return {
+            "improved": improved,
+            "worsened": worsened,
+            "delta": delta,
+            "post_compatibility": round(
+                float(sim_scores.mean().item()), _ROUND_DECIMALS
+            ),
+            "models_retained": len(self._analysis_model_ids(state)),
+            "dyads_retained": len(sim_dyads),
+            "context_coverage": 1.0,
+        }
 
     def _stage1_all(
         self,
@@ -715,10 +896,14 @@ class DeltaUEngine:
                 self.compute_delta_u(cid, state, dyads, registry) for cid in uncertain
             ]
 
+        # rpy2 calls used by causal metrics must remain on the calling thread.
+        if self._scorer.requires_causal():
+            return [
+                self.compute_delta_u(cid, state, dyads, registry) for cid in uncertain
+            ]
+
         results: dict[str, dict] = {}
         workers = max_workers or min(8, len(uncertain))
-        if self._scorer.requires_causal():
-            workers = 1
 
         with ThreadPoolExecutor(max_workers=workers) as executor:
             futures = {
@@ -897,6 +1082,15 @@ class DeltaUEngine:
         dyads: list[dict],
         registry: ComponentRegistry,
     ) -> dict:
+        if self._resolution_strategy == "condition":
+            return self._evaluate_conditioned_combination(
+                component_ids,
+                individual,
+                state,
+                dyads,
+                registry,
+            )
+
         sim_state = _clone_state(state)
 
         for cid in component_ids:
@@ -957,7 +1151,73 @@ class DeltaUEngine:
             "label": label,
         }
 
+    def _evaluate_conditioned_combination(
+        self,
+        component_ids: list[str],
+        individual: dict[str, dict],
+        state: StateTensor,
+        dyads: list[dict],
+        registry: ComponentRegistry,
+    ) -> dict:
+        baseline_scores = self._scorer.score_dyads(dyads)
+        baseline = float(baseline_scores.mean().item())
+        best_delta = float("-inf")
+        best_retained: set[str] = set()
+        best_conditioned: list[dict] = []
+        best_assignment: tuple[str, ...] | None = None
+
+        for assignment in product(("causal", "non-causal"), repeat=len(component_ids)):
+            retained = set(self._analysis_model_ids(state))
+            for component_id, target_status in zip(component_ids, assignment):
+                retained &= {
+                    model_id
+                    for model_id in retained
+                    if edge_applicable(state, model_id, component_id, registry)
+                    and state.get_status(model_id, component_id) == target_status
+                }
+            conditioned = [
+                dyad
+                for dyad in dyads
+                if dyad["ego_id"] in retained and dyad["alter_id"] in retained
+            ]
+            if not conditioned:
+                continue
+            post_scores = self._scorer.score_dyads(conditioned)
+            delta = float(post_scores.mean().item()) - baseline
+            if delta > best_delta:
+                best_delta = delta
+                best_retained = retained
+                best_conditioned = conditioned
+                best_assignment = assignment
+
+        combined_delta = (
+            round(best_delta, _ROUND_DECIMALS) if best_assignment is not None else 0.0
+        )
+
+        individual_sum = sum(
+            round(individual[cid]["delta_u"], _ROUND_DECIMALS) for cid in component_ids
+        )
+        synergy = round(combined_delta - individual_sum, _ROUND_DECIMALS)
+        label = "super-additive" if synergy > _TOLERANCE else "additive"
+        return {
+            "components": component_ids,
+            "delta_u_combined": combined_delta,
+            "delta_u_individual_sum": round(individual_sum, _ROUND_DECIMALS),
+            "synergy_score": synergy,
+            "label": label,
+            "best_resolutions": (
+                dict(zip(component_ids, best_assignment))
+                if best_assignment is not None
+                else {}
+            ),
+            "models_retained": len(best_retained),
+            "dyads_retained": len(best_conditioned),
+            "resolution_strategy": self._resolution_strategy,
+        }
+
     def _analysis_model_ids(self, state: StateTensor) -> list[str]:
         if self._model_ids is None:
             return list(state.model_ids)
-        return [model_id for model_id in self._model_ids if model_id in state.model_index]
+        return [
+            model_id for model_id in self._model_ids if model_id in state.model_index
+        ]

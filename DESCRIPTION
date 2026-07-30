@@ -1,7 +1,7 @@
 Package: theoRy
 Title: An R package for meta-analyzing theoretical uncertainty
-Date: 2024-01-20
-Version: 0.1.0
+Date: 2026-07-28
+Version: 0.2.0
 Authors@R: 
     c(
     person(given="Hung H. V.", family="Nguyen", email="hunghvnguyen@gmail.com", role = c("aut","cre"),

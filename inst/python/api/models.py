@@ -129,6 +129,7 @@ class DeltaURequest(BaseModel):
     synergistic_beam_width: int | None = None
 
     compatibility_metric: CompatibilityMetric = "similarity_rate"
+    resolution_strategy: Literal["condition", "update_unknowns"] = "condition"
     device: Literal["auto", "cpu", "cuda"] = "auto"
     use_tensor_engine: bool = True
     exposure: str | None = None
@@ -219,6 +220,7 @@ class SimulateRequest(BaseModel):
 
     # Which compatibility metric drives the scenario
     compatibility_metric: CompatibilityMetric = "similarity_rate"
+    resolution_strategy: Literal["condition", "update_unknowns"] = "condition"
 
     # Retained for validation of clients using the former simulation option.
     include_bidirectional: bool = False

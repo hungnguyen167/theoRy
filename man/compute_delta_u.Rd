@@ -14,6 +14,7 @@ compute_delta_u(
   synergistic_search = c("greedy", "beam"),
   synergistic_beam_width = NULL,
   compatibility_metric = c("similarity_rate", "mas_compatible", "identified_compatible"),
+  resolution_strategy = c("condition", "update_unknowns"),
   device = c("auto", "cpu", "cuda"),
   use_tensor_engine = TRUE,
   url = getOption("theoRy.engine_url", "http://localhost:8000")
@@ -55,6 +56,13 @@ least 2.}
 causal metrics require \code{exposure} and \code{outcome} in the dyads'
 \code{theory_context} attribute.}
 
+\item{resolution_strategy}{How hypothetical resolutions are evaluated.
+\code{"condition"} (default) conditions on the model context supporting
+each positive or negative resolution and recomputes compatibility only
+among the retained models and dyads; it does not rewrite model claims.
+\code{"update_unknowns"} instead updates applicable unknown claims to the
+hypothetical status, preserving the earlier mutation-based semantics.}
+
 \item{device}{Compute device: \code{"auto"} (default), \code{"cpu"}, or
 \code{"cuda"}.  \code{"cuda"} requires a CUDA-capable GPU with PyTorch.}
 
@@ -77,6 +85,12 @@ By default, a data frame with columns:
     \code{"negative"}, or \code{"none"})}
   \item{dyads_improved}{Number of dyads that improved}
   \item{dyads_worsened}{Number of dyads that worsened}
+  When supplied by the backend, the data frame also includes
+  \code{baseline_compatibility}, \code{post_compatibility_positive},
+  \code{post_compatibility_negative}, \code{models_retained_positive},
+  \code{models_retained_negative}, \code{dyads_retained_positive},
+  \code{dyads_retained_negative}, \code{context_coverage_positive},
+  \code{context_coverage_negative}, and \code{resolution_strategy}.
 
   When \code{component_id} is supplied, a one-row data frame with the
   same columns plus \code{delta_u_positive} and \code{delta_u_negative}.
@@ -111,11 +125,10 @@ Edge components respect temporal integrity: forcing an edge to
 \code{"causal"} is skipped when both endpoint timings are known and
 \code{timing(source) >= timing(target)}.
 
-The \code{"mas_compatible"} and \code{"identified_compatible"} metrics may
-be slow for large multiverses because they require recomputing causal
-metrics per resolution scenario. Consider using \code{mode = "two-stage"}
-with an appropriate \code{heatmap_threshold} to reduce the number of full
-evaluations.
+With \code{resolution_strategy = "condition"}, causal profiles and dyad
+scores are computed once and every resolution reuses the corresponding
+submultiverse. The legacy \code{"update_unknowns"} strategy may be slower
+because affected causal profiles and dyads must be recomputed.
 }
 \examples{
 \dontrun{

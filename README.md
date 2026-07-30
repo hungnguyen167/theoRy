@@ -111,7 +111,7 @@ The modern compatibility API exposes exactly three pairwise metrics:
 |---|---|---|
 | `similarity_rate` | numeric in `[0, 1]` | Component-level structural agreement. An edge applicable in exactly one model contributes one disagreement and one repair; an edge inapplicable in both models is ignored. |
 | `mas_compatible` | logical or unavailable | Both models retain at least one common minimal adjustment strategy for the same total-effect query. For partial models, the strategy must survive every valid resolved completion. |
-| `identified_compatible` | logical or unavailable | Both models support general identification of the same total causal effect. Two non-identified models are not compatible. |
+| `identified_compatible` | logical or unavailable | Both models support general identification of the same total-effect query **and** have equal declared relevant node sets after removing robust directed-path intermediates. Two non-identified models are not compatible. |
 
 `repair_cost` is a helper, not a fourth compatibility metric. It counts
 component-level edits, so a missing node and each one-sided incident edge each
@@ -217,6 +217,22 @@ semantics, and the old composite scoring controls were replaced by the single
 `compatibility_metric` selector. Restart the engine after upgrading: in-memory
 sessions created by the previous backend schema are incompatible with current
 requests and responses.
+
+As of `0.2.0`, `identified_compatible` is stricter: two models are identified-
+compatible only when **both** independently identify the same total-effect
+query **and** their relevant declared node sets are exactly equal after
+removing robust directed-path intermediates. For each resolved model, the
+relevant set is all declared present nodes (observed **and** latent) minus
+nodes that lie on at least one directed exposure-outcome path in the declared
+directed graph; bidirected edges never make a node an intermediate. For a
+partial model, a node is removed only when it is a directed-path intermediate
+in **every** valid represented completion (the robust union rule), so an
+uncertain possible mediator is retained rather than ignored; incomplete
+completion coverage makes the relevant set unavailable. Identification itself
+is still computed by `causaleffect` over the observed latent-projected ADMG;
+only cross-model comparability uses the declared node set. Two non-identified
+models are not compatible, and either unavailable identification or an
+unavailable relevant set returns unavailable.
 
 ## Deprecated Legacy API
 

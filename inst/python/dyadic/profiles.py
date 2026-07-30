@@ -45,12 +45,78 @@ def mas_compatible(
     return bool(mas_a & mas_b)
 
 
+def _directed_path_intermediates(
+    declared_nodes: list[str],
+    declared_directed_edges: list[tuple[str, str]],
+    exposure: str,
+    outcome: str,
+) -> frozenset[str]:
+    """Return nodes other than exposure/outcome on at least one directed X->Y path.
+
+    A node ``v`` is an intermediate exactly when ``v`` is reachable from the
+    exposure by one or more directed edges and the outcome is reachable from
+    ``v`` by one or more directed edges. Bidirected edges never contribute.
+    """
+    forward: dict[str, set[str]] = {node: set() for node in declared_nodes}
+    reverse: dict[str, set[str]] = {node: set() for node in declared_nodes}
+    for source, target in declared_directed_edges:
+        forward.setdefault(source, set()).add(target)
+        reverse.setdefault(target, set()).add(source)
+        forward.setdefault(target, set())
+        reverse.setdefault(source, set())
+
+    def reachable(start: str, adjacency: dict[str, set[str]]) -> set[str]:
+        seen: set[str] = set()
+        pending = [start]
+        while pending:
+            node = pending.pop()
+            if node in seen:
+                continue
+            seen.add(node)
+            pending.extend(adjacency.get(node, ()))
+        seen.discard(start)
+        return seen
+
+    exposure_descendants = reachable(exposure, forward)
+    outcome_ancestors = reachable(outcome, reverse)
+    intermediates = exposure_descendants & outcome_ancestors
+    intermediates.discard(exposure)
+    intermediates.discard(outcome)
+    return frozenset(intermediates)
+
+
+def identification_nodes_from_dag_spec(dag_spec: dict) -> frozenset[str] | None:
+    """Compute the relevant (non-intermediate) declared node set for a DAG spec.
+
+    Returns ``None`` when the declared pre-projection metadata is absent, the
+    query is not specified, or a query node is missing from the declared set.
+    """
+    declared_nodes = dag_spec.get("declared_nodes")
+    declared_edges = dag_spec.get("declared_directed_edges")
+    exposure = dag_spec.get("exposure")
+    outcome = dag_spec.get("outcome")
+    if declared_nodes is None or declared_edges is None:
+        return None
+    if exposure is None or outcome is None:
+        return None
+    if exposure not in declared_nodes or outcome not in declared_nodes:
+        return None
+    intermediates = _directed_path_intermediates(
+        declared_nodes, declared_edges, exposure, outcome
+    )
+    return frozenset(declared_nodes) - intermediates
+
+
 def identified_compatible(
     profile_a: CausalQueryProfile, profile_b: CausalQueryProfile
 ) -> bool | None:
     if profile_a.identified is None or profile_b.identified is None:
         return None
-    return profile_a.identified and profile_b.identified
+    if profile_a.identified is False or profile_b.identified is False:
+        return False
+    if profile_a.identification_nodes is None or profile_b.identification_nodes is None:
+        return None
+    return profile_a.identification_nodes == profile_b.identification_nodes
 
 
 @dataclass(frozen=True)
@@ -67,6 +133,7 @@ class CausalQueryProfile:
     completion_coverage_complete: bool
     completion_source: str = "direct"
     identification_method: str | None = None
+    identification_nodes: frozenset[str] | None = None
     completion_diagnostics: CompletionDiagnostics | None = None
 
     @property
@@ -87,6 +154,7 @@ class _ProfilePayload:
     completion_coverage_complete: bool
     completion_source: str
     identification_method: str | None
+    identification_nodes: frozenset[str] | None
     completion_diagnostics: CompletionDiagnostics
 
 
@@ -204,6 +272,8 @@ class CausalProfileBuilder:
         if dag_spec is None or dag_spec.get("query_nodes_missing", False):
             return self._unavailable_payload(diagnostics)
 
+        identification_nodes = identification_nodes_from_dag_spec(dag_spec)
+
         try:
             mas = self.causal_wrapper.compute_adjustment_sets(dag_spec)
         except CausalError:
@@ -233,6 +303,7 @@ class CausalProfileBuilder:
             completion_coverage_complete=True,
             completion_source="direct",
             identification_method=method,
+            identification_nodes=identification_nodes,
             completion_diagnostics=diagnostics,
         )
 
@@ -269,6 +340,27 @@ class CausalProfileBuilder:
         else:
             identified = None
 
+        # Robust partial rule: a node is an intermediate only when it is a
+        # directed-path intermediate in every represented completion, i.e. the
+        # intersection of completion K sets. The relevant set is the union of
+        # completion-level relevant sets (equivalent to declared nodes minus
+        # the intersection of completion intermediates because declared node
+        # presence is fixed across completions). Requires complete coverage, a
+        # nonempty descendant set, and every descendant's relevant set to be
+        # available.
+        identification_nodes: frozenset[str] | None = None
+        if (
+            diagnostics.completion_coverage_complete
+            and descendant_profiles
+            and all(
+                profile.identification_nodes is not None
+                for profile in descendant_profiles
+            )
+        ):
+            identification_nodes = frozenset()
+            for profile in descendant_profiles:
+                identification_nodes |= profile.identification_nodes
+
         return _ProfilePayload(
             mas=_serialize_mas(robust_mas),
             robust_mas=robust_mas,
@@ -281,6 +373,7 @@ class CausalProfileBuilder:
             completion_coverage_complete=diagnostics.completion_coverage_complete,
             completion_source="multiverse_lookup",
             identification_method="general_id" if self.identification_wrapper else None,
+            identification_nodes=identification_nodes,
             completion_diagnostics=diagnostics,
         )
 
@@ -299,6 +392,7 @@ class CausalProfileBuilder:
             completion_coverage_complete=diagnostics.completion_coverage_complete,
             completion_source=diagnostics.completion_source,
             identification_method=None,
+            identification_nodes=None,
             completion_diagnostics=diagnostics,
         )
 

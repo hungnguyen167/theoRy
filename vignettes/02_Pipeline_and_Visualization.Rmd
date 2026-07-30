@@ -44,7 +44,7 @@ The modern API exposes exactly three pairwise metrics:
 |---|---|
 | `similarity_rate` | Numeric component-level structural agreement. An edge applicable in only one model is one disagreement and one repair; an edge inapplicable in both is ignored. |
 | `mas_compatible` | Both models have a robust shared minimal adjustment strategy for the same total-effect query. |
-| `identified_compatible` | Both models generally identify the same total causal effect. Two non-identified models are not compatible. |
+| `identified_compatible` | Both models generally identify the same total-effect query **and** have equal relevant declared node sets after removing robust directed-path intermediates. The relevant set uses all declared present nodes (observed **and** latent); a node is a directed-path intermediate only when it lies on at least one directed exposure-outcome path in the declared directed graph (bidirected edges never qualify). For partial models, a node is removed only when it is an intermediate in every valid represented completion; incomplete coverage returns unavailable. Two non-identified models are not compatible. |
 
 For MAS output, `[[]]` represents one valid empty adjustment set `{}`, whereas
 `[]` means no valid adjustment set. Empty-set/empty-set can be compatible;

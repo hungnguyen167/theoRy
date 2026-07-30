@@ -7,7 +7,7 @@ packages = ["api", "registry", "state", "dyadic", "simulation", "clustering", "s
 
 [project]
 name = "theory-engine"
-version = "0.1.0"
+version = "0.2.0"
 requires-python = ">=3.10"
 dependencies = [
   "torch>=2.0",

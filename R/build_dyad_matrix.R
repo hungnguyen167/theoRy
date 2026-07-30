@@ -54,7 +54,15 @@
 #'   \item{identified_alter}{Whether the alter model's exposure-outcome effect
 #'     is identified}
 #'   \item{identified_compatible}{Whether the exposure-outcome effect is
-#'     identified in both models}
+#'     identified in both models and the two models' relevant declared node
+#'     sets are exactly equal after removing robust directed-path
+#'     intermediates. The relevant set uses all declared present nodes
+#'     (observed and latent); a node is a directed-path intermediate only
+#'     when it lies on at least one directed exposure-outcome path in the
+#'     declared directed graph (bidirected edges never qualify). For partial
+#'     models, a node is removed only when it is an intermediate in every
+#'     valid represented completion; incomplete completion coverage returns
+#'     unavailable. Two non-identified models are not compatible.}
 #'
 #'   For \code{"two-stage"}: a list with components
 #'   \code{heatmap_summary} and \code{detailed_comparisons} (data frame).

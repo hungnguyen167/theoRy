@@ -55,6 +55,10 @@
 #'   scenario requires \code{"mas_compatible"} or
 #'   \code{"identified_compatible"} and defaults to the former. Other
 #'   concrete scenarios default to \code{"similarity_rate"}.
+#' @param resolution_strategy How Delta-U resolutions are evaluated in concrete
+#'   simulations: \code{"condition"} (default) conditions on supporting model
+#'   contexts without rewriting claims, while \code{"update_unknowns"} updates
+#'   applicable unknown claims to the hypothetical status.
 #' @param exposure Optional exposure node. Required for causal metrics except
 #'   in a generated Illusion of Precision simulation, where the backend infers
 #'   \code{"X1"}.
@@ -127,6 +131,8 @@ run_simulation <- function(scenario = c("illusion_of_precision",
                             random_state = 42L,
                             mode = c("concrete", "symbolic"),
                             compatibility_metric = NULL,
+                            resolution_strategy = c("condition",
+                                                    "update_unknowns"),
                             exposure = NULL,
                             outcome = NULL,
                             include_plot_data = FALSE,
@@ -137,6 +143,7 @@ run_simulation <- function(scenario = c("illusion_of_precision",
                                              "http://localhost:8000")) {
   scenario <- match.arg(scenario)
   mode <- match.arg(mode)
+  resolution_strategy <- match.arg(resolution_strategy)
   .validate_simulation_direction(include_bidirectional)
 
   .validate_plot_data_args(include_plot_data, plot_sample_n, pair_sample_n)
@@ -184,6 +191,7 @@ run_simulation <- function(scenario = c("illusion_of_precision",
     sample_n = sample_n,
     random_state = random_state,
     compatibility_metric = compatibility_metric,
+    resolution_strategy = resolution_strategy,
     exposure = exposure,
     outcome = outcome,
     include_plot_data = include_plot_data,
@@ -258,6 +266,9 @@ run_simulation <- function(scenario = c("illusion_of_precision",
                                        pair_sample_n = 5000L,
                                        random_state,
                                        compatibility_metric = NULL,
+                                       resolution_strategy = c(
+                                         "condition", "update_unknowns"
+                                       ),
                                        exposure = NULL,
                                        outcome = NULL,
                                        url, ...) {
@@ -267,6 +278,7 @@ run_simulation <- function(scenario = c("illusion_of_precision",
   compatibility_metric <- .resolve_simulation_metric(
     scenario, compatibility_metric
   )
+  resolution_strategy <- match.arg(resolution_strategy)
   .validate_simulation_query(
     scenario, compatibility_metric, exposure, outcome, is_seeded
   )
@@ -304,13 +316,15 @@ run_simulation <- function(scenario = c("illusion_of_precision",
     .send_seeded_simulation(scenario, registry, states, sample_n,
                              include_plot_data, plot_sample_n,
                              pair_sample_n, random_state,
-                             compatibility_metric, exposure, outcome, url, ...)
+                             compatibility_metric, resolution_strategy,
+                             exposure, outcome, url, ...)
   } else {
     .send_synthetic_simulation(scenario, n_models, n_components,
                                 include_bidirectional,
                                 include_plot_data, plot_sample_n,
                                 pair_sample_n, random_state,
-                                compatibility_metric, exposure, outcome, url, ...)
+                                compatibility_metric, resolution_strategy,
+                                exposure, outcome, url, ...)
   }
 }
 
@@ -457,7 +471,8 @@ run_simulation <- function(scenario = c("illusion_of_precision",
                                          include_bidirectional = FALSE,
                                          include_plot_data, plot_sample_n,
                                          pair_sample_n, random_state,
-                                         compatibility_metric, exposure, outcome,
+                                         compatibility_metric,
+                                         resolution_strategy, exposure, outcome,
                                          url, ...) {
   payload <- list(
     scenario = scenario,
@@ -466,7 +481,8 @@ run_simulation <- function(scenario = c("illusion_of_precision",
     random_state = random_state,
     include_plot_data = isTRUE(include_plot_data),
     include_bidirectional = isTRUE(include_bidirectional),
-    compatibility_metric = compatibility_metric
+    compatibility_metric = compatibility_metric,
+    resolution_strategy = resolution_strategy
   )
   if (!is.null(exposure)) {
     payload$exposure <- exposure
@@ -487,7 +503,8 @@ run_simulation <- function(scenario = c("illusion_of_precision",
 .send_seeded_simulation <- function(scenario, registry, states, sample_n,
                                        include_plot_data, plot_sample_n,
                                        pair_sample_n, random_state,
-                                       compatibility_metric, exposure, outcome,
+                                       compatibility_metric,
+                                       resolution_strategy, exposure, outcome,
                                        url, ...) {
   .validate_seeded_simulation_inputs(registry, states, sample_n)
 
@@ -500,7 +517,8 @@ run_simulation <- function(scenario = c("illusion_of_precision",
     state_data = state_records,
     random_state = random_state,
     include_plot_data = isTRUE(include_plot_data),
-    compatibility_metric = compatibility_metric
+    compatibility_metric = compatibility_metric,
+    resolution_strategy = resolution_strategy
   )
   if (!is.null(exposure)) {
     payload$exposure <- exposure
@@ -666,9 +684,12 @@ run_simulation_illusion <- function(n_models = 100L,
                                      states = NULL,
                                      sample_n = NULL,
                                      random_state = 42L,
-                                     compatibility_metric = c(
-                                       "mas_compatible",
-                                       "identified_compatible"
+                                      compatibility_metric = c(
+                                        "mas_compatible",
+                                        "identified_compatible"
+                                       ),
+                                      resolution_strategy = c(
+                                        "condition", "update_unknowns"
                                       ),
                                       exposure = NULL,
                                       outcome = NULL,
@@ -680,6 +701,7 @@ run_simulation_illusion <- function(n_models = 100L,
                                                       "http://localhost:8000")) {
   .validate_simulation_direction(include_bidirectional)
   compatibility_metric <- match.arg(compatibility_metric)
+  resolution_strategy <- match.arg(resolution_strategy)
   .run_simulation_internal(
     scenario = "illusion_of_precision",
     n_models = n_models,
@@ -690,6 +712,7 @@ run_simulation_illusion <- function(n_models = 100L,
     sample_n = sample_n,
     random_state = random_state,
     compatibility_metric = compatibility_metric,
+    resolution_strategy = resolution_strategy,
     exposure = exposure,
     outcome = outcome,
     include_plot_data = include_plot_data,
@@ -750,6 +773,9 @@ run_simulation_lynchpin <- function(n_models = 200L,
                                        "similarity_rate", "mas_compatible",
                                        "identified_compatible"
                                      ),
+                                     resolution_strategy = c(
+                                       "condition", "update_unknowns"
+                                     ),
                                      exposure = NULL,
                                      outcome = NULL,
                                      n_zones = NULL,
@@ -762,6 +788,7 @@ run_simulation_lynchpin <- function(n_models = 200L,
                                                       "http://localhost:8000")) {
   .validate_simulation_direction(include_bidirectional)
   compatibility_metric <- match.arg(compatibility_metric)
+  resolution_strategy <- match.arg(resolution_strategy)
   .run_simulation_internal(
     scenario = "lynchpin_of_certainty",
     n_models = n_models,
@@ -772,6 +799,7 @@ run_simulation_lynchpin <- function(n_models = 200L,
     sample_n = sample_n,
     random_state = random_state,
     compatibility_metric = compatibility_metric,
+    resolution_strategy = resolution_strategy,
     exposure = exposure,
     outcome = outcome,
     include_plot_data = include_plot_data,
@@ -807,6 +835,9 @@ run_simulation_crux <- function(n_models = 200L,
                                    "similarity_rate", "mas_compatible",
                                    "identified_compatible"
                                  ),
+                                 resolution_strategy = c(
+                                   "condition", "update_unknowns"
+                                 ),
                                  exposure = NULL,
                                  outcome = NULL,
                                  n_zones = NULL,
@@ -819,6 +850,7 @@ run_simulation_crux <- function(n_models = 200L,
                                                   "http://localhost:8000")) {
   .validate_simulation_direction(include_bidirectional)
   compatibility_metric <- match.arg(compatibility_metric)
+  resolution_strategy <- match.arg(resolution_strategy)
   .run_simulation_internal(
     scenario = "crux_of_certainty",
     n_models = n_models,
@@ -829,6 +861,7 @@ run_simulation_crux <- function(n_models = 200L,
     sample_n = sample_n,
     random_state = random_state,
     compatibility_metric = compatibility_metric,
+    resolution_strategy = resolution_strategy,
     exposure = exposure,
     outcome = outcome,
     include_plot_data = include_plot_data,
@@ -901,6 +934,9 @@ run_simulation_ghost <- function(n_models = 150L,
                                     "similarity_rate", "mas_compatible",
                                     "identified_compatible"
                                   ),
+                                  resolution_strategy = c(
+                                    "condition", "update_unknowns"
+                                  ),
                                   exposure = NULL,
                                   outcome = NULL,
                                   mainstream_fraction = 0.70,
@@ -918,6 +954,7 @@ run_simulation_ghost <- function(n_models = 150L,
                                                    "http://localhost:8000")) {
   .validate_simulation_direction(include_bidirectional)
   compatibility_metric <- match.arg(compatibility_metric)
+  resolution_strategy <- match.arg(resolution_strategy)
   .run_simulation_internal(
     scenario = "ghost_discovery",
     n_models = n_models,
@@ -928,6 +965,7 @@ run_simulation_ghost <- function(n_models = 150L,
     sample_n = sample_n,
     random_state = random_state,
     compatibility_metric = compatibility_metric,
+    resolution_strategy = resolution_strategy,
     exposure = exposure,
     outcome = outcome,
     include_plot_data = include_plot_data,
@@ -975,7 +1013,7 @@ run_simulation_ghost <- function(n_models = 150L,
 
 
 .parse_lynchpin_results <- function(r) {
-  list(
+  parsed <- list(
     compatibility_metric = r$compatibility_metric,
     baseline_compatibility = r$baseline_compatibility,
     post_resolution_compatibility = r$post_resolution_compatibility,
@@ -992,6 +1030,26 @@ run_simulation_ghost <- function(n_models = 150L,
       data.frame(step = character(0), compatibility = numeric(0), stringsAsFactors = FALSE)
     }
   )
+
+  optional_integer <- intersect(c(
+    "models_retained", "dyads_retained",
+    "models_retained_positive", "models_retained_negative",
+    "dyads_retained_positive", "dyads_retained_negative"
+  ), names(r))
+  for (field in optional_integer) {
+    parsed[[field]] <- as.integer(r[[field]] %||% NA_integer_)
+  }
+  if ("resolution_strategy" %in% names(r)) {
+    parsed$resolution_strategy <- as.character(
+      r$resolution_strategy %||% NA_character_
+    )
+  }
+
+  extra_names <- setdiff(names(r), names(parsed))
+  for (field in extra_names) {
+    parsed[[field]] <- r[[field]]
+  }
+  parsed
 }
 
 
@@ -1094,6 +1152,9 @@ run_simulation_ghost <- function(n_models = 150L,
 
 
 .parse_extra_artifact_field <- function(val, name) {
+  if (identical(name, "rankings")) {
+    return(.parse_delta_u_rankings(val))
+  }
   if (identical(name, "embedding_2d")) {
     return(.parse_embedding_artifact(val))
   }

@@ -34,6 +34,12 @@
 #'   \code{"identified_compatible"}. Exactly one metric is used. The two
 #'   causal metrics require \code{exposure} and \code{outcome} in the dyads'
 #'   \code{theory_context} attribute.
+#' @param resolution_strategy How hypothetical resolutions are evaluated.
+#'   \code{"condition"} (default) conditions on the model context supporting
+#'   each positive or negative resolution and recomputes compatibility only
+#'   among the retained models and dyads; it does not rewrite model claims.
+#'   \code{"update_unknowns"} instead updates applicable unknown claims to the
+#'   hypothetical status, preserving the earlier mutation-based semantics.
 #' @param device Compute device: \code{"auto"} (default), \code{"cpu"}, or
 #'   \code{"cuda"}.  \code{"cuda"} requires a CUDA-capable GPU with PyTorch.
 #' @param use_tensor_engine Whether to use the tensorized structural engine
@@ -53,6 +59,12 @@
 #'     \code{"negative"}, or \code{"none"})}
 #'   \item{dyads_improved}{Number of dyads that improved}
 #'   \item{dyads_worsened}{Number of dyads that worsened}
+#'   When supplied by the backend, the data frame also includes
+#'   \code{baseline_compatibility}, \code{post_compatibility_positive},
+#'   \code{post_compatibility_negative}, \code{models_retained_positive},
+#'   \code{models_retained_negative}, \code{dyads_retained_positive},
+#'   \code{dyads_retained_negative}, \code{context_coverage_positive},
+#'   \code{context_coverage_negative}, and \code{resolution_strategy}.
 #'
 #'   When \code{component_id} is supplied, a one-row data frame with the
 #'   same columns plus \code{delta_u_positive} and \code{delta_u_negative}.
@@ -81,11 +93,10 @@
 #' \code{"causal"} is skipped when both endpoint timings are known and
 #' \code{timing(source) >= timing(target)}.
 #'
-#' The \code{"mas_compatible"} and \code{"identified_compatible"} metrics may
-#' be slow for large multiverses because they require recomputing causal
-#' metrics per resolution scenario. Consider using \code{mode = "two-stage"}
-#' with an appropriate \code{heatmap_threshold} to reduce the number of full
-#' evaluations.
+#' With \code{resolution_strategy = "condition"}, causal profiles and dyad
+#' scores are computed once and every resolution reuses the corresponding
+#' submultiverse. The legacy \code{"update_unknowns"} strategy may be slower
+#' because affected causal profiles and dyads must be recomputed.
 #'
 #' @examples
 #' \dontrun{
@@ -125,12 +136,15 @@ compute_delta_u <- function(dyads,
                             compatibility_metric = c("similarity_rate",
                                                      "mas_compatible",
                                                      "identified_compatible"),
+                            resolution_strategy = c("condition",
+                                                    "update_unknowns"),
                             device = c("auto", "cpu", "cuda"),
                             use_tensor_engine = TRUE,
                             url = getOption("theoRy.engine_url",
                                              "http://localhost:8000")) {
   mode <- match.arg(mode)
   compatibility_metric <- match.arg(compatibility_metric)
+  resolution_strategy <- match.arg(resolution_strategy)
   device <- match.arg(device)
 
   if (missing(dyads) || !is.data.frame(dyads)) {
@@ -188,7 +202,8 @@ compute_delta_u <- function(dyads,
     ),
     top_k = as.integer(top_k),
     mode = mode,
-    compatibility_metric = compatibility_metric
+    compatibility_metric = compatibility_metric,
+    resolution_strategy = resolution_strategy
   )
 
   if (!is.null(component_id)) {
@@ -334,9 +349,6 @@ compute_delta_u <- function(dyads,
 
 .parse_single_result <- function(result, registry_data = NULL) {
   meta <- .component_metadata(result$component_id, registry_data)
-  fields <- c("rank", "component_id", "type", "source", "target",
-              "delta_u", "best_resolution", "dyads_improved",
-              "dyads_worsened", "delta_u_positive", "delta_u_negative")
   row <- list(
     rank = 1L,
     component_id = result$component_id %||% NA_character_,
@@ -349,11 +361,32 @@ compute_delta_u <- function(dyads,
     },
     delta_u = result$delta_u %||% NA_real_,
     best_resolution = result$best_resolution %||% NA_character_,
-    dyads_improved = as.integer(result$dyads_improved %||% 0L),
-    dyads_worsened = as.integer(result$dyads_worsened %||% 0L),
+    dyads_improved = as.integer(result$dyads_improved %||% NA_integer_),
+    dyads_worsened = as.integer(result$dyads_worsened %||% NA_integer_),
     delta_u_positive = result$delta_u_positive %||% NA_real_,
     delta_u_negative = result$delta_u_negative %||% NA_real_
   )
+
+  optional_numeric <- c(
+    "baseline_compatibility", "post_compatibility_positive",
+    "post_compatibility_negative", "context_coverage_positive",
+    "context_coverage_negative"
+  )
+  for (field in intersect(optional_numeric, names(result))) {
+    row[[field]] <- as.numeric(result[[field]] %||% NA_real_)
+  }
+  optional_integer <- c(
+    "models_retained_positive", "models_retained_negative",
+    "dyads_retained_positive", "dyads_retained_negative"
+  )
+  for (field in intersect(optional_integer, names(result))) {
+    row[[field]] <- as.integer(result[[field]] %||% NA_integer_)
+  }
+  if ("resolution_strategy" %in% names(result)) {
+    row$resolution_strategy <- as.character(
+      result$resolution_strategy %||% NA_character_
+    )
+  }
   data.frame(row, stringsAsFactors = FALSE)
 }
 
@@ -423,13 +456,39 @@ compute_delta_u <- function(dyads,
                                NA_character_,
                              character(1), USE.NAMES = FALSE),
     dyads_improved = vapply(rankings, function(r) {
-      as.integer(r$dyads_improved %||% 0L)
+      as.integer(r$dyads_improved %||% NA_integer_)
     }, integer(1), USE.NAMES = FALSE),
     dyads_worsened = vapply(rankings, function(r) {
-      as.integer(r$dyads_worsened %||% 0L)
+      as.integer(r$dyads_worsened %||% NA_integer_)
     }, integer(1), USE.NAMES = FALSE),
     stringsAsFactors = FALSE
   )
+
+  record_names <- unique(unlist(lapply(rankings, names)))
+  optional_numeric <- intersect(c(
+    "baseline_compatibility", "post_compatibility_positive",
+    "post_compatibility_negative", "context_coverage_positive",
+    "context_coverage_negative"
+  ), record_names)
+  for (field in optional_numeric) {
+    df[[field]] <- vapply(rankings, function(r) {
+      as.numeric(r[[field]] %||% NA_real_)
+    }, numeric(1), USE.NAMES = FALSE)
+  }
+  optional_integer <- intersect(c(
+    "models_retained_positive", "models_retained_negative",
+    "dyads_retained_positive", "dyads_retained_negative"
+  ), record_names)
+  for (field in optional_integer) {
+    df[[field]] <- vapply(rankings, function(r) {
+      as.integer(r[[field]] %||% NA_integer_)
+    }, integer(1), USE.NAMES = FALSE)
+  }
+  if ("resolution_strategy" %in% record_names) {
+    df$resolution_strategy <- vapply(rankings, function(r) {
+      as.character(r$resolution_strategy %||% NA_character_)
+    }, character(1), USE.NAMES = FALSE)
+  }
 
   df
 }

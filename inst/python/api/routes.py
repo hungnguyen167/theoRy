@@ -474,14 +474,16 @@ async def delta_u(request: DeltaURequest):
     compatibility_metric = request.compatibility_metric
 
     if compatibility_metric not in (
-        "similarity_rate", "mas_compatible", "identified_compatible"
+        "similarity_rate",
+        "mas_compatible",
+        "identified_compatible",
     ):
         raise HTTPException(
             status_code=422,
             detail={
                 "code": "INVALID_COMPATIBILITY_METRIC",
                 "message": "compatibility_metric must be one of: "
-                           "similarity_rate, mas_compatible, identified_compatible",
+                "similarity_rate, mas_compatible, identified_compatible",
             },
         )
 
@@ -553,7 +555,10 @@ async def delta_u(request: DeltaURequest):
 
     causal_wrapper = None
     identification_wrapper = None
-    requires_causal = compatibility_metric in ("mas_compatible", "identified_compatible")
+    requires_causal = compatibility_metric in (
+        "mas_compatible",
+        "identified_compatible",
+    )
     if requires_causal:
         try:
             causal_wrapper = CausalWrapper()
@@ -565,6 +570,7 @@ async def delta_u(request: DeltaURequest):
         if compatibility_metric == "identified_compatible":
             try:
                 from dyadic.identification import IdentificationWrapper
+
                 identification_wrapper = IdentificationWrapper()
             except Exception as e:
                 raise HTTPException(
@@ -585,6 +591,7 @@ async def delta_u(request: DeltaURequest):
         outcome=outcome,
         identification_wrapper=identification_wrapper,
         model_ids=list(state.model_ids),
+        resolution_strategy=request.resolution_strategy,
     )
     computation_mode = request.mode
 
@@ -686,6 +693,7 @@ async def delta_u(request: DeltaURequest):
         )
 
     response_data["compatibility_metric"] = compatibility_metric
+    response_data["resolution_strategy"] = request.resolution_strategy
     if exposure is not None:
         response_data["exposure"] = exposure
     if outcome is not None:
@@ -972,6 +980,7 @@ async def simulate(request: SimulateRequest):
             n_models=request.n_models,
             n_components=request.n_components,
             compatibility_metric=request.compatibility_metric,
+            resolution_strategy=request.resolution_strategy,
             enforce_thresholds=enforce_thresholds,
             exposure=request.exposure,
             outcome=request.outcome,
@@ -1115,7 +1124,7 @@ def _universe_from_request(request: SymbolicUniverseRequest):
                         )
 
         if request.absent_nodes is not None:
-            for (src, tgt) in universe.fixed_causal_edges:
+            for src, tgt in universe.fixed_causal_edges:
                 if src in request.absent_nodes or tgt in request.absent_nodes:
                     raise HTTPException(
                         status_code=422,
@@ -1276,7 +1285,9 @@ async def symbolic_compare(request: SymbolicCompareRequest):
         return {
             "status": "success",
             "data": {
-                "adjustment_identifiable_compatible": comparison["adjustment_identifiable_compatible"],
+                "adjustment_identifiable_compatible": comparison[
+                    "adjustment_identifiable_compatible"
+                ],
                 "a_signature": _sig_to_dict(comparison["a_signature"]),
                 "b_signature": _sig_to_dict(comparison["b_signature"]),
             },

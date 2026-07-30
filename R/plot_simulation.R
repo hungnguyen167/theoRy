@@ -105,10 +105,16 @@ plot_simulation <- function(result, ...) {
   # Compatibility timeline
   plots$compatibility_timeline <- plot_compatibility_timeline(result)
 
-  # Lynchpin ranking - build a one-row data frame from the single lynchpin
-  lynchpin_id <- result$results$lynchpin_component_id
-  phase_score <- result$results$phase_transition_score
-  if (!is.null(lynchpin_id) && !is.null(phase_score)) {
+  rankings <- result$artifacts$rankings
+  if (is.data.frame(rankings) && nrow(rankings) > 0) {
+    plots$lynchpin_ranking <- plot_lynchpin_ranking(rankings)
+  } else {
+    # Older responses expose only the top-ranked component.
+    lynchpin_id <- result$results$lynchpin_component_id
+    phase_score <- result$results$phase_transition_score
+    if (is.null(lynchpin_id) || is.null(phase_score)) {
+      return(plots)
+    }
     one_row <- data.frame(
       rank = 1L,
       component_id = lynchpin_id,

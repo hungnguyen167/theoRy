@@ -407,6 +407,8 @@ class DyadicEngine:
                     "nodes": node_names,
                     "edges": edges,
                     "bidirected_edges": bidirected_edges,
+                    "declared_nodes": list(node_names),
+                    "declared_directed_edges": list(edges),
                     "exposure": exposure,
                     "outcome": outcome,
                     "query_nodes_missing": True,
@@ -430,6 +432,9 @@ class DyadicEngine:
         else:
             exposure, outcome = self._default_exposure_outcome(node_names)
 
+        declared_nodes = list(node_names)
+        declared_directed_edges = list(edges)
+
         node_names, edges, bidirected_edges = self._project_latent_nodes(
             node_names, edges, bidirected_edges, observed_by_node
         )
@@ -443,6 +448,8 @@ class DyadicEngine:
             "nodes": node_names,
             "edges": edges,
             "bidirected_edges": bidirected_edges,
+            "declared_nodes": declared_nodes,
+            "declared_directed_edges": declared_directed_edges,
             "exposure": exposure,
             "outcome": outcome,
             "query_nodes_missing": False,
@@ -461,8 +468,7 @@ class DyadicEngine:
         if not latent:
             return nodes, directed_edges, bidirected_edges
         if any(
-            source in latent or target in latent
-            for source, target in bidirected_edges
+            source in latent or target in latent for source, target in bidirected_edges
         ):
             raise DyadicError(
                 "Latent projection supports directed paths through latent nodes, "

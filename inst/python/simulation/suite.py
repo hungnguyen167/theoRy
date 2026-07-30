@@ -1,6 +1,5 @@
 """Simulation suite: three proof-of-concept scenario generators."""
 
-import copy
 import random
 
 from registry.builder import ComponentRegistryBuilder
@@ -9,7 +8,7 @@ from registry.schema import ComponentRegistry, RegistryError
 from state.tensor import StateError, StateTensor
 from state.completions import materialize_missing_completions
 from dyadic.engine import DyadicEngine
-from simulation.delta_u import DeltaUEngine
+from simulation.delta_u import DeltaUEngine, resolve_unknown_component
 from simulation.scoring import CompatibilityScorer
 from clustering.engine import ClusteringEngine
 from clustering.ghost import GhostDetector
@@ -349,10 +348,25 @@ class SimulationSuite:
         except StateError as e:
             raise SimulationInputError(f"Invalid seeded state_data: {e}") from e
 
-        dyadic_engine = DyadicEngine()
-        dyads = dyadic_engine.compare_pairs(
-            state, registry, sampled_model_ids, mode="basic"
+        from dyadic.tensor_engine import structural_similarity_matrix
+
+        validator = DyadicEngine()
+        for model_id in sampled_model_ids:
+            validator._validate_acyclic(model_id, state, registry)
+        similarity, ordered_ids = structural_similarity_matrix(
+            state, registry, model_ids=sampled_model_ids
         )
+        dyads = [
+            {
+                "dyad_id": f"{ego_id}__{alter_id}",
+                "ego_id": ego_id,
+                "alter_id": alter_id,
+                "similarity_rate": round(float(similarity[i, j]), 6),
+            }
+            for i, ego_id in enumerate(ordered_ids)
+            for j, alter_id in enumerate(ordered_ids)
+            if i != j
+        ]
         return registry, state, dyads, sampled_model_ids, filtered_records
 
     def _build_seeded_result_wrapper(
@@ -400,16 +414,44 @@ class SimulationSuite:
             if compatibility_metric == "identified_compatible":
                 identification_wrapper = self._make_identification_wrapper()
 
-        dyads = DyadicEngine().compare_pairs(
-            state,
-            registry,
-            list(model_ids),
-            mode=mode,
-            causal_wrapper=causal_wrapper,
-            identification_wrapper=identification_wrapper,
-            exposure=exposure,
-            outcome=outcome,
+        from dyadic.profiles import CausalProfileBuilder
+        from dyadic.tensor_engine import structural_similarity_matrix
+
+        validator = DyadicEngine()
+        for model_id in model_ids:
+            validator._validate_acyclic(model_id, state, registry)
+        profiles = None
+        if mode == "full":
+            profiles = DyadicEngine()._build_causal_profiles(
+                state,
+                registry,
+                mode=mode,
+                causal_wrapper=causal_wrapper,
+                identification_wrapper=identification_wrapper,
+                exposure=exposure,
+                outcome=outcome,
+            )
+        similarity, ordered_ids = structural_similarity_matrix(
+            state, registry, model_ids=list(model_ids)
         )
+        dyads = []
+        for i, ego_id in enumerate(ordered_ids):
+            for j, alter_id in enumerate(ordered_ids):
+                if i == j:
+                    continue
+                dyad = {
+                    "dyad_id": f"{ego_id}__{alter_id}",
+                    "ego_id": ego_id,
+                    "alter_id": alter_id,
+                    "similarity_rate": round(float(similarity[i, j]), 6),
+                }
+                if profiles is not None:
+                    dyad.update(
+                        CausalProfileBuilder.compare(
+                            profiles[ego_id], profiles[alter_id]
+                        )
+                    )
+                dyads.append(dyad)
         scorer = CompatibilityScorer(compatibility_metric=compatibility_metric)
         scores = scorer.score_dyads(dyads)
         unavailable = sum(d.get(compatibility_metric) is None for d in dyads)
@@ -737,6 +779,7 @@ class SimulationSuite:
         pair_sample_n: int | None = 5000,
         include_bidirectional: bool = False,
         compatibility_metric: str = "similarity_rate",
+        resolution_strategy: str = "condition",
         exposure: str | None = None,
         outcome: str | None = None,
     ):
@@ -876,6 +919,7 @@ class SimulationSuite:
         pair_sample_n: int | None = 5000,
         include_bidirectional: bool = False,
         compatibility_metric: str = "similarity_rate",
+        resolution_strategy: str = "condition",
         exposure: str | None = None,
         outcome: str | None = None,
     ):
@@ -893,6 +937,7 @@ class SimulationSuite:
             pair_sample_n=pair_sample_n,
             include_bidirectional=include_bidirectional,
             compatibility_metric=compatibility_metric,
+            resolution_strategy=resolution_strategy,
             exposure=exposure,
             outcome=outcome,
         )
@@ -915,6 +960,7 @@ class SimulationSuite:
         pair_sample_n: int | None = 5000,
         include_bidirectional: bool = False,
         compatibility_metric: str = "similarity_rate",
+        resolution_strategy: str = "condition",
         exposure: str | None = None,
         outcome: str | None = None,
     ):
@@ -933,6 +979,7 @@ class SimulationSuite:
                 plot_sample_n=plot_sample_n,
                 pair_sample_n=pair_sample_n,
                 compatibility_metric=compatibility_metric,
+                resolution_strategy=resolution_strategy,
                 exposure=exposure,
                 outcome=outcome,
             )
@@ -1008,6 +1055,7 @@ class SimulationSuite:
                 include_plot_data=include_plot_data,
                 pair_sample_n=pair_sample_n,
                 compatibility_metric=compatibility_metric,
+                resolution_strategy=resolution_strategy,
                 metric_diagnostics=metric_diagnostics,
                 causal_wrapper=causal_wrapper,
                 identification_wrapper=identification_wrapper,
@@ -1051,6 +1099,7 @@ class SimulationSuite:
         plot_sample_n=200,
         pair_sample_n=5000,
         compatibility_metric="similarity_rate",
+        resolution_strategy="condition",
         exposure=None,
         outcome=None,
     ):
@@ -1091,6 +1140,7 @@ class SimulationSuite:
             include_plot_data=include_plot_data,
             pair_sample_n=pair_sample_n,
             compatibility_metric=compatibility_metric,
+            resolution_strategy=resolution_strategy,
             metric_diagnostics=metric_diagnostics,
             causal_wrapper=causal_wrapper,
             identification_wrapper=identification_wrapper,
@@ -1136,6 +1186,7 @@ class SimulationSuite:
         include_plot_data=False,
         pair_sample_n=5000,
         compatibility_metric="similarity_rate",
+        resolution_strategy="condition",
         metric_diagnostics=None,
         causal_wrapper=None,
         identification_wrapper=None,
@@ -1156,6 +1207,7 @@ class SimulationSuite:
             exposure=exposure,
             outcome=outcome,
             model_ids=model_ids,
+            resolution_strategy=resolution_strategy,
         )
         rankings = delta_engine.rank_lynchpins(
             state=state,
@@ -1168,24 +1220,54 @@ class SimulationSuite:
         top_component = rankings[0]["component_id"] if rankings else None
         best_resolution = rankings[0]["best_resolution"] if rankings else "positive"
 
-        resolved_state = self._resolve_component(
-            state,
-            registry,
-            top_component,
-            best_resolution,
-            model_ids=model_ids,
+        if resolution_strategy == "condition":
+            if top_component is None or best_resolution == "none":
+                resolved_model_ids = model_ids
+            else:
+                from state.semantics import edge_applicable
+
+                target_status = (
+                    "causal" if best_resolution == "positive" else "non-causal"
+                )
+                resolved_model_ids = [
+                    model_id
+                    for model_id in model_ids
+                    if edge_applicable(state, model_id, top_component, registry)
+                    and state.get_status(model_id, top_component) == target_status
+                ]
+            retained = set(resolved_model_ids)
+            dyads_resolved = [
+                dyad
+                for dyad in dyads_baseline
+                if dyad["ego_id"] in retained and dyad["alter_id"] in retained
+            ]
+        else:
+            resolved_model_ids = model_ids
+            if top_component is None or best_resolution == "none":
+                resolved_state = state
+            else:
+                resolved_state = self._resolve_component(
+                    state,
+                    registry,
+                    top_component,
+                    best_resolution,
+                    model_ids=model_ids,
+                )
+            dyads_resolved = dyadic_engine.compare_pairs(
+                resolved_state,
+                registry,
+                model_ids,
+                mode="basic" if compatibility_metric == "similarity_rate" else "full",
+                causal_wrapper=causal_wrapper,
+                identification_wrapper=identification_wrapper,
+                exposure=exposure,
+                outcome=outcome,
+            )
+        post_compat = (
+            self._compute_metric_rate(dyads_resolved, compatibility_metric)
+            if dyads_resolved
+            else baseline_compat
         )
-        dyads_resolved = dyadic_engine.compare_pairs(
-            resolved_state,
-            registry,
-            model_ids,
-            mode="basic" if compatibility_metric == "similarity_rate" else "full",
-            causal_wrapper=causal_wrapper,
-            identification_wrapper=identification_wrapper,
-            exposure=exposure,
-            outcome=outcome,
-        )
-        post_compat = self._compute_metric_rate(dyads_resolved, compatibility_metric)
         phase_score = round(post_compat - baseline_compat, 6)
         lynchpin_is_seeded = (
             top_component == seeded_lynchpin_id if seeded_lynchpin_id else False
@@ -1200,6 +1282,9 @@ class SimulationSuite:
             "lynchpin_rank": 1,
             "seeded_lynchpin_id": seeded_lynchpin_id,
             "lynchpin_matches_seed": lynchpin_is_seeded,
+            "resolution_strategy": resolution_strategy,
+            "models_retained": len(resolved_model_ids),
+            "dyads_retained": len(dyads_resolved),
             "compatibility_timeline": [
                 {"step": "baseline", "compatibility": baseline_compat},
                 {"step": f"resolved_{top_component}", "compatibility": post_compat},
@@ -1210,6 +1295,7 @@ class SimulationSuite:
             "registry_data": registry.data.to_dict(orient="records"),
             "state_data": state_records,
             "model_ids": model_ids,
+            "rankings": rankings,
             "dyads_baseline_count": len(dyads_baseline),
             "dyads_resolved_count": len(dyads_resolved),
             "summary_stats": {
@@ -1218,6 +1304,8 @@ class SimulationSuite:
                 "compatibility_metric": compatibility_metric,
                 "baseline_mean_compatibility": baseline_compat,
                 "resolved_mean_compatibility": post_compat,
+                "resolution_strategy": resolution_strategy,
+                "models_retained": len(resolved_model_ids),
                 "seed": seed,
             },
         }
@@ -1515,11 +1603,15 @@ class SimulationSuite:
     def _resolve_component(
         self, state, registry, component_id, resolution, *, model_ids=None
     ):
-        """Clone state and resolve a component for all models."""
-        resolved = copy.deepcopy(state)
+        """Clone state and resolve only unknown instances of a component."""
         target_status = "causal" if resolution == "positive" else "non-causal"
-        for model_id in model_ids or resolved.model_ids:
-            resolved.set_status(model_id, component_id, target_status)
+        resolved, _ = resolve_unknown_component(
+            state,
+            registry,
+            component_id,
+            target_status,
+            model_ids,
+        )
         return resolved
 
     # ── scenario C: ghost discovery ────────────────────────────────────────────
@@ -1545,6 +1637,7 @@ class SimulationSuite:
         pair_sample_n: int | None = 5000,
         include_bidirectional: bool = False,
         compatibility_metric: str = "similarity_rate",
+        resolution_strategy: str = "condition",
         exposure: str | None = None,
         outcome: str | None = None,
     ):

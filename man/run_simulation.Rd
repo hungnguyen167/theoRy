@@ -16,6 +16,7 @@ run_simulation(
   random_state = 42L,
   mode = c("concrete", "symbolic"),
   compatibility_metric = NULL,
+  resolution_strategy = c("condition", "update_unknowns"),
   exposure = NULL,
   outcome = NULL,
   include_plot_data = FALSE,
@@ -67,6 +68,11 @@ non-deterministic results.  Defaults to \code{42L}.}
 scenario requires \code{"mas_compatible"} or
 \code{"identified_compatible"} and defaults to the former. Other
 concrete scenarios default to \code{"similarity_rate"}.}
+
+\item{resolution_strategy}{How Delta-U resolutions are evaluated in concrete
+simulations: \code{"condition"} (default) conditions on supporting model
+contexts without rewriting claims, while \code{"update_unknowns"} updates
+applicable unknown claims to the hypothetical status.}
 
 \item{exposure}{Optional exposure node. Required for causal metrics except
 in a generated Illusion of Precision simulation, where the backend infers

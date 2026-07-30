@@ -13,6 +13,7 @@ run_simulation_crux(
   sample_n = NULL,
   random_state = 42L,
   compatibility_metric = c("similarity_rate", "mas_compatible", "identified_compatible"),
+  resolution_strategy = c("condition", "update_unknowns"),
   exposure = NULL,
   outcome = NULL,
   n_zones = NULL,
@@ -54,6 +55,11 @@ If \code{NULL}, all supplied models are used.}
 scenario requires \code{"mas_compatible"} or
 \code{"identified_compatible"} and defaults to the former. Other
 concrete scenarios default to \code{"similarity_rate"}.}
+
+\item{resolution_strategy}{How Delta-U resolutions are evaluated in concrete
+simulations: \code{"condition"} (default) conditions on supporting model
+contexts without rewriting claims, while \code{"update_unknowns"} updates
+applicable unknown claims to the hypothetical status.}
 
 \item{exposure}{Optional exposure node. Required for causal metrics except
 in a generated Illusion of Precision simulation, where the backend infers

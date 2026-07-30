@@ -247,6 +247,16 @@ class CausalProfileBuilder:
             "mas_compatible": mas_compatible(profile_a, profile_b),
             "identified_ego": profile_a.identified,
             "identified_alter": profile_b.identified,
+            "identification_nodes_ego": (
+                sorted(profile_a.identification_nodes)
+                if profile_a.identification_nodes is not None
+                else None
+            ),
+            "identification_nodes_alter": (
+                sorted(profile_b.identification_nodes)
+                if profile_b.identification_nodes is not None
+                else None
+            ),
             "identified_compatible": identified_compatible(profile_a, profile_b),
         }
 

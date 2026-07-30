@@ -82,6 +82,10 @@ For \code{mode = "basic"}, \code{"full"}, or \code{"single-ref"}:
     identified}
   \item{identified_alter}{Whether the alter model's exposure-outcome effect
     is identified}
+  \item{identification_nodes_ego}{Relevant declared node set used to compare
+    identified compatibility for the ego model (list-column).}
+  \item{identification_nodes_alter}{Relevant declared node set used to compare
+    identified compatibility for the alter model (list-column).}
   \item{identified_compatible}{Whether the exposure-outcome effect is
     identified in both models and the two models' relevant declared node
     sets are exactly equal after removing robust directed-path

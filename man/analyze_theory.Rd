@@ -67,7 +67,7 @@ models with variable node scope. With \code{"vary"}, both
 ranking. Defaults to 10.}
 
 \item{plot}{Logical. When \code{TRUE}, generate standard plots
-(dyad heatmap, lynchpin ranking, cluster embedding when available).
+(dyad heatmap, crux ranking, cluster embedding when available).
 Defaults to \code{FALSE}.}
 
 \item{eps}{DBSCAN eps parameter for ghost detection. Defaults to 0.5.}
@@ -99,14 +99,18 @@ A list with components:
   \item{ghost_clusters}{List from \code{\link{detect_ghost_clusters}} or
     \code{NULL} when no prior model is supplied.}
   \item{summary}{Character vector of human-readable key findings, including
-    model and non-outcome-node counts plus available-dyad compatibility
-    percentages and Herfindahl indices.}
+    model and non-outcome-node counts, available-dyad compatibility
+    percentages, the most common MAS, the MAS uniquely enabling the most
+    compatible model pairs, the top Delta-U crux, and available ghost-cluster
+    counts. With \code{node_policy = "vary"}, the summary also identifies
+    the relevant node most often differing between identified-incompatible
+    pairs where both effects and both relevant-node sets are available.}
   \item{plots}{Named list of \code{ggplot} objects or \code{NULL} when
     \code{plot = FALSE}.}
 }
 \description{
 Chains the five core theoRy pipeline steps - component registry,
-model-state expansion, dyad matrix, Delta-U lynchpin ranking, and
+model-state expansion, dyad matrix, Delta-U crux ranking, and
 (optionally) ghost cluster detection - with sensible defaults and
 progress messages. Optionally generates standard visualizations.
 }

@@ -59,6 +59,10 @@
 #'     identified}
 #'   \item{identified_alter}{Whether the alter model's exposure-outcome effect
 #'     is identified}
+#'   \item{identification_nodes_ego}{Relevant declared node set used to compare
+#'     identified compatibility for the ego model (list-column).}
+#'   \item{identification_nodes_alter}{Relevant declared node set used to compare
+#'     identified compatibility for the alter model (list-column).}
 #'   \item{identified_compatible}{Whether the exposure-outcome effect is
 #'     identified in both models and the two models' relevant declared node
 #'     sets are exactly equal after removing robust directed-path
@@ -452,6 +456,20 @@ build_dyad_matrix <- function(registry,
     identified_alter = vapply(dyads, function(d) {
       if (is.null(d$identified_alter)) NA else d$identified_alter
     }, logical(1), USE.NAMES = FALSE),
+    identification_nodes_ego = I(lapply(dyads, function(d) {
+      if (is.null(d$identification_nodes_ego)) {
+        NULL
+      } else {
+        as.character(unlist(d$identification_nodes_ego, use.names = FALSE))
+      }
+    })),
+    identification_nodes_alter = I(lapply(dyads, function(d) {
+      if (is.null(d$identification_nodes_alter)) {
+        NULL
+      } else {
+        as.character(unlist(d$identification_nodes_alter, use.names = FALSE))
+      }
+    })),
     identified_compatible = vapply(dyads, function(d) {
       if (is.null(d$identified_compatible)) NA else d$identified_compatible
     }, logical(1), USE.NAMES = FALSE),

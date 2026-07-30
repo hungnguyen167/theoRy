@@ -4,7 +4,7 @@
 #' Run the full theoRy analysis pipeline in one call
 #'
 #' Chains the five core theoRy pipeline steps - component registry,
-#' model-state expansion, dyad matrix, Delta-U lynchpin ranking, and
+#' model-state expansion, dyad matrix, Delta-U crux ranking, and
 #' (optionally) ghost cluster detection - with sensible defaults and
 #' progress messages. Optionally generates standard visualizations.
 #'
@@ -34,7 +34,7 @@
 #' @param top_k Maximum number of components to return in the Delta-U
 #'   ranking. Defaults to 10.
 #' @param plot Logical. When \code{TRUE}, generate standard plots
-#'   (dyad heatmap, lynchpin ranking, cluster embedding when available).
+#'   (dyad heatmap, crux ranking, cluster embedding when available).
 #'   Defaults to \code{FALSE}.
 #' @param eps DBSCAN eps parameter for ghost detection. Defaults to 0.5.
 #' @param min_samples DBSCAN min_samples parameter. Defaults to 5.
@@ -59,8 +59,12 @@
 #'   \item{ghost_clusters}{List from \code{\link{detect_ghost_clusters}} or
 #'     \code{NULL} when no prior model is supplied.}
 #'   \item{summary}{Character vector of human-readable key findings, including
-#'     model and non-outcome-node counts plus available-dyad compatibility
-#'     percentages and Herfindahl indices.}
+#'     model and non-outcome-node counts, available-dyad compatibility
+#'     percentages, the most common MAS, the MAS uniquely enabling the most
+#'     compatible model pairs, the top Delta-U crux, and available ghost-cluster
+#'     counts. With \code{node_policy = "vary"}, the summary also identifies
+#'     the relevant node most often differing between identified-incompatible
+#'     pairs where both effects and both relevant-node sets are available.}
 #'   \item{plots}{Named list of \code{ggplot} objects or \code{NULL} when
 #'     \code{plot = FALSE}.}
 #'
@@ -174,7 +178,7 @@ analyze_theory <- function(nodes = NULL,
 
     if (is.list(delta_u$results) && length(delta_u$results) > 0) {
       top <- delta_u$results[[1]]
-      summary <- c(summary, sprintf("Top lynchpin: %s (%s \u2192 %s, delta_u = %.4f)",
+      summary <- c(summary, sprintf("Top crux: %s (%s \u2192 %s, delta_u = %.4f)",
                                      top$component_id, top$source, top$target, top$delta_u))
     }
 
@@ -258,7 +262,7 @@ analyze_theory <- function(nodes = NULL,
   )
 
   # ── 4. Compute Delta-U ───────────────────────────────────────────────────────
-  message("Step 4/5: Computing Delta-U lynchpin rankings...")
+  message("Step 4/5: Computing Delta-U crux rankings...")
   delta_u <- compute_delta_u(dyads, top_k = as.integer(top_k), url = url)
 
   # ── 5. Ghost detection ───────────────────────────────────────────────────────
@@ -295,12 +299,19 @@ analyze_theory <- function(nodes = NULL,
       dyads, "identified_compatible", "Identified"
     )
   )
+  summary <- c(summary, .analyze_theory_mas_summary(dyads))
+  summary <- c(
+    summary,
+    .analyze_theory_missing_component_summary(
+      dyads, registry, node_policy
+    )
+  )
 
   if (is.data.frame(delta_u) && nrow(delta_u) > 0) {
     top <- delta_u[1, ]
     src <- top$source %||% ""
     tgt <- top$target %||% ""
-    summary <- c(summary, sprintf("Top lynchpin: %s (%s \u2192 %s, delta_u = %.4f)",
+    summary <- c(summary, sprintf("Top crux: %s (%s \u2192 %s, delta_u = %.4f)",
                                    top$component_id, src, tgt, top$delta_u))
   }
 
@@ -318,7 +329,7 @@ analyze_theory <- function(nodes = NULL,
     plots$dyad_heatmap <- plot_dyad_heatmap(dyads)
 
     if (is.data.frame(delta_u) && nrow(delta_u) > 0) {
-      plots$lynchpin_ranking <- plot_lynchpin_ranking(delta_u)
+      plots$crux_ranking <- plot_lynchpin_ranking(delta_u)
     }
 
     if (!is.null(ghost_result)) {
@@ -443,10 +454,208 @@ analyze_theory <- function(nodes = NULL,
   }
 
   compatible_rate <- mean(values[available])
-  hhi <- compatible_rate^2 + (1 - compatible_rate)^2
-  c(
-    sprintf("%s compatibility: %.1f%% (%d/%d available dyads)",
-            label, 100 * compatible_rate, sum(values[available]), available_count),
-    sprintf("%s compatibility Herfindahl index: %.4f", label, hhi)
+  sprintf("%s compatibility: %.1f%% (%d/%d available dyads)",
+          label, 100 * compatible_rate, sum(values[available]), available_count)
+}
+
+
+.analyze_theory_value_key <- function(values) {
+  values <- as.character(values)
+  if (length(values) == 0L) {
+    return("0:")
+  }
+  paste0(nchar(values), ":", values, collapse = "|")
+}
+
+
+.analyze_theory_format_mas <- function(mas) {
+  if (length(mas) == 0L) {
+    return("{}")
+  }
+  paste0("{", paste(mas, collapse = ", "), "}")
+}
+
+
+.analyze_theory_model_mas <- function(dyads) {
+  if (!is.data.frame(dyads) ||
+      !all(c("ego_id", "mas_ego") %in% names(dyads))) {
+    return(NULL)
+  }
+
+  model_ids <- unique(as.character(dyads$ego_id))
+  profiles <- lapply(model_ids, function(model_id) {
+    row <- which(as.character(dyads$ego_id) == model_id)[[1]]
+    mas <- dyads$mas_ego[[row]]
+    if (is.null(mas)) {
+      return(NULL)
+    }
+
+    normalized <- lapply(mas, function(set) {
+      sort(unique(as.character(set)))
+    })
+    keys <- vapply(normalized, .analyze_theory_value_key, character(1))
+    normalized <- normalized[!duplicated(keys)]
+    names(normalized) <- keys[!duplicated(keys)]
+    normalized
+  })
+  names(profiles) <- model_ids
+  profiles
+}
+
+
+.analyze_theory_mas_summary <- function(dyads) {
+  profiles <- .analyze_theory_model_mas(dyads)
+  if (is.null(profiles) || length(profiles) == 0L) {
+    return(c(
+      "Most common MAS set: unavailable",
+      "MAS set uniquely enabling most compatibility: unavailable"
+    ))
+  }
+
+  available <- !vapply(profiles, is.null, logical(1))
+  available_profiles <- profiles[available]
+  labels <- character(0)
+  all_keys <- character(0)
+  for (profile in available_profiles) {
+    keys <- names(profile)
+    all_keys <- c(all_keys, keys)
+    for (key in keys) {
+      if (!key %in% names(labels)) {
+        labels[[key]] <- .analyze_theory_format_mas(profile[[key]])
+      }
+    }
+  }
+
+  if (length(all_keys) == 0L) {
+    return(c(
+      "Most common MAS set: none",
+      "MAS set uniquely enabling most compatibility: none (0 model pairs)"
+    ))
+  }
+
+  frequencies <- table(all_keys)
+  most_common_keys <- names(frequencies)[frequencies == max(frequencies)]
+  most_common_keys <- most_common_keys[order(labels[most_common_keys])]
+  most_common <- paste(unname(labels[most_common_keys]), collapse = "; ")
+  most_common_count <- as.integer(max(frequencies))
+  availability <- ""
+  if (sum(available) < length(profiles)) {
+    availability <- sprintf(
+      "; MAS available for %d/%d models", sum(available), length(profiles)
+    )
+  }
+  prevalence_line <- sprintf(
+    "Most common MAS set: %s (%d/%d models%s)",
+    most_common, most_common_count, length(profiles), availability
+  )
+
+  unique_pair_counts <- setNames(integer(length(labels)), names(labels))
+  available_ids <- names(available_profiles)
+  if (length(available_ids) >= 2L) {
+    for (left in seq_len(length(available_ids) - 1L)) {
+      for (right in seq.int(left + 1L, length(available_ids))) {
+        shared <- intersect(
+          names(available_profiles[[available_ids[[left]]]]),
+          names(available_profiles[[available_ids[[right]]]])
+        )
+        if (length(shared) == 1L) {
+          unique_pair_counts[[shared]] <- unique_pair_counts[[shared]] + 1L
+        }
+      }
+    }
+  }
+
+  if (length(unique_pair_counts) == 0L || max(unique_pair_counts) == 0L) {
+    contribution_line <-
+      "MAS set uniquely enabling most compatibility: none (0 model pairs)"
+  } else {
+    top_keys <- names(unique_pair_counts)[
+      unique_pair_counts == max(unique_pair_counts)
+    ]
+    top_keys <- top_keys[order(labels[top_keys])]
+    contribution_line <- sprintf(
+      "MAS set uniquely enabling most compatibility: %s (%d model pairs)",
+      paste(unname(labels[top_keys]), collapse = "; "),
+      max(unique_pair_counts)
+    )
+  }
+
+  c(prevalence_line, contribution_line)
+}
+
+
+.analyze_theory_missing_component_summary <- function(dyads,
+                                                       registry,
+                                                       node_policy) {
+  if (!identical(node_policy, "vary")) {
+    return(character(0))
+  }
+
+  dyad_fields <- c(
+    "ego_id", "alter_id", "identified_ego", "identified_alter",
+    "identified_compatible", "identification_nodes_ego",
+    "identification_nodes_alter"
+  )
+  if (!is.data.frame(dyads) || !all(dyad_fields %in% names(dyads)) ||
+      !is.data.frame(registry) ||
+      !all(c("comp_id", "type", "source") %in% names(registry))) {
+    return("Missing component contribution to identified incompatibility: unavailable")
+  }
+
+  eligible <- !is.na(dyads$identified_compatible) &
+    !dyads$identified_compatible &
+    (dyads$identified_ego %in% TRUE) &
+    (dyads$identified_alter %in% TRUE) &
+    !vapply(dyads$identification_nodes_ego, is.null, logical(1)) &
+    !vapply(dyads$identification_nodes_alter, is.null, logical(1))
+  pairs <- dyads[eligible, , drop = FALSE]
+  if (nrow(pairs) == 0L) {
+    return(paste0(
+      "Missing component contribution to identified incompatibility: ",
+      "unavailable (no eligible model pairs)"
+    ))
+  }
+
+  pair_keys <- mapply(function(ego, alter) {
+    .analyze_theory_value_key(sort(c(ego, alter)))
+  }, as.character(pairs$ego_id), as.character(pairs$alter_id),
+  USE.NAMES = FALSE)
+  pairs <- pairs[!duplicated(pair_keys), , drop = FALSE]
+
+  nodes <- registry[registry$type == "node", , drop = FALSE]
+  node_names <- as.character(nodes$source)
+  missing_counts <- setNames(integer(length(node_names)), node_names)
+  for (row in seq_len(nrow(pairs))) {
+    ego_nodes <- as.character(pairs$identification_nodes_ego[[row]])
+    alter_nodes <- as.character(pairs$identification_nodes_alter[[row]])
+    missing <- union(
+      setdiff(ego_nodes, alter_nodes),
+      setdiff(alter_nodes, ego_nodes)
+    )
+    missing_counts[missing] <- missing_counts[missing] + 1L
+  }
+
+  if (length(missing_counts) == 0L || max(missing_counts) == 0L) {
+    return(sprintf(
+      paste0(
+        "Missing component contribution to identified incompatibility: ",
+        "none (no node-presence differences in %d eligible model pairs)"
+      ),
+      nrow(pairs)
+    ))
+  }
+
+  top_names <- names(missing_counts)[missing_counts == max(missing_counts)]
+  top_nodes <- nodes[match(top_names, as.character(nodes$source)), , drop = FALSE]
+  top_labels <- paste0(top_nodes$source, " (", top_nodes$comp_id, ")")
+  top_labels <- sort(top_labels)
+  sprintf(
+    paste0(
+      "Missing component contributing most to identified incompatibility: ",
+      "%s (missing in %d/%d eligible model pairs)"
+    ),
+    paste(top_labels, collapse = "; "),
+    max(missing_counts),
+    nrow(pairs)
   )
 }

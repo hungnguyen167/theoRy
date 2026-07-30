@@ -240,7 +240,7 @@ the three modern metrics and has not been redefined as general identification.
 - Publish app in R Journal after developing the algorithmic basis.
 - Reorient temporal ordering so that Y is always at time 0 (currently Y can be at different listed time points in the same multiverse)
 - Force user to specify temporal ordering, and then optionally 'free' specific nodes by allowing them to be at specified time points (like X2 could come before or after X1) or free them completely so that they could be at any time point (not recommended as it blows up the size of the multiverse and is too 'weak' theoretically).
-
+- Fix run_theoRy() help menu so that it names the objects properly (component registry etc)
 ## Funding
 
 This package was developed within the project

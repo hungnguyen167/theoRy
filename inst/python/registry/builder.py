@@ -33,8 +33,8 @@ class ComponentRegistryBuilder:
             When ``True``, only generate directed edges where
             ``timing(source) < timing(target)``.
         include_bidirectional:
-            When ``True``, also generate ``<->`` edge components for each
-            unordered node pair.
+            When ``True``, also generate ``<->`` edge components for unordered
+            node pairs that can occupy the same time when timing is respected.
         constraints:
             Optional list of dicts with ``source``, ``target``, ``direction``,
             and ``rule`` (one of ``allow``, ``forbid``, ``require``).
@@ -250,8 +250,29 @@ class ComponentRegistryBuilder:
                         continue
                     if triplet in forbidden_set:
                         continue
-                    if allowed_bidirectional and triplet not in allowed_bidirectional:
-                        continue
+
+                    is_explicit = (
+                        triplet in allowed_bidirectional or triplet in required_set
+                    )
+                    if respect_timing and not is_explicit:
+                        source_options = source_node.get("timing_options")
+                        target_options = target_node.get("timing_options")
+                        if source_options is None:
+                            source_time = source_node.get("timing")
+                            source_options = (
+                                [source_time] if source_time is not None else None
+                            )
+                        if target_options is None:
+                            target_time = target_node.get("timing")
+                            target_options = (
+                                [target_time] if target_time is not None else None
+                            )
+                        if (
+                            source_options is not None
+                            and target_options is not None
+                            and set(source_options).isdisjoint(target_options)
+                        ):
+                            continue
 
                     is_fixed = triplet in required_set
                     registry_records.append(

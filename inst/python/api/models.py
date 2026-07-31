@@ -38,7 +38,7 @@ class DyadMatrixRequest(BaseModel):
     top_k: int | None = None
     exposure: str | None = None
     outcome: str | None = None
-    causal_backend: Literal["auto", "native", "r"] = "auto"
+    causal_backend: Literal["auto", "native", "r"] = "r"
 
 
 class DyadMatrixResponse(BaseModel):

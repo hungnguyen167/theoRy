@@ -27,7 +27,7 @@ analyze_theory(
   optional_nodes = character(),
   max_models = 10000L,
   allow_large = FALSE,
-  causal_backend = c("auto", "native", "r")
+  causal_backend = c("r", "auto", "native")
 )
 }
 \arguments{
@@ -88,7 +88,9 @@ recreates the selected multiverse.}
 \item{max_models, allow_large}{Expansion safety controls forwarded to
 \code{expand_model_states()}.}
 
-\item{causal_backend}{Causal backend passed to \code{build_dyad_matrix()}.}
+\item{causal_backend}{Causal backend passed to \code{build_dyad_matrix()}.
+Defaults to \code{"r"} for general identification through
+Dagitty/CausalEffect.}
 }
 \value{
 A list with components:
@@ -101,7 +103,7 @@ A list with components:
   \item{summary}{Character vector of human-readable key findings, including
     model and non-outcome-node counts, available-dyad compatibility
     percentages, the most common MAS, the MAS uniquely enabling the most
-    compatible model pairs, the top Delta-U crux, and available ghost-cluster
+    compatible model dyads, the top Delta-U crux, and available ghost-cluster
     counts. With \code{node_policy = "vary"}, the summary also identifies
     the relevant node most often differing between identified-incompatible
     pairs where both effects and both relevant-node sets are available.}

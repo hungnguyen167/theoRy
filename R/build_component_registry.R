@@ -17,9 +17,13 @@
 #' @param respect_timing When \code{TRUE} (default), directed candidates must
 #'   be temporally possible.
 #' @param include_bidirectional When \code{TRUE}, generate candidate
-#'   bidirected edges for every unordered node pair. Prefer explicit
-#'   \code{<->} \code{"allow"} constraints for selected possible confounding,
-#'   or \code{"require"} constraints to enforce named confounding pairs.
+#'   bidirected edges for unordered node pairs that can occupy the same time
+#'   when \code{respect_timing = TRUE}. With flexible timing, the nodes must
+#'   share at least one timing option. Prefer explicit \code{<->}
+#'   \code{"allow"} constraints for selected possible confounding, including
+#'   cross-time pairs, or \code{"require"} constraints to enforce named
+#'   confounding pairs. When \code{respect_timing = FALSE}, every unordered
+#'   node pair is eligible.
 #' @param constraints Optional data frame or list with \code{source},
 #'   \code{target}, \code{direction}, and \code{rule}. Directed
 #'   and bidirected \code{"require"} edges are fixed causal paths or

@@ -30,10 +30,9 @@ Install the cross-platform Python engine dependencies from a source checkout:
 python -m pip install -e inst/python
 ```
 
-The default engine has a native NetworkX backdoor-adjustment implementation and
-does not need a Python-to-R bridge. For Dagitty adjustment sets and broader
-`causaleffect` identification, install the optional R backend and its R
-packages:
+Full causal analyses default to the R backend so that identification is not
+limited to the backdoor criterion. Install the Python-to-R bridge and the
+Dagitty/CausalEffect R packages:
 
 ```bash
 python -m pip install -e 'inst/python[rpy2]'
@@ -43,9 +42,11 @@ python -m pip install -e 'inst/python[rpy2]'
 install.packages(c("dagitty", "causaleffect"))
 ```
 
-Select `causal_backend = "native"`, `"auto"`, or `"r"` in
-`build_dyad_matrix()`. `"auto"` is the default: it uses native backdoor
-identification where supported and otherwise uses the optional R backend.
+Select `causal_backend = "r"`, `"auto"`, or `"native"` in
+`build_dyad_matrix()`. `"r"` is the default and uses Dagitty plus
+`causaleffect` for general identification. `"auto"` first uses native
+backdoor identification and falls back to R when needed; `"native"` never
+loads R and supports backdoor identification only.
 
 ## Engine Lifecycle
 

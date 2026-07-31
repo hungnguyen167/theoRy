@@ -12,7 +12,7 @@ build_dyad_matrix(
   top_k = NULL,
   exposure = NULL,
   outcome = NULL,
-  causal_backend = c("auto", "native", "r"),
+  causal_backend = c("r", "auto", "native"),
   url = getOption("theoRy.engine_url", "http://localhost:8000")
 )
 }
@@ -48,12 +48,12 @@ Must be a node in the registry. When omitted, defaults to the last node
 in the registry. Both or neither of \code{exposure} and \code{outcome}
 must be provided.}
 
-\item{causal_backend}{Causal-identification backend: \code{"auto"}
-(default) uses the native NetworkX implementation when it supports the
-model and falls back to the R stack when available. If a query requires
-the R stack but it is unavailable, \code{"auto"} returns unavailable
-causal fields rather than failing the full analysis. \code{"native"}
-never loads R; \code{"r"} requires the Dagitty/CausalEffect stack.}
+\item{causal_backend}{Causal-identification backend: \code{"r"} (default)
+requires the Dagitty/CausalEffect stack and supports general
+identification. \code{"auto"} uses the native NetworkX implementation
+when it supports the model and falls back to the R stack when available;
+if the fallback is unavailable, affected causal fields are unavailable.
+\code{"native"} never loads R and supports backdoor identification only.}
 
 \item{url}{Base URL of the theoRy Python backend API. Defaults to
 \code{getOption("theoRy.engine_url", "http://localhost:8000")}.}

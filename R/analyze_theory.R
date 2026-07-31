@@ -50,6 +50,8 @@
 #' @param max_models,allow_large Expansion safety controls forwarded to
 #'   \code{expand_model_states()}.
 #' @param causal_backend Causal backend passed to \code{build_dyad_matrix()}.
+#'   Defaults to \code{"r"} for general identification through
+#'   Dagitty/CausalEffect.
 #'
 #' @return A list with components:
 #'   \item{registry}{Data frame from \code{\link{build_component_registry}}.}
@@ -61,7 +63,7 @@
 #'   \item{summary}{Character vector of human-readable key findings, including
 #'     model and non-outcome-node counts, available-dyad compatibility
 #'     percentages, the most common MAS, the MAS uniquely enabling the most
-#'     compatible model pairs, the top Delta-U crux, and available ghost-cluster
+#'     compatible model dyads, the top Delta-U crux, and available ghost-cluster
 #'     counts. With \code{node_policy = "vary"}, the summary also identifies
 #'     the relevant node most often differing between identified-incompatible
 #'     pairs where both effects and both relevant-node sets are available.}
@@ -110,7 +112,7 @@ analyze_theory <- function(nodes = NULL,
                              optional_nodes = character(),
                              max_models = 10000L,
                              allow_large = FALSE,
-                             causal_backend = c("auto", "native", "r")) {
+                             causal_backend = c("r", "auto", "native")) {
   mode <- match.arg(mode)
   node_policy <- match.arg(node_policy)
   input_mode <- match.arg(input_mode)
@@ -295,6 +297,9 @@ analyze_theory <- function(nodes = NULL,
     .analyze_theory_compatibility_summary(
       dyads, "mas_compatible", "MAS"
     ),
+    .analyze_theory_identified_models_summary(
+      dyads, unique(states$model_id)
+    ),
     .analyze_theory_compatibility_summary(
       dyads, "identified_compatible", "Identified"
     )
@@ -459,6 +464,45 @@ analyze_theory <- function(nodes = NULL,
 }
 
 
+.analyze_theory_identified_models_summary <- function(dyads, model_ids) {
+  model_ids <- unique(as.character(model_ids))
+  required <- c(
+    "ego_id", "alter_id", "identified_ego", "identified_alter"
+  )
+  if (!is.data.frame(dyads) || !all(required %in% names(dyads)) ||
+      length(model_ids) == 0L) {
+    return("Identified models: unavailable")
+  }
+
+  ids <- c(as.character(dyads$ego_id), as.character(dyads$alter_id))
+  values <- c(dyads$identified_ego, dyads$identified_alter)
+  statuses <- vapply(model_ids, function(model_id) {
+    observed <- unique(values[ids == model_id & !is.na(values)])
+    if (length(observed) == 1L) observed[[1]] else NA
+  }, logical(1))
+
+  available_count <- sum(!is.na(statuses))
+  if (available_count == 0L) {
+    return(sprintf(
+      "Identified models: unavailable (identification available for 0/%d models)",
+      length(model_ids)
+    ))
+  }
+
+  availability <- ""
+  if (available_count < length(model_ids)) {
+    availability <- sprintf(
+      " (identification available for %d/%d models)",
+      available_count, length(model_ids)
+    )
+  }
+  sprintf(
+    "Identified models: %d/%d%s",
+    sum(statuses %in% TRUE), length(model_ids), availability
+  )
+}
+
+
 .analyze_theory_value_key <- function(values) {
   values <- as.character(values)
   if (length(values) == 0L) {
@@ -529,7 +573,7 @@ analyze_theory <- function(nodes = NULL,
   if (length(all_keys) == 0L) {
     return(c(
       "Most common MAS set: none",
-      "MAS set uniquely enabling most compatibility: none (0 model pairs)"
+      "MAS set uniquely enabling most compatibility: none (0 model dyads)"
     ))
   }
 
@@ -567,14 +611,14 @@ analyze_theory <- function(nodes = NULL,
 
   if (length(unique_pair_counts) == 0L || max(unique_pair_counts) == 0L) {
     contribution_line <-
-      "MAS set uniquely enabling most compatibility: none (0 model pairs)"
+      "MAS set uniquely enabling most compatibility: none (0 model dyads)"
   } else {
     top_keys <- names(unique_pair_counts)[
       unique_pair_counts == max(unique_pair_counts)
     ]
     top_keys <- top_keys[order(labels[top_keys])]
     contribution_line <- sprintf(
-      "MAS set uniquely enabling most compatibility: %s (%d model pairs)",
+      "MAS set uniquely enabling most compatibility: %s (%d model dyads)",
       paste(unname(labels[top_keys]), collapse = "; "),
       max(unique_pair_counts)
     )

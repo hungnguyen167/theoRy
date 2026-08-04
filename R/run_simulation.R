@@ -55,10 +55,14 @@
 #'   scenario requires \code{"mas_compatible"} or
 #'   \code{"identified_compatible"} and defaults to the former. Other
 #'   concrete scenarios default to \code{"similarity_rate"}.
-#' @param resolution_strategy How Delta-U resolutions are evaluated in concrete
-#'   simulations: \code{"condition"} (default) conditions on supporting model
-#'   contexts without rewriting claims, while \code{"update_unknowns"} updates
-#'   applicable unknown claims to the hypothetical status.
+#' @param crux_mode Crux semantics used by the lynchpin/crux scenarios:
+#'   \code{"marginal"} (default) ranks uncertain components by evaluating both
+#'   causal and non-causal resolutions; \code{"global"} resolves every
+#'   applicable unknown edge instance to a single status. Illusion and Ghost
+#'   scenarios only accept the default \code{"marginal"} value.
+#' @param global_status Required status (\code{"causal"} or
+#'   \code{"non-causal"}) for \code{crux_mode = "global"}. Must be
+#'   \code{NULL} in marginal mode.
 #' @param exposure Optional exposure node. Required for causal metrics except
 #'   in a generated Illusion of Precision simulation, where the backend infers
 #'   \code{"X1"}.
@@ -131,8 +135,8 @@ run_simulation <- function(scenario = c("illusion_of_precision",
                             random_state = 42L,
                             mode = c("concrete", "symbolic"),
                             compatibility_metric = NULL,
-                            resolution_strategy = c("condition",
-                                                    "update_unknowns"),
+                            crux_mode = c("marginal", "global"),
+                            global_status = NULL,
                             exposure = NULL,
                             outcome = NULL,
                             include_plot_data = FALSE,
@@ -143,12 +147,16 @@ run_simulation <- function(scenario = c("illusion_of_precision",
                                              "http://localhost:8000")) {
   scenario <- match.arg(scenario)
   mode <- match.arg(mode)
-  resolution_strategy <- match.arg(resolution_strategy)
+  crux_mode <- match.arg(crux_mode)
   .validate_simulation_direction(include_bidirectional)
 
   .validate_plot_data_args(include_plot_data, plot_sample_n, pair_sample_n)
 
   if (identical(mode, "symbolic")) {
+    if (!identical(crux_mode, "marginal") || !is.null(global_status)) {
+      stop("Symbolic simulations do not support global crux arguments.",
+           call. = FALSE)
+    }
     compatibility_metric <- compatibility_metric %||% "similarity_rate"
     compatibility_metric <- match.arg(
       compatibility_metric,
@@ -191,7 +199,8 @@ run_simulation <- function(scenario = c("illusion_of_precision",
     sample_n = sample_n,
     random_state = random_state,
     compatibility_metric = compatibility_metric,
-    resolution_strategy = resolution_strategy,
+    crux_mode = crux_mode,
+    global_status = global_status,
     exposure = exposure,
     outcome = outcome,
     include_plot_data = include_plot_data,
@@ -266,9 +275,8 @@ run_simulation <- function(scenario = c("illusion_of_precision",
                                        pair_sample_n = 5000L,
                                        random_state,
                                        compatibility_metric = NULL,
-                                       resolution_strategy = c(
-                                         "condition", "update_unknowns"
-                                       ),
+                                       crux_mode = c("marginal", "global"),
+                                       global_status = NULL,
                                        exposure = NULL,
                                        outcome = NULL,
                                        url, ...) {
@@ -278,7 +286,26 @@ run_simulation <- function(scenario = c("illusion_of_precision",
   compatibility_metric <- .resolve_simulation_metric(
     scenario, compatibility_metric
   )
-  resolution_strategy <- match.arg(resolution_strategy)
+  crux_mode <- match.arg(crux_mode)
+  is_crux_scenario <- scenario %in% c(
+    "lynchpin_of_certainty", "crux_of_certainty"
+  )
+  if (is_crux_scenario) {
+    if (!is.null(global_status)) {
+      global_status <- match.arg(global_status, c("causal", "non-causal"))
+    }
+    if (identical(crux_mode, "global") && is.null(global_status)) {
+      stop("global_status ('causal' or 'non-causal') is required when ",
+           "crux_mode = 'global'.", call. = FALSE)
+    }
+    if (identical(crux_mode, "marginal") && !is.null(global_status)) {
+      stop("global_status is only valid with crux_mode = 'global'.",
+           call. = FALSE)
+    }
+  } else if (!identical(crux_mode, "marginal") || !is.null(global_status)) {
+    stop("crux_mode and global_status only apply to lynchpin/crux scenarios.",
+         call. = FALSE)
+  }
   .validate_simulation_query(
     scenario, compatibility_metric, exposure, outcome, is_seeded
   )
@@ -292,8 +319,8 @@ run_simulation <- function(scenario = c("illusion_of_precision",
       )
     }
     if (!is.null(sample_n) && (!is.numeric(sample_n) || length(sample_n) != 1L ||
-        is.na(sample_n) || sample_n < 1 || sample_n != as.integer(sample_n))) {
-      stop("sample_n must be a positive integer or NULL.", call. = FALSE)
+        is.na(sample_n) || sample_n < 2 || sample_n != as.integer(sample_n))) {
+      stop("sample_n must be an integer of at least 2 or NULL.", call. = FALSE)
     }
   } else {
     if (!is.null(sample_n)) {
@@ -316,14 +343,14 @@ run_simulation <- function(scenario = c("illusion_of_precision",
     .send_seeded_simulation(scenario, registry, states, sample_n,
                              include_plot_data, plot_sample_n,
                              pair_sample_n, random_state,
-                             compatibility_metric, resolution_strategy,
+                             compatibility_metric, crux_mode, global_status,
                              exposure, outcome, url, ...)
   } else {
     .send_synthetic_simulation(scenario, n_models, n_components,
                                 include_bidirectional,
                                 include_plot_data, plot_sample_n,
                                 pair_sample_n, random_state,
-                                compatibility_metric, resolution_strategy,
+                                compatibility_metric, crux_mode, global_status,
                                 exposure, outcome, url, ...)
   }
 }
@@ -472,7 +499,8 @@ run_simulation <- function(scenario = c("illusion_of_precision",
                                          include_plot_data, plot_sample_n,
                                          pair_sample_n, random_state,
                                          compatibility_metric,
-                                         resolution_strategy, exposure, outcome,
+                                         crux_mode, global_status, exposure,
+                                         outcome,
                                          url, ...) {
   payload <- list(
     scenario = scenario,
@@ -481,9 +509,15 @@ run_simulation <- function(scenario = c("illusion_of_precision",
     random_state = random_state,
     include_plot_data = isTRUE(include_plot_data),
     include_bidirectional = isTRUE(include_bidirectional),
-    compatibility_metric = compatibility_metric,
-    resolution_strategy = resolution_strategy
+    compatibility_metric = compatibility_metric
   )
+  if (identical(scenario, "lynchpin_of_certainty") ||
+      identical(scenario, "crux_of_certainty")) {
+    payload$crux_mode <- crux_mode
+    if (!is.null(global_status)) {
+      payload$global_status <- global_status
+    }
+  }
   if (!is.null(exposure)) {
     payload$exposure <- exposure
     payload$outcome <- outcome
@@ -504,7 +538,8 @@ run_simulation <- function(scenario = c("illusion_of_precision",
                                        include_plot_data, plot_sample_n,
                                        pair_sample_n, random_state,
                                        compatibility_metric,
-                                       resolution_strategy, exposure, outcome,
+                                       crux_mode, global_status, exposure,
+                                       outcome,
                                        url, ...) {
   .validate_seeded_simulation_inputs(registry, states, sample_n)
 
@@ -517,9 +552,15 @@ run_simulation <- function(scenario = c("illusion_of_precision",
     state_data = state_records,
     random_state = random_state,
     include_plot_data = isTRUE(include_plot_data),
-    compatibility_metric = compatibility_metric,
-    resolution_strategy = resolution_strategy
+    compatibility_metric = compatibility_metric
   )
+  if (identical(scenario, "lynchpin_of_certainty") ||
+      identical(scenario, "crux_of_certainty")) {
+    payload$crux_mode <- crux_mode
+    if (!is.null(global_status)) {
+      payload$global_status <- global_status
+    }
+  }
   if (!is.null(exposure)) {
     payload$exposure <- exposure
     payload$outcome <- outcome
@@ -596,11 +637,21 @@ run_simulation <- function(scenario = c("illusion_of_precision",
     result$summary <- c(
       sprintf("Baseline compatibility: %.2f", data$results$baseline_compatibility),
       sprintf("Post-resolution compatibility: %.2f", data$results$post_resolution_compatibility),
-      sprintf("Phase transition score: %.2f", data$results$phase_transition_score),
-      sprintf("Lynchpin component: %s (rank %d)",
-              data$results$lynchpin_component_id,
-              data$results$lynchpin_rank)
+      sprintf("Phase transition score: %.2f", data$results$phase_transition_score)
     )
+    if (!is.null(data$results$lynchpin_component_id)) {
+      result$summary <- c(
+        result$summary,
+        sprintf("Lynchpin component: %s (rank %d)",
+                data$results$lynchpin_component_id,
+                data$results$lynchpin_rank)
+      )
+    } else if (identical(data$results$crux_mode, "global")) {
+      result$summary <- c(
+        result$summary,
+        sprintf("Global crux status: %s", data$results$target_status)
+      )
+    }
   } else if (identical(data$scenario, "ghost_discovery")) {
     result$results <- .parse_ghost_results(data$results)
     result$summary <- c(
@@ -688,9 +739,8 @@ run_simulation_illusion <- function(n_models = 100L,
                                         "mas_compatible",
                                         "identified_compatible"
                                        ),
-                                      resolution_strategy = c(
-                                        "condition", "update_unknowns"
-                                      ),
+                                      crux_mode = c("marginal", "global"),
+                                      global_status = NULL,
                                       exposure = NULL,
                                       outcome = NULL,
                                       enforce_thresholds = NULL,
@@ -701,7 +751,7 @@ run_simulation_illusion <- function(n_models = 100L,
                                                       "http://localhost:8000")) {
   .validate_simulation_direction(include_bidirectional)
   compatibility_metric <- match.arg(compatibility_metric)
-  resolution_strategy <- match.arg(resolution_strategy)
+  crux_mode <- match.arg(crux_mode)
   .run_simulation_internal(
     scenario = "illusion_of_precision",
     n_models = n_models,
@@ -712,7 +762,8 @@ run_simulation_illusion <- function(n_models = 100L,
     sample_n = sample_n,
     random_state = random_state,
     compatibility_metric = compatibility_metric,
-    resolution_strategy = resolution_strategy,
+    crux_mode = crux_mode,
+    global_status = global_status,
     exposure = exposure,
     outcome = outcome,
     include_plot_data = include_plot_data,
@@ -773,9 +824,8 @@ run_simulation_lynchpin <- function(n_models = 200L,
                                        "similarity_rate", "mas_compatible",
                                        "identified_compatible"
                                      ),
-                                     resolution_strategy = c(
-                                       "condition", "update_unknowns"
-                                     ),
+                                     crux_mode = c("marginal", "global"),
+                                     global_status = NULL,
                                      exposure = NULL,
                                      outcome = NULL,
                                      n_zones = NULL,
@@ -788,7 +838,7 @@ run_simulation_lynchpin <- function(n_models = 200L,
                                                       "http://localhost:8000")) {
   .validate_simulation_direction(include_bidirectional)
   compatibility_metric <- match.arg(compatibility_metric)
-  resolution_strategy <- match.arg(resolution_strategy)
+  crux_mode <- match.arg(crux_mode)
   .run_simulation_internal(
     scenario = "lynchpin_of_certainty",
     n_models = n_models,
@@ -799,7 +849,8 @@ run_simulation_lynchpin <- function(n_models = 200L,
     sample_n = sample_n,
     random_state = random_state,
     compatibility_metric = compatibility_metric,
-    resolution_strategy = resolution_strategy,
+    crux_mode = crux_mode,
+    global_status = global_status,
     exposure = exposure,
     outcome = outcome,
     include_plot_data = include_plot_data,
@@ -835,9 +886,8 @@ run_simulation_crux <- function(n_models = 200L,
                                    "similarity_rate", "mas_compatible",
                                    "identified_compatible"
                                  ),
-                                 resolution_strategy = c(
-                                   "condition", "update_unknowns"
-                                 ),
+                                 crux_mode = c("marginal", "global"),
+                                 global_status = NULL,
                                  exposure = NULL,
                                  outcome = NULL,
                                  n_zones = NULL,
@@ -850,7 +900,7 @@ run_simulation_crux <- function(n_models = 200L,
                                                   "http://localhost:8000")) {
   .validate_simulation_direction(include_bidirectional)
   compatibility_metric <- match.arg(compatibility_metric)
-  resolution_strategy <- match.arg(resolution_strategy)
+  crux_mode <- match.arg(crux_mode)
   .run_simulation_internal(
     scenario = "crux_of_certainty",
     n_models = n_models,
@@ -861,7 +911,8 @@ run_simulation_crux <- function(n_models = 200L,
     sample_n = sample_n,
     random_state = random_state,
     compatibility_metric = compatibility_metric,
-    resolution_strategy = resolution_strategy,
+    crux_mode = crux_mode,
+    global_status = global_status,
     exposure = exposure,
     outcome = outcome,
     include_plot_data = include_plot_data,
@@ -934,9 +985,8 @@ run_simulation_ghost <- function(n_models = 150L,
                                     "similarity_rate", "mas_compatible",
                                     "identified_compatible"
                                   ),
-                                  resolution_strategy = c(
-                                    "condition", "update_unknowns"
-                                  ),
+                                  crux_mode = c("marginal", "global"),
+                                  global_status = NULL,
                                   exposure = NULL,
                                   outcome = NULL,
                                   mainstream_fraction = 0.70,
@@ -954,7 +1004,7 @@ run_simulation_ghost <- function(n_models = 150L,
                                                    "http://localhost:8000")) {
   .validate_simulation_direction(include_bidirectional)
   compatibility_metric <- match.arg(compatibility_metric)
-  resolution_strategy <- match.arg(resolution_strategy)
+  crux_mode <- match.arg(crux_mode)
   .run_simulation_internal(
     scenario = "ghost_discovery",
     n_models = n_models,
@@ -965,7 +1015,8 @@ run_simulation_ghost <- function(n_models = 150L,
     sample_n = sample_n,
     random_state = random_state,
     compatibility_metric = compatibility_metric,
-    resolution_strategy = resolution_strategy,
+    crux_mode = crux_mode,
+    global_status = global_status,
     exposure = exposure,
     outcome = outcome,
     include_plot_data = include_plot_data,
@@ -1032,16 +1083,28 @@ run_simulation_ghost <- function(n_models = 150L,
   )
 
   optional_integer <- intersect(c(
-    "models_retained", "dyads_retained",
-    "models_retained_positive", "models_retained_negative",
-    "dyads_retained_positive", "dyads_retained_negative"
+    "models_retained", "dyads_retained", "models_changed"
   ), names(r))
   for (field in optional_integer) {
     parsed[[field]] <- as.integer(r[[field]] %||% NA_integer_)
   }
-  if ("resolution_strategy" %in% names(r)) {
-    parsed$resolution_strategy <- as.character(
-      r$resolution_strategy %||% NA_character_
+  optional_numeric <- intersect(c("mapping_coverage"), names(r))
+  for (field in optional_numeric) {
+    parsed[[field]] <- as.numeric(r[[field]] %||% NA_real_)
+  }
+  if ("crux_mode" %in% names(r)) {
+    parsed$crux_mode <- as.character(
+      r$crux_mode %||% NA_character_
+    )
+  }
+  if ("target_status" %in% names(r)) {
+    parsed$target_status <- as.character(
+      r$target_status %||% NA_character_
+    )
+  }
+  if ("crux_component_id" %in% names(r)) {
+    parsed$crux_component_id <- as.character(
+      r$crux_component_id %||% NA_character_
     )
   }
 

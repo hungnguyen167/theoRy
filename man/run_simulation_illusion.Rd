@@ -13,7 +13,8 @@ run_simulation_illusion(
   sample_n = NULL,
   random_state = 42L,
   compatibility_metric = c("mas_compatible", "identified_compatible"),
-  resolution_strategy = c("condition", "update_unknowns"),
+  crux_mode = c("marginal", "global"),
+  global_status = NULL,
   exposure = NULL,
   outcome = NULL,
   enforce_thresholds = NULL,
@@ -56,10 +57,15 @@ scenario requires \code{"mas_compatible"} or
 \code{"identified_compatible"} and defaults to the former. Other
 concrete scenarios default to \code{"similarity_rate"}.}
 
-\item{resolution_strategy}{How Delta-U resolutions are evaluated in concrete
-simulations: \code{"condition"} (default) conditions on supporting model
-contexts without rewriting claims, while \code{"update_unknowns"} updates
-applicable unknown claims to the hypothetical status.}
+\item{crux_mode}{Crux semantics used by the lynchpin/crux scenarios:
+\code{"marginal"} (default) ranks uncertain components by evaluating both
+causal and non-causal resolutions; \code{"global"} resolves every
+applicable unknown edge instance to a single status. Illusion and Ghost
+scenarios only accept the default \code{"marginal"} value.}
+
+\item{global_status}{Required status (\code{"causal"} or
+\code{"non-causal"}) for \code{crux_mode = "global"}. Must be
+\code{NULL} in marginal mode.}
 
 \item{exposure}{Optional exposure node. Required for causal metrics except
 in a generated Illusion of Precision simulation, where the backend infers

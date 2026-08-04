@@ -34,12 +34,14 @@
 #'   \code{"identified_compatible"}. Exactly one metric is used. The two
 #'   causal metrics require \code{exposure} and \code{outcome} in the dyads'
 #'   \code{theory_context} attribute.
-#' @param resolution_strategy How hypothetical resolutions are evaluated.
-#'   \code{"condition"} (default) conditions on the model context supporting
-#'   each positive or negative resolution and recomputes compatibility only
-#'   among the retained models and dyads; it does not rewrite model claims.
-#'   \code{"update_unknowns"} instead updates applicable unknown claims to the
-#'   hypothetical status, preserving the earlier mutation-based semantics.
+#' @param crux_mode Crux semantics: \code{"marginal"} (default) ranks each
+#'   uncertain component by evaluating both causal and non-causal resolutions;
+#'   \code{"global"} resolves every applicable unknown edge instance to a
+#'   single user-selected status and compares the remapped multiverse against
+#'   the unchanged baseline.
+#' @param global_status Required status for \code{crux_mode = "global"}:
+#'   \code{"causal"} or \code{"non-causal"}. Must be \code{NULL} in marginal
+#'   mode.
 #' @param device Compute device: \code{"auto"} (default), \code{"cpu"}, or
 #'   \code{"cuda"}.  \code{"cuda"} requires a CUDA-capable GPU with PyTorch.
 #' @param use_tensor_engine Whether to use the tensorized structural engine
@@ -55,19 +57,18 @@
 #'   \item{source}{Node source name}
 #'   \item{target}{Node target name (\code{NA} for nodes)}
 #'   \item{delta_u}{Delta-U score (mean compatibility improvement)}
-#'   \item{best_resolution}{Recommended resolution (\code{"positive"},
-#'     \code{"negative"}, or \code{"none"})}
+#'   \item{best_resolution}{Recommended resolution (\code{"causal"},
+#'     \code{"non-causal"}, or \code{"none"})}
 #'   \item{dyads_improved}{Number of dyads that improved}
 #'   \item{dyads_worsened}{Number of dyads that worsened}
 #'   When supplied by the backend, the data frame also includes
-#'   \code{baseline_compatibility}, \code{post_compatibility_positive},
-#'   \code{post_compatibility_negative}, \code{models_retained_positive},
-#'   \code{models_retained_negative}, \code{dyads_retained_positive},
-#'   \code{dyads_retained_negative}, \code{context_coverage_positive},
-#'   \code{context_coverage_negative}, and \code{resolution_strategy}.
+#'   \code{baseline_compatibility}, \code{post_compatibility_causal},
+#'   \code{post_compatibility_non_causal}, \code{models_changed_causal},
+#'   \code{models_changed_non_causal}, \code{mapping_coverage_causal},
+#'   \code{mapping_coverage_non_causal}, and \code{crux_mode}.
 #'
 #'   When \code{component_id} is supplied, a one-row data frame with the
-#'   same columns plus \code{delta_u_positive} and \code{delta_u_negative}.
+#'   same columns plus \code{delta_u_causal} and \code{delta_u_non_causal}.
 #'
 #'   When \code{synergistic_set_size} is supplied, a list with components
 #'   \code{rankings} (data frame) and \code{synergistic_sets} (data frame
@@ -75,6 +76,14 @@
 #'   \code{delta_u_individual_sum}, \code{synergy_score}, \code{label}).
 #'   The returned data frame or list has a \code{compatibility_metric}
 #'   attribute recording the selected metric.
+#'
+#'   With \code{crux_mode = "global"}, a one-row data frame with
+#'   \code{crux_mode}, \code{target_status}, \code{feasible},
+#'   \code{baseline_compatibility}, \code{post_compatibility},
+#'   \code{compatibility_change}, \code{delta_u}, \code{model_count},
+#'   \code{dyad_count}, \code{models_changed}, \code{unknown_instances_forced},
+#'   \code{dyads_improved}, \code{dyads_worsened}, and
+#'   \code{mapping_coverage}.
 #'
 #' @details
 #' Delta-U simulates what would happen if each uncertain (unknown)
@@ -89,14 +98,19 @@
 #' candidates.  Absent nodes and inapplicable edges are excluded from
 #' default Delta-U candidate selection.
 #'
-#' Edge components respect temporal integrity: forcing an edge to
-#' \code{"causal"} is skipped when both endpoint timings are known and
-#' \code{timing(source) >= timing(target)}.
+#' Both crux modes are \emph{model-remapping} analyses: hypothetical
+#' resolutions never mutate model claims and never recompute causal profiles.
+#' Each affected model is mapped to the existing multiverse model whose
+#' semantic state (node presence, applicable edge statuses, timing,
+#' constraints) is identical except for the resolved edge(s), and the mapped
+#' models' existing dyad records are reused.  The model and dyad counts are
+#' preserved.  This requires a \emph{resolution-closed} multiverse; when an
+#' exact match is missing, marginal ranking and strict resolutions fail with
+#' a completion-coverage error instead of synthesizing new models.
 #'
-#' With \code{resolution_strategy = "condition"}, causal profiles and dyad
-#' scores are computed once and every resolution reuses the corresponding
-#' submultiverse. The legacy \code{"update_unknowns"} strategy may be slower
-#' because affected causal profiles and dyads must be recomputed.
+#' Edge components respect temporal integrity and joint acyclicity: a
+#' resolution that would violate timing or create a cycle is reported as
+#' infeasible rather than silently skipped.
 #'
 #' @examples
 #' \dontrun{
@@ -136,15 +150,15 @@ compute_delta_u <- function(dyads,
                             compatibility_metric = c("similarity_rate",
                                                      "mas_compatible",
                                                      "identified_compatible"),
-                            resolution_strategy = c("condition",
-                                                    "update_unknowns"),
+                            crux_mode = c("marginal", "global"),
+                            global_status = NULL,
                             device = c("auto", "cpu", "cuda"),
                             use_tensor_engine = TRUE,
                             url = getOption("theoRy.engine_url",
                                              "http://localhost:8000")) {
   mode <- match.arg(mode)
   compatibility_metric <- match.arg(compatibility_metric)
-  resolution_strategy <- match.arg(resolution_strategy)
+  crux_mode <- match.arg(crux_mode)
   device <- match.arg(device)
 
   if (missing(dyads) || !is.data.frame(dyads)) {
@@ -158,8 +172,10 @@ compute_delta_u <- function(dyads,
          call. = FALSE)
   }
 
-  if (!is.numeric(top_k) || top_k <= 0) {
-    stop("top_k must be positive.", call. = FALSE)
+  if (!is.numeric(top_k) || length(top_k) != 1L || is.na(top_k) ||
+      !is.finite(top_k) ||
+      top_k < 1 || top_k != as.integer(top_k)) {
+    stop("top_k must be positive integer-valued.", call. = FALSE)
   }
   if (identical(mode, "two-stage")) {
     if (is.null(heatmap_threshold)) {
@@ -181,6 +197,30 @@ compute_delta_u <- function(dyads,
     stop("synergistic_beam_width must be positive.", call. = FALSE)
   }
 
+  if (!is.null(global_status)) {
+    global_status <- match.arg(global_status, c("causal", "non-causal"))
+  }
+  if (identical(crux_mode, "global")) {
+    if (is.null(global_status)) {
+      stop("global_status ('causal' or 'non-causal') is required when ",
+           "crux_mode = 'global'.", call. = FALSE)
+    }
+    if (!is.null(component_id)) {
+      stop("component_id is not used with crux_mode = 'global'.", call. = FALSE)
+    }
+    if (identical(mode, "two-stage")) {
+      stop("crux_mode = 'global' does not support two-stage mode.",
+           call. = FALSE)
+    }
+    if (!is.null(synergistic_set_size)) {
+      stop("crux_mode = 'global' does not support synergistic sets.",
+           call. = FALSE)
+    }
+  } else if (!is.null(global_status)) {
+    stop("global_status is only valid with crux_mode = 'global'.",
+         call. = FALSE)
+  }
+
   causal_metric <- compatibility_metric %in%
     c("mas_compatible", "identified_compatible")
   if (causal_metric &&
@@ -192,20 +232,29 @@ compute_delta_u <- function(dyads,
       call. = FALSE
     )
   }
+  if (causal_metric && !compatibility_metric %in% names(dyads)) {
+    stop(
+      "compatibility_metric = '", compatibility_metric,
+      "' requires full dyads (build_dyad_matrix(mode = 'full')). ",
+      "The column '", compatibility_metric, "' is missing from dyads.",
+      call. = FALSE
+    )
+  }
 
   payload <- list(
     registry_data = context$registry_data,
     state_data = context$state_data,
     model_ids = I(context$model_ids),
-    dyads = .delta_u_dyads_to_records(
-      dyads, metric_fields = compatibility_metric
-    ),
+    dyads = .delta_u_dyads_to_records(dyads),
     top_k = as.integer(top_k),
     mode = mode,
     compatibility_metric = compatibility_metric,
-    resolution_strategy = resolution_strategy
+    crux_mode = crux_mode
   )
 
+  if (!is.null(global_status)) {
+    payload$global_status <- global_status
+  }
   if (!is.null(component_id)) {
     payload$component_id <- component_id
   }
@@ -270,8 +319,11 @@ compute_delta_u <- function(dyads,
   data <- body$data
   rankings <- NULL
   synergistic <- NULL
+  global_crux <- NULL
 
-  if (!is.null(data$result)) {
+  if (!is.null(data$global_result)) {
+    global_crux <- .parse_global_crux(data$global_result)
+  } else if (!is.null(data$result)) {
     rankings <- .parse_single_result(data$result, context$registry_data)
   } else if (!is.null(data$rankings)) {
     rankings <- .parse_delta_u_rankings(data$rankings)
@@ -289,6 +341,15 @@ compute_delta_u <- function(dyads,
     }
   }
 
+  if (!is.null(global_crux)) {
+    attr(global_crux, "compatibility_metric") <-
+      data$compatibility_metric %||% compatibility_metric
+    if (!is.null(data$device)) {
+      attr(global_crux, "device") <- data$device
+    }
+    return(global_crux)
+  }
+
   if (!is.null(synergistic)) {
     result <- list(rankings = rankings, synergistic_sets = synergistic)
     attr(result, "compatibility_metric") <-
@@ -303,22 +364,10 @@ compute_delta_u <- function(dyads,
 }
 
 
-.delta_u_dyads_to_records <- function(
-    dyads,
-    metric_fields = intersect(
-      c("similarity_rate", "mas_compatible", "identified_compatible"),
-      names(dyads)
-    )) {
+.delta_u_dyads_to_records <- function(dyads) {
   valid_metrics <- c(
     "similarity_rate", "mas_compatible", "identified_compatible"
   )
-  if (length(metric_fields) < 1L || any(!metric_fields %in% valid_metrics)) {
-    stop(
-      "metric_fields must contain one or more of: ",
-      paste(valid_metrics, collapse = ", "), ".",
-      call. = FALSE
-    )
-  }
 
   required <- c("dyad_id", "ego_id", "alter_id", "similarity_rate")
   missing_cols <- setdiff(required, names(dyads))
@@ -335,12 +384,31 @@ compute_delta_u <- function(dyads,
       alter_id = as.character(row$alter_id),
       similarity_rate = as.numeric(row$similarity_rate)
     )
-    available_fields <- setdiff(
-      intersect(metric_fields, names(dyads)), "similarity_rate"
-    )
-    for (field in available_fields) {
+    # Selected compatibility metric(s) present in the dyads (similarity_rate
+    # is already set above and must not be coerced to logical)
+    metric_fields <- setdiff(intersect(valid_metrics, names(dyads)), "similarity_rate")
+    for (field in metric_fields) {
       value <- dyads[[field]][i]
-      entry[[field]] <- as.logical(value)
+      entry[[field]] <- if (is.null(value) || is.na(value)) NULL else as.logical(value)
+    }
+    # Per-model profile fields needed for copied/self-source dyads
+    logical_profiles <- c("identified_ego", "identified_alter")
+    for (field in intersect(logical_profiles, names(dyads))) {
+      value <- dyads[[field]][i]
+      entry[field] <- list(
+        if (is.null(value) || is.na(value)) NULL else as.logical(value)
+      )
+    }
+    list_profiles <- c(
+      "mas_ego", "mas_alter",
+      "identification_nodes_ego", "identification_nodes_alter"
+    )
+    for (field in intersect(list_profiles, names(dyads))) {
+      value <- dyads[[field]][[i]]
+      if (!is.null(value) && startsWith(field, "identification_nodes_")) {
+        value <- unname(as.list(as.character(value)))
+      }
+      entry[field] <- list(value)
     }
     entry
   })
@@ -363,28 +431,28 @@ compute_delta_u <- function(dyads,
     best_resolution = result$best_resolution %||% NA_character_,
     dyads_improved = as.integer(result$dyads_improved %||% NA_integer_),
     dyads_worsened = as.integer(result$dyads_worsened %||% NA_integer_),
-    delta_u_positive = result$delta_u_positive %||% NA_real_,
-    delta_u_negative = result$delta_u_negative %||% NA_real_
+    delta_u_causal = result$delta_u_causal %||% NA_real_,
+    delta_u_non_causal = result$delta_u_non_causal %||% NA_real_
   )
 
   optional_numeric <- c(
-    "baseline_compatibility", "post_compatibility_positive",
-    "post_compatibility_negative", "context_coverage_positive",
-    "context_coverage_negative"
+    "baseline_compatibility", "post_compatibility_causal",
+    "post_compatibility_non_causal", "mapping_coverage_causal",
+    "mapping_coverage_non_causal"
   )
   for (field in intersect(optional_numeric, names(result))) {
     row[[field]] <- as.numeric(result[[field]] %||% NA_real_)
   }
   optional_integer <- c(
-    "models_retained_positive", "models_retained_negative",
-    "dyads_retained_positive", "dyads_retained_negative"
+    "models_changed_causal", "models_changed_non_causal",
+    "instances_forced_causal", "instances_forced_non_causal"
   )
   for (field in intersect(optional_integer, names(result))) {
     row[[field]] <- as.integer(result[[field]] %||% NA_integer_)
   }
-  if ("resolution_strategy" %in% names(result)) {
-    row$resolution_strategy <- as.character(
-      result$resolution_strategy %||% NA_character_
+  if ("crux_mode" %in% names(result)) {
+    row$crux_mode <- as.character(
+      result$crux_mode %||% NA_character_
     )
   }
   data.frame(row, stringsAsFactors = FALSE)
@@ -466,9 +534,9 @@ compute_delta_u <- function(dyads,
 
   record_names <- unique(unlist(lapply(rankings, names)))
   optional_numeric <- intersect(c(
-    "baseline_compatibility", "post_compatibility_positive",
-    "post_compatibility_negative", "context_coverage_positive",
-    "context_coverage_negative"
+    "baseline_compatibility", "post_compatibility_causal",
+    "post_compatibility_non_causal", "mapping_coverage_causal",
+    "mapping_coverage_non_causal"
   ), record_names)
   for (field in optional_numeric) {
     df[[field]] <- vapply(rankings, function(r) {
@@ -476,21 +544,47 @@ compute_delta_u <- function(dyads,
     }, numeric(1), USE.NAMES = FALSE)
   }
   optional_integer <- intersect(c(
-    "models_retained_positive", "models_retained_negative",
-    "dyads_retained_positive", "dyads_retained_negative"
+    "models_changed_causal", "models_changed_non_causal",
+    "instances_forced_causal", "instances_forced_non_causal"
   ), record_names)
   for (field in optional_integer) {
     df[[field]] <- vapply(rankings, function(r) {
       as.integer(r[[field]] %||% NA_integer_)
     }, integer(1), USE.NAMES = FALSE)
   }
-  if ("resolution_strategy" %in% record_names) {
-    df$resolution_strategy <- vapply(rankings, function(r) {
-      as.character(r$resolution_strategy %||% NA_character_)
+  if ("crux_mode" %in% record_names) {
+    df$crux_mode <- vapply(rankings, function(r) {
+      as.character(r$crux_mode %||% NA_character_)
     }, character(1), USE.NAMES = FALSE)
   }
 
   df
+}
+
+
+.parse_global_crux <- function(result) {
+  if (is.null(result)) {
+    return(NULL)
+  }
+  row <- list(
+    crux_mode = result$crux_mode %||% NA_character_,
+    target_status = result$target_status %||% NA_character_,
+    feasible = result$feasible %||% NA,
+    baseline_compatibility = result$baseline_compatibility %||% NA_real_,
+    post_compatibility = result$post_compatibility %||% NA_real_,
+    compatibility_change = result$compatibility_change %||% NA_real_,
+    delta_u = result$delta_u %||% NA_real_,
+    model_count = as.integer(result$model_count %||% NA_integer_),
+    dyad_count = as.integer(result$dyad_count %||% NA_integer_),
+    models_changed = as.integer(result$models_changed %||% NA_integer_),
+    unknown_instances_forced = as.integer(
+      result$unknown_instances_forced %||% NA_integer_
+    ),
+    dyads_improved = as.integer(result$dyads_improved %||% NA_integer_),
+    dyads_worsened = as.integer(result$dyads_worsened %||% NA_integer_),
+    mapping_coverage = result$mapping_coverage %||% NA_real_
+  )
+  data.frame(row, stringsAsFactors = FALSE)
 }
 
 

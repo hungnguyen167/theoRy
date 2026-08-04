@@ -84,8 +84,10 @@ plot_lynchpin_ranking <- function(rankings,
   # Ensure best_resolution is a factor with consistent ordering
   resolutions <- as.character(rankings$best_resolution)
   resolutions[is.na(resolutions)] <- "none"
+  resolutions[resolutions == "positive"] <- "causal"
+  resolutions[resolutions == "negative"] <- "non-causal"
   rankings$best_resolution <- factor(
-    resolutions, levels = c("positive", "negative", "none", "synergy")
+    resolutions, levels = c("causal", "non-causal", "none", "synergy")
   )
 
   # Order labels by delta_u ascending so highest is at top after coord_flip
@@ -101,7 +103,7 @@ plot_lynchpin_ranking <- function(rankings,
     ggplot2::geom_col() +
     ggplot2::coord_flip() +
     ggplot2::scale_fill_manual(
-      values = c(positive = "#4393c3", negative = "#d6604d",
+      values = c(causal = "#4393c3", `non-causal` = "#d6604d",
                  none = "grey70", synergy = "#9970ab"),
       drop = FALSE
     ) +
@@ -124,7 +126,7 @@ plot_lynchpin_ranking <- function(rankings,
     } else {
       syn_df <- synergistic_sets
       syn_df$best_resolution <- factor(
-        "synergy", levels = c("positive", "negative", "none", "synergy")
+        "synergy", levels = c("causal", "non-causal", "none", "synergy")
       )
       syn_df$delta_u <- syn_df$delta_u_combined
       # Order after individual bars

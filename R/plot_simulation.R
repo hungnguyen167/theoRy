@@ -122,7 +122,7 @@ plot_simulation <- function(result, ...) {
       source = "",
       target = "",
       delta_u = phase_score,
-      best_resolution = "positive",
+      best_resolution = "causal",
       dyads_improved = 0L,
       dyads_worsened = 0L,
       stringsAsFactors = FALSE

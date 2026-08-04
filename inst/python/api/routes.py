@@ -574,6 +574,17 @@ async def delta_u(request: DeltaURequest):
         "mas_compatible",
         "identified_compatible",
     )
+    if requires_causal and (exposure is None or outcome is None):
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": "INVALID_CAUSAL_TARGET",
+                "message": (
+                    f"compatibility_metric {compatibility_metric!r} requires both "
+                    "exposure and outcome in the request or stored dyad context"
+                ),
+            },
+        )
     if requires_causal:
         try:
             causal_wrapper = CausalWrapper()
@@ -606,19 +617,44 @@ async def delta_u(request: DeltaURequest):
         outcome=outcome,
         identification_wrapper=identification_wrapper,
         model_ids=list(state.model_ids),
-        resolution_strategy=request.resolution_strategy,
+        crux_mode=request.crux_mode,
     )
     computation_mode = request.mode
 
-    if len(dyads) != len(state.model_ids) * (len(state.model_ids) - 1):
-        dyads = engine.compare_pairs(
-            state,
-            registry,
-            mode="basic",
-        )
-
+    requires_causal = compatibility_metric in (
+        "mas_compatible",
+        "identified_compatible",
+    )
     try:
-        if request.component_id is not None:
+        if len(dyads) != len(state.model_ids) * (len(state.model_ids) - 1):
+            dyads = engine.compare_pairs(
+                state,
+                registry,
+                mode="full" if requires_causal else "basic",
+                causal_wrapper=causal_wrapper,
+                identification_wrapper=identification_wrapper,
+                exposure=exposure,
+                outcome=outcome,
+            )
+
+        if request.crux_mode == "global":
+            global_result = delta_engine.compute_global_crux(
+                request.global_status,
+                state,
+                dyads,
+                registry,
+            )
+            public_global_result = {
+                key: value
+                for key, value in global_result.items()
+                if key != "post_dyads"
+            }
+            response_data = {
+                "global_result": public_global_result,
+                "crux_mode": "global",
+                "computation_mode": "global",
+            }
+        elif request.component_id is not None:
             if request.component_id not in state.component_index:
                 raise HTTPException(
                     status_code=422,
@@ -687,13 +723,18 @@ async def delta_u(request: DeltaURequest):
 
     except DeltaUError as e:
         raise HTTPException(
-            status_code=500,
+            status_code=422,
             detail={"code": "DELTA_U_ERROR", "message": str(e)},
         )
     except CausalError as e:
         raise HTTPException(
             status_code=500,
             detail={"code": "CAUSAL_DELTA_U_ERROR", "message": str(e)},
+        )
+    except DyadicError as e:
+        raise HTTPException(
+            status_code=422,
+            detail={"code": "DYAD_ERROR", "message": str(e)},
         )
     except HTTPException:
         raise
@@ -708,7 +749,7 @@ async def delta_u(request: DeltaURequest):
         )
 
     response_data["compatibility_metric"] = compatibility_metric
-    response_data["resolution_strategy"] = request.resolution_strategy
+    response_data["crux_mode"] = request.crux_mode
     if exposure is not None:
         response_data["exposure"] = exposure
     if outcome is not None:
@@ -995,7 +1036,6 @@ async def simulate(request: SimulateRequest):
             n_models=request.n_models,
             n_components=request.n_components,
             compatibility_metric=request.compatibility_metric,
-            resolution_strategy=request.resolution_strategy,
             enforce_thresholds=enforce_thresholds,
             exposure=request.exposure,
             outcome=request.outcome,
@@ -1016,6 +1056,12 @@ async def simulate(request: SimulateRequest):
                 include_plot_data=True,
                 plot_sample_n=request.plot_sample_n,
                 pair_sample_n=request.pair_sample_n,
+            )
+
+        if request.scenario in ("lynchpin_of_certainty", "crux_of_certainty"):
+            common.update(
+                crux_mode=request.crux_mode,
+                global_status=request.global_status,
             )
 
         if request.scenario == "illusion_of_precision":
@@ -1050,6 +1096,15 @@ async def simulate(request: SimulateRequest):
             content={
                 "status": "error",
                 "code": "INVALID_SIMULATION_INPUT",
+                "message": str(e),
+            },
+        )
+    except DeltaUError as e:
+        return JSONResponse(
+            status_code=422,
+            content={
+                "status": "error",
+                "code": "DELTA_U_ERROR",
                 "message": str(e),
             },
         )

@@ -8,7 +8,7 @@ from registry.schema import ComponentRegistry, RegistryError
 from state.tensor import StateError, StateTensor
 from state.completions import materialize_missing_completions
 from dyadic.engine import DyadicEngine
-from simulation.delta_u import DeltaUEngine, resolve_unknown_component
+from simulation.delta_u import DeltaUEngine
 from simulation.scoring import CompatibilityScorer
 from clustering.engine import ClusteringEngine
 from clustering.ghost import GhostDetector
@@ -256,12 +256,19 @@ class SimulationSuite:
                 "selected compatibility metric"
             )
         elif scenario in ("lynchpin_of_certainty", "crux_of_certainty"):
-            checks = {
-                "post exceeds baseline": results["post_resolution_compatibility"]
-                > results["baseline_compatibility"],
-                "phase_transition_score > 0": results["phase_transition_score"] > 0,
-                "lynchpin_rank == 1": results["lynchpin_rank"] == 1,
-            }
+            if results.get("crux_mode") == "global":
+                checks = {
+                    "global resolution changes compatibility": (
+                        results["phase_transition_score"] != 0
+                    ),
+                }
+            else:
+                checks = {
+                    "post exceeds baseline": results["post_resolution_compatibility"]
+                    > results["baseline_compatibility"],
+                    "phase_transition_score > 0": results["phase_transition_score"] > 0,
+                    "lynchpin_rank == 1": results["lynchpin_rank"] == 1,
+                }
         elif scenario == "ghost_discovery":
             ghosts = results["ghost_clusters"]
             top = ghosts[0] if ghosts else None
@@ -779,7 +786,6 @@ class SimulationSuite:
         pair_sample_n: int | None = 5000,
         include_bidirectional: bool = False,
         compatibility_metric: str = "similarity_rate",
-        resolution_strategy: str = "condition",
         exposure: str | None = None,
         outcome: str | None = None,
     ):
@@ -919,7 +925,8 @@ class SimulationSuite:
         pair_sample_n: int | None = 5000,
         include_bidirectional: bool = False,
         compatibility_metric: str = "similarity_rate",
-        resolution_strategy: str = "condition",
+        crux_mode: str = "marginal",
+        global_status: str | None = None,
         exposure: str | None = None,
         outcome: str | None = None,
     ):
@@ -937,7 +944,8 @@ class SimulationSuite:
             pair_sample_n=pair_sample_n,
             include_bidirectional=include_bidirectional,
             compatibility_metric=compatibility_metric,
-            resolution_strategy=resolution_strategy,
+            crux_mode=crux_mode,
+            global_status=global_status,
             exposure=exposure,
             outcome=outcome,
         )
@@ -960,10 +968,21 @@ class SimulationSuite:
         pair_sample_n: int | None = 5000,
         include_bidirectional: bool = False,
         compatibility_metric: str = "similarity_rate",
-        resolution_strategy: str = "condition",
+        crux_mode: str = "marginal",
+        global_status: str | None = None,
         exposure: str | None = None,
         outcome: str | None = None,
     ):
+        if crux_mode not in ("marginal", "global"):
+            raise SimulationInputError("crux_mode must be 'marginal' or 'global'")
+        if crux_mode == "global" and global_status not in ("causal", "non-causal"):
+            raise SimulationInputError(
+                "crux_mode='global' requires global_status 'causal' or 'non-causal'"
+            )
+        if crux_mode == "marginal" and global_status is not None:
+            raise SimulationInputError(
+                "global_status is only valid with crux_mode='global'"
+            )
         if include_bidirectional:
             raise SimulationInputError(
                 "Simulations support directed components only; "
@@ -979,7 +998,8 @@ class SimulationSuite:
                 plot_sample_n=plot_sample_n,
                 pair_sample_n=pair_sample_n,
                 compatibility_metric=compatibility_metric,
-                resolution_strategy=resolution_strategy,
+                crux_mode=crux_mode,
+                global_status=global_status,
                 exposure=exposure,
                 outcome=outcome,
             )
@@ -995,6 +1015,7 @@ class SimulationSuite:
             registry = self._build_synthetic_registry(n_components)
 
         def _try(seed):
+            self._rng.seed(seed)
             edge_comps = registry.data[registry.data["type"] == "edge"]
             if n_zones is not None:
                 nz = n_zones
@@ -1041,7 +1062,7 @@ class SimulationSuite:
                 compatibility_metric,
                 exposure,
                 outcome,
-                synthesize_completion_support=True,
+                synthesize_completion_support=False,
             )
 
             result, artifacts = self._analyze_lynchpin_result(
@@ -1055,7 +1076,8 @@ class SimulationSuite:
                 include_plot_data=include_plot_data,
                 pair_sample_n=pair_sample_n,
                 compatibility_metric=compatibility_metric,
-                resolution_strategy=resolution_strategy,
+                crux_mode=crux_mode,
+                global_status=global_status,
                 metric_diagnostics=metric_diagnostics,
                 causal_wrapper=causal_wrapper,
                 identification_wrapper=identification_wrapper,
@@ -1099,7 +1121,8 @@ class SimulationSuite:
         plot_sample_n=200,
         pair_sample_n=5000,
         compatibility_metric="similarity_rate",
-        resolution_strategy="condition",
+        crux_mode="marginal",
+        global_status=None,
         exposure=None,
         outcome=None,
     ):
@@ -1126,7 +1149,7 @@ class SimulationSuite:
         if unknown_edges == 0:
             raise SimulationInputError(
                 "Seeded states contain no unknown applicable edge components "
-                "for lynchpin analysis."
+                "for crux analysis."
             )
         seed = self._random_state if self._random_state is not None else 42
         result, artifacts = self._analyze_lynchpin_result(
@@ -1140,7 +1163,8 @@ class SimulationSuite:
             include_plot_data=include_plot_data,
             pair_sample_n=pair_sample_n,
             compatibility_metric=compatibility_metric,
-            resolution_strategy=resolution_strategy,
+            crux_mode=crux_mode,
+            global_status=global_status,
             metric_diagnostics=metric_diagnostics,
             causal_wrapper=causal_wrapper,
             identification_wrapper=identification_wrapper,
@@ -1186,14 +1210,14 @@ class SimulationSuite:
         include_plot_data=False,
         pair_sample_n=5000,
         compatibility_metric="similarity_rate",
-        resolution_strategy="condition",
+        crux_mode="marginal",
+        global_status=None,
         metric_diagnostics=None,
         causal_wrapper=None,
         identification_wrapper=None,
         exposure=None,
         outcome=None,
     ):
-        dyadic_engine = DyadicEngine()
         metric_diagnostics = metric_diagnostics or {}
         baseline_compat = metric_diagnostics.get(
             "compatibility_rate",
@@ -1207,67 +1231,85 @@ class SimulationSuite:
             exposure=exposure,
             outcome=outcome,
             model_ids=model_ids,
-            resolution_strategy=resolution_strategy,
-        )
-        rankings = delta_engine.rank_lynchpins(
-            state=state,
-            dyads=dyads_baseline,
-            registry=registry,
-            top_k=10,
-            mode="exhaustive",
+            crux_mode=crux_mode,
         )
 
-        top_component = rankings[0]["component_id"] if rankings else None
-        best_resolution = rankings[0]["best_resolution"] if rankings else "positive"
-
-        if resolution_strategy == "condition":
-            if top_component is None or best_resolution == "none":
-                resolved_model_ids = model_ids
-            else:
-                from state.semantics import edge_applicable
-
-                target_status = (
-                    "causal" if best_resolution == "positive" else "non-causal"
-                )
-                resolved_model_ids = [
-                    model_id
-                    for model_id in model_ids
-                    if edge_applicable(state, model_id, top_component, registry)
-                    and state.get_status(model_id, top_component) == target_status
-                ]
-            retained = set(resolved_model_ids)
-            dyads_resolved = [
-                dyad
-                for dyad in dyads_baseline
-                if dyad["ego_id"] in retained and dyad["alter_id"] in retained
-            ]
-        else:
-            resolved_model_ids = model_ids
-            if top_component is None or best_resolution == "none":
-                resolved_state = state
-            else:
-                resolved_state = self._resolve_component(
-                    state,
-                    registry,
-                    top_component,
-                    best_resolution,
-                    model_ids=model_ids,
-                )
-            dyads_resolved = dyadic_engine.compare_pairs(
-                resolved_state,
+        if crux_mode == "global":
+            global_result = delta_engine.compute_global_crux(
+                global_status,
+                state,
+                dyads_baseline,
                 registry,
-                model_ids,
-                mode="basic" if compatibility_metric == "similarity_rate" else "full",
-                causal_wrapper=causal_wrapper,
-                identification_wrapper=identification_wrapper,
-                exposure=exposure,
-                outcome=outcome,
             )
-        post_compat = (
-            self._compute_metric_rate(dyads_resolved, compatibility_metric)
-            if dyads_resolved
-            else baseline_compat
-        )
+            if not global_result["feasible"]:
+                detail = (
+                    "global crux is infeasible for the supplied multiverse; "
+                    f"invalid models: {global_result['invalid_models']}, "
+                    f"unmatched models: {global_result['unmatched_models']}. "
+                    "Supply a resolution-closed multiverse."
+                )
+                raise SimulationError(detail)
+            top_component = None
+            best_resolution = None
+            resolved_model_ids = list(model_ids)
+            dyads_resolved = global_result["post_dyads"]
+            post_compat = global_result["post_compatibility"]
+            resolved_models_changed = global_result["models_changed"]
+            mapping_coverage = global_result["mapping_coverage"]
+            timeline_label = f"global_{global_status}"
+            rankings = []
+        else:
+            rankings = delta_engine.rank_lynchpins(
+                state=state,
+                dyads=dyads_baseline,
+                registry=registry,
+                top_k=10,
+                mode="exhaustive",
+            )
+            if not rankings:
+                top_component = None
+                best_resolution = None
+                resolved_model_ids = list(model_ids)
+                dyads_resolved = dyads_baseline
+                post_compat = baseline_compat
+                resolved_models_changed = 0
+                mapping_coverage = 1.0
+                timeline_label = "resolved_none"
+            else:
+                top_component = rankings[0]["component_id"]
+                best_resolution = rankings[0]["best_resolution"]
+                if best_resolution == "none":
+                    resolved_model_ids = list(model_ids)
+                    dyads_resolved = dyads_baseline
+                    post_compat = baseline_compat
+                    resolved_models_changed = 0
+                    mapping_coverage = rankings[0]["mapping_coverage_causal"]
+                    timeline_label = "resolved_none"
+                else:
+                    target_status = best_resolution
+                    dyads_resolved = delta_engine.resolve_dyads(
+                        top_component,
+                        target_status,
+                        state,
+                        dyads_baseline,
+                        registry,
+                    )
+                    resolved_model_ids = list(model_ids)
+                    post_compat = self._compute_metric_rate(
+                        dyads_resolved, compatibility_metric
+                    )
+                    resolved_models_changed = (
+                        rankings[0]["models_changed_causal"]
+                        if target_status == "causal"
+                        else rankings[0]["models_changed_non_causal"]
+                    )
+                    mapping_coverage = (
+                        rankings[0]["mapping_coverage_causal"]
+                        if target_status == "causal"
+                        else rankings[0]["mapping_coverage_non_causal"]
+                    )
+                    timeline_label = f"resolved_{top_component}"
+
         phase_score = round(post_compat - baseline_compat, 6)
         lynchpin_is_seeded = (
             top_component == seeded_lynchpin_id if seeded_lynchpin_id else False
@@ -1279,15 +1321,27 @@ class SimulationSuite:
             "post_resolution_compatibility": post_compat,
             "phase_transition_score": phase_score,
             "lynchpin_component_id": top_component,
-            "lynchpin_rank": 1,
+            "crux_component_id": top_component,
+            "lynchpin_rank": 1 if top_component is not None else None,
             "seeded_lynchpin_id": seeded_lynchpin_id,
             "lynchpin_matches_seed": lynchpin_is_seeded,
-            "resolution_strategy": resolution_strategy,
+            "crux_mode": crux_mode,
+            "target_status": (
+                global_status
+                if crux_mode == "global"
+                else (
+                    best_resolution
+                    if best_resolution in ("causal", "non-causal")
+                    else None
+                )
+            ),
             "models_retained": len(resolved_model_ids),
             "dyads_retained": len(dyads_resolved),
+            "models_changed": resolved_models_changed,
+            "mapping_coverage": mapping_coverage,
             "compatibility_timeline": [
                 {"step": "baseline", "compatibility": baseline_compat},
-                {"step": f"resolved_{top_component}", "compatibility": post_compat},
+                {"step": timeline_label, "compatibility": post_compat},
             ],
         }
         result.update(metric_diagnostics)
@@ -1304,8 +1358,11 @@ class SimulationSuite:
                 "compatibility_metric": compatibility_metric,
                 "baseline_mean_compatibility": baseline_compat,
                 "resolved_mean_compatibility": post_compat,
-                "resolution_strategy": resolution_strategy,
+                "crux_mode": crux_mode,
+                "target_status": result["target_status"],
                 "models_retained": len(resolved_model_ids),
+                "models_changed": resolved_models_changed,
+                "mapping_coverage": mapping_coverage,
                 "seed": seed,
             },
         }
@@ -1396,7 +1453,12 @@ class SimulationSuite:
         return lynchpin_id, zone_edges
 
     def _generate_mas_crux_states(self, registry, n_models, exposure, outcome):
-        """Create a completion-closed crux whose status changes the shared MAS."""
+        """Create a resolution-closed crux whose status changes the shared MAS.
+
+        Every model shares the same context; the crux edge cycles through
+        unknown / causal / non-causal so that every unknown model has exact
+        causal and non-causal matches inside the multiverse (marginal crux).
+        """
         nodes = list(registry.data[registry.data["type"] == "node"]["source"])
         if exposure not in nodes or outcome not in nodes:
             raise SimulationError("MAS crux exposure/outcome must be registry nodes")
@@ -1427,14 +1489,16 @@ class SimulationSuite:
         exposure_outcome_id = edge_id(exposure, outcome)
         node_ids = set(registry.data[registry.data["type"] == "node"]["comp_id"])
         records = []
+        statuses = ("unknown", "causal", "non-causal")
         for model_number in range(1, n_models + 1):
             model_id = f"M{model_number:04d}"
+            crux_status = statuses[(model_number - 1) % 3]
             for _, component in registry.data.iterrows():
                 comp_id = component["comp_id"]
                 if comp_id in node_ids:
                     status = "present"
                 elif comp_id == crux_id:
-                    status = "unknown"
+                    status = crux_status
                 elif comp_id in (confounder_outcome_id, exposure_outcome_id):
                     status = "causal"
                 else:
@@ -1450,7 +1514,12 @@ class SimulationSuite:
         return records, crux_id
 
     def _generate_identified_crux_states(self, registry, n_models, exposure, outcome):
-        """Create a directed latent front-door crux with an unknown direct edge."""
+        """Create a directed latent front-door crux with an unknown direct edge.
+
+        The crux edge cycles through unknown / causal / non-causal so that
+        every unknown model has exact causal and non-causal matches inside the
+        multiverse (marginal crux).
+        """
         node_rows = registry.data[registry.data["type"] == "node"]
         latent_rows = node_rows[node_rows["observed"] == False]  # noqa: E712
         if latent_rows.empty:
@@ -1496,14 +1565,16 @@ class SimulationSuite:
         }
         node_ids = set(registry.data[registry.data["type"] == "node"]["comp_id"])
         records = []
+        statuses = ("unknown", "causal", "non-causal")
         for model_number in range(1, n_models + 1):
             model_id = f"M{model_number:04d}"
+            crux_status = statuses[(model_number - 1) % 3]
             for _, component in registry.data.iterrows():
                 comp_id = component["comp_id"]
                 if comp_id in node_ids:
                     status = "present"
                 elif comp_id == crux_id:
-                    status = "unknown"
+                    status = crux_status
                 elif comp_id in fixed_ids:
                     status = "causal"
                 else:
@@ -1528,91 +1599,89 @@ class SimulationSuite:
         *,
         noise_fraction: float = 0.10,
     ):
-        """Generate fragmented multiverse with a seeded phase-transition lynchpin."""
+        """Generate a resolution-closed fragmented multiverse.
+
+        Every context (zone prototype or noise prototype) has all non-lynchpin
+        edges resolved and is emitted in three variants: the lynchpin unknown,
+        causal, and non-causal. This guarantees exact marginal matches for the
+        lynchpin while keeping the design phase-transition-ready.
+        """
         all_comp_ids = list(registry.data["comp_id"])
         node_comps = set(registry.data[registry.data["type"] == "node"]["comp_id"])
 
-        models_per_zone = n_models // n_zones
-        noise_count = max(1, int(n_models * noise_fraction))
+        n_contexts = max(1, n_models // 3)
+        noise_count = max(1, int(n_contexts * noise_fraction))
+        zone_context_count = max(0, n_contexts - noise_count)
         records = []
         model_idx = 1
+        contexts: list[dict[str, str]] = []
 
-        for zone in range(n_zones):
-            n_this = (
-                models_per_zone
-                if zone < n_zones - 1
-                else n_models - (model_idx - 1) - noise_count
-            )
-            n_this = max(1, n_this)
-            for _ in range(n_this):
-                model_id = f"M{model_idx:04d}"
-                model_idx += 1
-                for comp_id in all_comp_ids:
-                    if comp_id in node_comps:
-                        status = "present"
-                    elif comp_id == lynchpin_id:
-                        status = "unknown"
-                    elif comp_id in zone_edges.get(zone, set()):
-                        status = "causal"
-                    elif any(
-                        comp_id in zone_edges.get(z, set()) for z in range(n_zones)
-                    ):
-                        status = "non-causal"
-                    else:
-                        status = self._rng.choice(["causal", "unknown"])
-
-                    comp_row = registry.data[registry.data["comp_id"] == comp_id].iloc[
-                        0
-                    ]
-                    timing = self._timing_from_comp(comp_row)
-                    records.append(
-                        {
-                            "model_id": model_id,
-                            "comp_id": comp_id,
-                            "status": status,
-                            "timing": timing,
-                        }
-                    )
-
-        for _ in range(noise_count):
-            if model_idx > n_models:
-                break
+        def append_variant(context_statuses: dict[str, str], crux_status: str):
+            nonlocal model_idx
             model_id = f"M{model_idx:04d}"
             model_idx += 1
             for comp_id in all_comp_ids:
+                comp_row = registry.data[registry.data["comp_id"] == comp_id].iloc[0]
                 if comp_id in node_comps:
                     status = "present"
                 elif comp_id == lynchpin_id:
-                    status = "unknown"
+                    status = crux_status
                 else:
-                    status = self._rng.choice(["causal", "unknown", "non-causal"])
-
-                comp_row = registry.data[registry.data["comp_id"] == comp_id].iloc[0]
-                timing = self._timing_from_comp(comp_row)
+                    status = context_statuses[comp_id]
                 records.append(
                     {
                         "model_id": model_id,
                         "comp_id": comp_id,
                         "status": status,
-                        "timing": timing,
+                        "timing": self._timing_from_comp(comp_row),
                     }
                 )
 
-        return records
+        def append_variants(context_statuses: dict[str, str]):
+            contexts.append(context_statuses)
+            for crux_status in ("unknown", "causal", "non-causal"):
+                append_variant(context_statuses, crux_status)
 
-    def _resolve_component(
-        self, state, registry, component_id, resolution, *, model_ids=None
-    ):
-        """Clone state and resolve only unknown instances of a component."""
-        target_status = "causal" if resolution == "positive" else "non-causal"
-        resolved, _ = resolve_unknown_component(
-            state,
-            registry,
-            component_id,
-            target_status,
-            model_ids,
-        )
-        return resolved
+        for zone in range(n_zones):
+            n_this = (
+                zone_context_count // n_zones
+                if zone < n_zones - 1
+                else zone_context_count
+                - (zone_context_count // n_zones) * (n_zones - 1)
+            )
+            n_this = max(0, n_this)
+            for _ in range(n_this):
+                statuses: dict[str, str] = {}
+                for comp_id in all_comp_ids:
+                    if comp_id in node_comps or comp_id == lynchpin_id:
+                        continue
+                    if comp_id in zone_edges.get(zone, set()):
+                        statuses[comp_id] = "causal"
+                    elif any(
+                        comp_id in zone_edges.get(z, set()) for z in range(n_zones)
+                    ):
+                        statuses[comp_id] = "non-causal"
+                    else:
+                        statuses[comp_id] = self._rng.choice(["causal", "non-causal"])
+                append_variants(statuses)
+
+        for _ in range(noise_count):
+            statuses = {
+                comp_id: self._rng.choice(["causal", "non-causal"])
+                for comp_id in all_comp_ids
+                if comp_id not in node_comps and comp_id != lynchpin_id
+            }
+            append_variants(statuses)
+
+        # Complete triples provide closure. Extra requested slots are resolved
+        # duplicates, so they cannot introduce an unmatched unknown context.
+        filler_statuses = ("causal", "non-causal")
+        while model_idx <= n_models:
+            context = contexts[(model_idx - 1) % len(contexts)]
+            status = filler_statuses[(model_idx - 1) % len(filler_statuses)]
+            append_variant(context, status)
+
+        return records
 
     # ── scenario C: ghost discovery ────────────────────────────────────────────
 
@@ -1637,7 +1706,6 @@ class SimulationSuite:
         pair_sample_n: int | None = 5000,
         include_bidirectional: bool = False,
         compatibility_metric: str = "similarity_rate",
-        resolution_strategy: str = "condition",
         exposure: str | None = None,
         outcome: str | None = None,
     ):
@@ -1670,6 +1738,7 @@ class SimulationSuite:
         registry = self._build_synthetic_registry(n_components)
 
         def _try(seed):
+            self._rng.seed(seed)
             edge_comps = registry.data[registry.data["type"] == "edge"]
 
             n_mainstream = int(n_models * mainstream_fraction)

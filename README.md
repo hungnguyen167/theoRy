@@ -110,7 +110,8 @@ stop_theory_engine()
 
 For a one-call concrete pipeline, use `analyze_theory()`. The explicit steps
 above are preferable when selecting a causal compatibility metric for Delta-U
-or simulations.
+or simulations. Concrete `analyze_theory()` defaults to exhaustive expansion
+so its crux analysis is resolution-closed.
 
 ### Interactive Workflow
 
@@ -186,6 +187,38 @@ completion support. Those descendants are internal support artifacts: they do
 not increase `n_models` and are excluded from ordinary dyad aggregation,
 Delta-U ranking, and clustering. Seeded simulations do not silently add models
 to a user corpus and instead require completion-closed input.
+
+## Crux Modes
+
+`compute_delta_u()` (and `analyze_theory()`) supports two crux semantics:
+
+- **Marginal crux** (default) ranks each uncertain component by evaluating
+  both the causal and the non-causal resolution of that component.
+- **Global crux** resolves *every* applicable unknown edge instance in the
+  multiverse to a single user-selected status (`global_status = "causal"` or
+  `"non-causal"`) and reports one aggregate contrast against the unchanged
+  baseline.
+
+Both modes are model-remapping analyses: they never mutate model claims and
+never recompute adjustment sets or identification. Each hypothetically
+resolved model is mapped to the existing multiverse model whose semantic state
+matches the resolution, and the mapped models' precomputed dyad records are
+reused. Model and dyad counts are preserved. This requires a
+*resolution-closed* multiverse (e.g. exhaustive expansion); when an exact
+match is missing, marginal ranking fails with a completion-coverage error
+instead of synthesizing new models. Global and explicit single-component
+resolutions use the same strict coverage policy.
+
+```r
+rankings <- compute_delta_u(dyads, crux_mode = "marginal", top_k = 10)
+
+global <- compute_delta_u(
+  dyads,
+  crux_mode = "global",
+  global_status = "causal"
+)
+```
+
 
 ## Causal Queries
 

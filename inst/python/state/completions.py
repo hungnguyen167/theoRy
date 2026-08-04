@@ -87,8 +87,10 @@ class CompletionIndex:
             for model_id in state.model_ids
         }
         self._resolved_by_signature: dict[SemanticSignature, list[str]] = {}
+        self.models_by_signature: dict[SemanticSignature, list[str]] = {}
         for model_id in sorted(state.model_ids):
             signature = self._signature_by_model[model_id]
+            self.models_by_signature.setdefault(signature, []).append(model_id)
             if self.is_resolved_signature(signature) and self.is_valid_signature(
                 signature
             ):
@@ -164,6 +166,50 @@ class CompletionIndex:
 
     # A short alias is convenient for cache consumers.
     signature = semantic_signature
+
+    def signature_after_resolution(
+        self,
+        model_id: str,
+        assignments: dict[str, str],
+    ) -> SemanticSignature:
+        """Return the semantic signature with hypothetical edge assignments.
+
+        Only edges that are applicable in the model are overridden; node
+        presence, node timing, and model constraints are carried over
+        unchanged.
+        """
+        base = self.semantic_signature(model_id)
+        statuses = dict(base.edge_statuses)
+        for edge_id, status in assignments.items():
+            if edge_id in statuses:
+                statuses[edge_id] = status
+        return SemanticSignature(
+            node_presence=base.node_presence,
+            edge_statuses=tuple(sorted(statuses.items())),
+            node_timing=base.node_timing,
+            constraints=base.constraints,
+        )
+
+    def matching_model(
+        self,
+        model_id: str,
+        assignments: dict[str, str],
+        allowed_model_ids: set[str] | None = None,
+    ) -> str | None:
+        """Find an existing model matching a hypothetical resolution.
+
+        Returns the lexicographically first model with the target semantic
+        signature (including still-partial models). When ``allowed_model_ids``
+        is supplied, only those models are considered. Returns ``None`` when
+        no matching model exists.
+        """
+        target = self.signature_after_resolution(model_id, assignments)
+        candidates = self.models_by_signature.get(target)
+        if not candidates:
+            return None
+        if allowed_model_ids is not None:
+            candidates = [m for m in candidates if m in allowed_model_ids]
+        return candidates[0] if candidates else None
 
     @staticmethod
     def is_resolved_signature(signature: SemanticSignature) -> bool:

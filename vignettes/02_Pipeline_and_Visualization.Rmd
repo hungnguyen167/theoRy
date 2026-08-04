@@ -72,8 +72,7 @@ result <- analyze_theory(
   exposure = "X1",
   outcome = "Y",
   prior_model = "M0001",
-  mode = "sampled",
-  n_models = 200,
+  mode = "exhaustive",
   plot = TRUE
 )
 ```
@@ -138,7 +137,12 @@ dyads <- build_dyad_matrix(registry, states, mode = "full",
 head(dyads)
 ```
 
-### Step 4: Compute Delta-U lynchpin rankings
+### Step 4: Compute Delta-U crux rankings
+
+By default, Delta-U uses **marginal crux**: each uncertain component is ranked
+by evaluating both its causal and non-causal resolutions against the unchanged
+baseline. The **global crux** mode instead resolves every applicable unknown
+edge instance to one selected status and reports a single aggregate contrast.
 
 ```{r}
 rankings <- compute_delta_u(
@@ -147,7 +151,20 @@ rankings <- compute_delta_u(
   compatibility_metric = "identified_compatible"
 )
 head(rankings)
+
+# One multiverse-wide resolution
+global_crux <- compute_delta_u(
+  dyads,
+  crux_mode = "global",
+  global_status = "causal"
+)
+global_crux
 ```
+
+Both modes remap models to existing multiverse states and reuse their dyad
+records; they never mutate claims or recompute causal profiles. Marginal
+ranking therefore requires a resolution-closed multiverse (e.g. exhaustive
+expansion).
 
 ### Step 5: Detect ghost clusters
 
@@ -297,7 +314,8 @@ This restriction does not apply to general non-simulation APIs.
 - **Lynchpin ranking**: Horizontal bars show Delta-U scores. Taller blue bars
   indicate components that, if resolved as causal, would maximally increase
   global compatibility. Red bars indicate components best resolved as
-  non-causal.
+  non-causal. Grey bars mark components whose resolution does not change
+  global compatibility.
 
 - **Cluster embedding**: UMAP projection of compatibility profiles. Red points
   are ghost clusters (internally consistent but prior-invisible). Blue points

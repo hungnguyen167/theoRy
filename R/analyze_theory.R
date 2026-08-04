@@ -21,8 +21,11 @@
 #' @param prior_model Optional model ID (e.g. \code{"M0001"}) for ghost
 #'   cluster detection contrast analysis. When \code{NULL} (default),
 #'   ghost detection is skipped.
-#' @param mode Model expansion mode: \code{"symbolic"} (default for symbolic),
-#'   \code{"sampled"}, or \code{"exhaustive"}.
+#' @param mode Model expansion mode: \code{"exhaustive"} (default),
+#'   \code{"sampled"}, or \code{"symbolic"}. Concrete marginal/global crux
+#'   analysis requires a resolution-closed multiverse. Sampled expansion is
+#'   therefore suitable only when the resulting sample is resolution-closed;
+#'   otherwise Delta-U reports a completion-coverage error.
 #' @param n_models Number of models to sample in \code{"sampled"} mode.
 #'   Defaults to 200.
 #' @param seed Random seed for reproducible sampling. Defaults to 42.
@@ -33,6 +36,13 @@
 #'   \code{"symbolic"} mode.
 #' @param top_k Maximum number of components to return in the Delta-U
 #'   ranking. Defaults to 10.
+#' @param crux_mode Crux semantics forwarded to
+#'   \code{\link{compute_delta_u}}: \code{"marginal"} (default) ranks
+#'   uncertain components; \code{"global"} resolves every applicable unknown
+#'   edge instance to one status. Not available in symbolic mode.
+#' @param global_status Required status (\code{"causal"} or
+#'   \code{"non-causal"}) for \code{crux_mode = "global"}. Must be
+#'   \code{NULL} in marginal mode.
 #' @param plot Logical. When \code{TRUE}, generate standard plots
 #'   (dyad heatmap, crux ranking, cluster embedding when available).
 #'   Defaults to \code{FALSE}.
@@ -44,9 +54,11 @@
 #'   \code{"interactive"}. Interactive mode runs the guided registry
 #'   questionnaire before the analysis and prints a programmatic call that
 #'   recreates the selected multiverse.
-#' @param constraints,include_bidirectional,time_points,timing_options,
-#'   optional_nodes Registry options forwarded to
+#' @param constraints,include_bidirectional,time_points,timing_options Registry
+#'   options forwarded to
 #'   \code{build_component_registry()} in programmatic mode.
+#' @param optional_nodes Character vector of nodes allowed to be absent,
+#'   forwarded to \code{build_component_registry()} in programmatic mode.
 #' @param max_models,allow_large Expansion safety controls forwarded to
 #'   \code{expand_model_states()}.
 #' @param causal_backend Causal backend passed to \code{build_dyad_matrix()}.
@@ -94,13 +106,15 @@ analyze_theory <- function(nodes = NULL,
                              exposure = NULL,
                              outcome = NULL,
                              prior_model = NULL,
-                             mode = c("sampled", "exhaustive", "symbolic"),
+                             mode = c("exhaustive", "sampled", "symbolic"),
                              n_models = 200L,
                              seed = 42L,
                              node_policy = c("all-present", "vary"),
                              top_k = 10L,
+                             crux_mode = c("marginal", "global"),
+                             global_status = NULL,
                              plot = FALSE,
-                            eps = 0.5,
+                             eps = 0.5,
                              min_samples = 5L,
                              url = getOption("theoRy.engine_url",
                                               "http://localhost:8000"),
@@ -117,6 +131,18 @@ analyze_theory <- function(nodes = NULL,
   node_policy <- match.arg(node_policy)
   input_mode <- match.arg(input_mode)
   causal_backend <- match.arg(causal_backend)
+  crux_mode <- match.arg(crux_mode)
+  if (!is.null(global_status)) {
+    global_status <- match.arg(global_status, c("causal", "non-causal"))
+  }
+  if (identical(crux_mode, "global") && is.null(global_status)) {
+    stop("global_status ('causal' or 'non-causal') is required when ",
+         "crux_mode = 'global'.", call. = FALSE)
+  }
+  if (identical(crux_mode, "marginal") && !is.null(global_status)) {
+    stop("global_status is only valid with crux_mode = 'global'.",
+         call. = FALSE)
+  }
 
   # ── 0. Health check ──────────────────────────────────────────────────────────
   alive <- tryCatch(
@@ -138,6 +164,10 @@ analyze_theory <- function(nodes = NULL,
   if (identical(mode, "symbolic")) {
     if (is.null(exposure) || is.null(outcome)) {
       stop("exposure and outcome are required.", call. = FALSE)
+    }
+    if (identical(crux_mode, "global")) {
+      stop("crux_mode = 'global' is not available in symbolic mode.",
+           call. = FALSE)
     }
     message("Step 1/5: Building symbolic multiverse...")
     symbolic <- build_symbolic_multiverse(
@@ -236,7 +266,8 @@ analyze_theory <- function(nodes = NULL,
     model_count <- length(unique(states$model_id))
     if (model_count > 10000) {
       warning("Exhaustive expansion produced ", model_count,
-              " models. Consider using mode = 'sampled'.", call. = FALSE)
+              " models; dyad and crux computation may be expensive.",
+              call. = FALSE)
     }
   } else {
     states <- expand_model_states(
@@ -265,7 +296,13 @@ analyze_theory <- function(nodes = NULL,
 
   # ── 4. Compute Delta-U ───────────────────────────────────────────────────────
   message("Step 4/5: Computing Delta-U crux rankings...")
-  delta_u <- compute_delta_u(dyads, top_k = as.integer(top_k), url = url)
+  delta_u <- compute_delta_u(
+    dyads,
+    top_k = as.integer(top_k),
+    crux_mode = crux_mode,
+    global_status = global_status,
+    url = url
+  )
 
   # ── 5. Ghost detection ───────────────────────────────────────────────────────
   ghost_result <- NULL
@@ -313,11 +350,25 @@ analyze_theory <- function(nodes = NULL,
   )
 
   if (is.data.frame(delta_u) && nrow(delta_u) > 0) {
-    top <- delta_u[1, ]
-    src <- top$source %||% ""
-    tgt <- top$target %||% ""
-    summary <- c(summary, sprintf("Top crux: %s (%s \u2192 %s, delta_u = %.4f)",
-                                   top$component_id, src, tgt, top$delta_u))
+    if (identical(delta_u$crux_mode[1], "global")) {
+      summary <- c(
+        summary,
+        sprintf("Global crux (%s): compatibility %.4f -> %.4f (change %+.4f)",
+                delta_u$target_status[1],
+                delta_u$baseline_compatibility[1],
+                delta_u$post_compatibility[1],
+                delta_u$compatibility_change[1])
+      )
+    } else {
+      top <- delta_u[1, ]
+      src <- top$source %||% ""
+      tgt <- top$target %||% ""
+      resolution <- top$best_resolution %||% "none"
+      summary <- c(summary, sprintf(
+        "Top crux: %s (%s \u2192 %s, resolution = %s, delta_u = %.4f)",
+        top$component_id, src, tgt, resolution, top$delta_u
+      ))
+    }
   }
 
   if (!is.null(ghost_result) &&
@@ -333,7 +384,8 @@ analyze_theory <- function(nodes = NULL,
     plots <- list()
     plots$dyad_heatmap <- plot_dyad_heatmap(dyads)
 
-    if (is.data.frame(delta_u) && nrow(delta_u) > 0) {
+    if (is.data.frame(delta_u) && nrow(delta_u) > 0 &&
+        !identical(delta_u$crux_mode[1], "global")) {
       plots$crux_ranking <- plot_lynchpin_ranking(delta_u)
     }
 
@@ -353,6 +405,8 @@ analyze_theory <- function(nodes = NULL,
         seed = seed,
         node_policy = node_policy,
         top_k = top_k,
+        crux_mode = crux_mode,
+        global_status = global_status,
         plot = plot,
         eps = eps,
         min_samples = min_samples,
@@ -386,6 +440,8 @@ analyze_theory <- function(nodes = NULL,
                                                seed,
                                                node_policy,
                                                top_k,
+                                               crux_mode,
+                                               global_status,
                                                plot,
                                                eps,
                                                min_samples,
@@ -412,6 +468,8 @@ analyze_theory <- function(nodes = NULL,
     list("mode", mode),
     list("node_policy", node_policy),
     list("top_k", as.integer(top_k)),
+    list("crux_mode", crux_mode),
+    list("global_status", global_status),
     list("plot", isTRUE(plot)),
     list("eps", eps),
     list("min_samples", as.integer(min_samples)),

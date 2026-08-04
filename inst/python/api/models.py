@@ -132,7 +132,8 @@ class DeltaURequest(BaseModel):
     synergistic_beam_width: int | None = None
 
     compatibility_metric: CompatibilityMetric = "similarity_rate"
-    resolution_strategy: Literal["condition", "update_unknowns"] = "condition"
+    crux_mode: Literal["marginal", "global"] = "marginal"
+    global_status: Literal["causal", "non-causal"] | None = None
     device: Literal["auto", "cpu", "cuda"] = "auto"
     use_tensor_engine: bool = True
     exposure: str | None = None
@@ -140,13 +141,39 @@ class DeltaURequest(BaseModel):
 
     @model_validator(mode="after")
     def validate_metric_query(self):
-        if self.compatibility_metric != "similarity_rate" and (
-            self.exposure is None or self.outcome is None
+        if (self.exposure is None) != (self.outcome is None):
+            raise ValueError("Both or neither of exposure and outcome must be provided")
+        has_explicit_context = (
+            self.registry_data is not None or self.state_data is not None
+        )
+        if (
+            self.compatibility_metric != "similarity_rate"
+            and has_explicit_context
+            and self.exposure is None
         ):
             raise ValueError(
                 f"compatibility_metric '{self.compatibility_metric}' requires "
-                "both exposure and outcome"
+                "both exposure and outcome with an explicit analysis context"
             )
+        return self
+
+    @model_validator(mode="after")
+    def validate_crux_request(self):
+        if self.crux_mode == "global":
+            if self.global_status is None:
+                raise ValueError(
+                    "crux_mode='global' requires global_status "
+                    "('causal' or 'non-causal')"
+                )
+            if self.component_id is not None:
+                raise ValueError("global crux does not accept component_id")
+            if self.mode == "two-stage":
+                raise ValueError("global crux does not support two-stage mode")
+            if self.synergistic_set_size is not None:
+                raise ValueError("global crux does not support synergistic sets")
+        else:
+            if self.global_status is not None:
+                raise ValueError("global_status is only valid with crux_mode='global'")
         return self
 
 
@@ -223,7 +250,10 @@ class SimulateRequest(BaseModel):
 
     # Which compatibility metric drives the scenario
     compatibility_metric: CompatibilityMetric = "similarity_rate"
-    resolution_strategy: Literal["condition", "update_unknowns"] = "condition"
+
+    # Crux semantics (only used by lynchpin/crux scenarios)
+    crux_mode: Literal["marginal", "global"] = "marginal"
+    global_status: Literal["causal", "non-causal"] | None = None
 
     # Retained for validation of clients using the former simulation option.
     include_bidirectional: bool = False
@@ -233,12 +263,32 @@ class SimulateRequest(BaseModel):
         has_registry = self.registry_data is not None
         has_states = self.state_data is not None
         is_seeded = has_registry or has_states
+        is_crux_scenario = self.scenario in (
+            "lynchpin_of_certainty",
+            "crux_of_certainty",
+        )
 
         if self.include_bidirectional:
             raise ValueError(
                 "Simulations support directed components only; "
                 "include_bidirectional must be false"
             )
+
+        if not is_crux_scenario and (
+            self.crux_mode != "marginal" or self.global_status is not None
+        ):
+            raise ValueError(
+                "crux_mode and global_status only apply to "
+                "lynchpin_of_certainty and crux_of_certainty scenarios"
+            )
+        if is_crux_scenario and self.crux_mode == "global":
+            if self.global_status is None:
+                raise ValueError(
+                    "crux_mode='global' requires global_status "
+                    "('causal' or 'non-causal')"
+                )
+        elif is_crux_scenario and self.global_status is not None:
+            raise ValueError("global_status is only valid with crux_mode='global'")
 
         if self.registry_data is not None and any(
             row.direction == "<->" for row in self.registry_data

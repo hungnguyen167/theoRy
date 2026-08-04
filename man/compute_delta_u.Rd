@@ -14,7 +14,8 @@ compute_delta_u(
   synergistic_search = c("greedy", "beam"),
   synergistic_beam_width = NULL,
   compatibility_metric = c("similarity_rate", "mas_compatible", "identified_compatible"),
-  resolution_strategy = c("condition", "update_unknowns"),
+  crux_mode = c("marginal", "global"),
+  global_status = NULL,
   device = c("auto", "cpu", "cuda"),
   use_tensor_engine = TRUE,
   url = getOption("theoRy.engine_url", "http://localhost:8000")
@@ -56,12 +57,15 @@ least 2.}
 causal metrics require \code{exposure} and \code{outcome} in the dyads'
 \code{theory_context} attribute.}
 
-\item{resolution_strategy}{How hypothetical resolutions are evaluated.
-\code{"condition"} (default) conditions on the model context supporting
-each positive or negative resolution and recomputes compatibility only
-among the retained models and dyads; it does not rewrite model claims.
-\code{"update_unknowns"} instead updates applicable unknown claims to the
-hypothetical status, preserving the earlier mutation-based semantics.}
+\item{crux_mode}{Crux semantics: \code{"marginal"} (default) ranks each
+uncertain component by evaluating both causal and non-causal resolutions;
+\code{"global"} resolves every applicable unknown edge instance to a
+single user-selected status and compares the remapped multiverse against
+the unchanged baseline.}
+
+\item{global_status}{Required status for \code{crux_mode = "global"}:
+\code{"causal"} or \code{"non-causal"}. Must be \code{NULL} in marginal
+mode.}
 
 \item{device}{Compute device: \code{"auto"} (default), \code{"cpu"}, or
 \code{"cuda"}.  \code{"cuda"} requires a CUDA-capable GPU with PyTorch.}
@@ -81,19 +85,18 @@ By default, a data frame with columns:
   \item{source}{Node source name}
   \item{target}{Node target name (\code{NA} for nodes)}
   \item{delta_u}{Delta-U score (mean compatibility improvement)}
-  \item{best_resolution}{Recommended resolution (\code{"positive"},
-    \code{"negative"}, or \code{"none"})}
+  \item{best_resolution}{Recommended resolution (\code{"causal"},
+    \code{"non-causal"}, or \code{"none"})}
   \item{dyads_improved}{Number of dyads that improved}
   \item{dyads_worsened}{Number of dyads that worsened}
   When supplied by the backend, the data frame also includes
-  \code{baseline_compatibility}, \code{post_compatibility_positive},
-  \code{post_compatibility_negative}, \code{models_retained_positive},
-  \code{models_retained_negative}, \code{dyads_retained_positive},
-  \code{dyads_retained_negative}, \code{context_coverage_positive},
-  \code{context_coverage_negative}, and \code{resolution_strategy}.
+  \code{baseline_compatibility}, \code{post_compatibility_causal},
+  \code{post_compatibility_non_causal}, \code{models_changed_causal},
+  \code{models_changed_non_causal}, \code{mapping_coverage_causal},
+  \code{mapping_coverage_non_causal}, and \code{crux_mode}.
 
   When \code{component_id} is supplied, a one-row data frame with the
-  same columns plus \code{delta_u_positive} and \code{delta_u_negative}.
+  same columns plus \code{delta_u_causal} and \code{delta_u_non_causal}.
 
   When \code{synergistic_set_size} is supplied, a list with components
   \code{rankings} (data frame) and \code{synergistic_sets} (data frame
@@ -101,6 +104,14 @@ By default, a data frame with columns:
   \code{delta_u_individual_sum}, \code{synergy_score}, \code{label}).
   The returned data frame or list has a \code{compatibility_metric}
   attribute recording the selected metric.
+
+  With \code{crux_mode = "global"}, a one-row data frame with
+  \code{crux_mode}, \code{target_status}, \code{feasible},
+  \code{baseline_compatibility}, \code{post_compatibility},
+  \code{compatibility_change}, \code{delta_u}, \code{model_count},
+  \code{dyad_count}, \code{models_changed}, \code{unknown_instances_forced},
+  \code{dyads_improved}, \code{dyads_worsened}, and
+  \code{mapping_coverage}.
 }
 \description{
 Identifies which theoretical claims, if resolved, would maximize global
@@ -121,14 +132,19 @@ in at least one model where the edge is applicable are considered as
 candidates.  Absent nodes and inapplicable edges are excluded from
 default Delta-U candidate selection.
 
-Edge components respect temporal integrity: forcing an edge to
-\code{"causal"} is skipped when both endpoint timings are known and
-\code{timing(source) >= timing(target)}.
+Both crux modes are \emph{model-remapping} analyses: hypothetical
+resolutions never mutate model claims and never recompute causal profiles.
+Each affected model is mapped to the existing multiverse model whose
+semantic state (node presence, applicable edge statuses, timing,
+constraints) is identical except for the resolved edge(s), and the mapped
+models' existing dyad records are reused.  The model and dyad counts are
+preserved.  This requires a \emph{resolution-closed} multiverse; when an
+exact match is missing, marginal ranking and strict resolutions fail with
+a completion-coverage error instead of synthesizing new models.
 
-With \code{resolution_strategy = "condition"}, causal profiles and dyad
-scores are computed once and every resolution reuses the corresponding
-submultiverse. The legacy \code{"update_unknowns"} strategy may be slower
-because affected causal profiles and dyads must be recomputed.
+Edge components respect temporal integrity and joint acyclicity: a
+resolution that would violate timing or create a cycle is reported as
+infeasible rather than silently skipped.
 }
 \examples{
 \dontrun{

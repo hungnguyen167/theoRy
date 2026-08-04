@@ -10,11 +10,13 @@ analyze_theory(
   exposure = NULL,
   outcome = NULL,
   prior_model = NULL,
-  mode = c("sampled", "exhaustive", "symbolic"),
+  mode = c("exhaustive", "sampled", "symbolic"),
   n_models = 200L,
   seed = 42L,
   node_policy = c("all-present", "vary"),
   top_k = 10L,
+  crux_mode = c("marginal", "global"),
+  global_status = NULL,
   plot = FALSE,
   eps = 0.5,
   min_samples = 5L,
@@ -49,8 +51,11 @@ and collected in interactive mode.}
 cluster detection contrast analysis. When \code{NULL} (default),
 ghost detection is skipped.}
 
-\item{mode}{Model expansion mode: \code{"symbolic"} (default for symbolic),
-\code{"sampled"}, or \code{"exhaustive"}.}
+\item{mode}{Model expansion mode: \code{"exhaustive"} (default),
+\code{"sampled"}, or \code{"symbolic"}. Concrete marginal/global crux
+analysis requires a resolution-closed multiverse. Sampled expansion is
+therefore suitable only when the resulting sample is resolution-closed;
+otherwise Delta-U reports a completion-coverage error.}
 
 \item{n_models}{Number of models to sample in \code{"sampled"} mode.
 Defaults to 200.}
@@ -65,6 +70,15 @@ models with variable node scope. With \code{"vary"}, both
 
 \item{top_k}{Maximum number of components to return in the Delta-U
 ranking. Defaults to 10.}
+
+\item{crux_mode}{Crux semantics forwarded to
+\code{\link{compute_delta_u}}: \code{"marginal"} (default) ranks
+uncertain components; \code{"global"} resolves every applicable unknown
+edge instance to one status. Not available in symbolic mode.}
+
+\item{global_status}{Required status (\code{"causal"} or
+\code{"non-causal"}) for \code{crux_mode = "global"}. Must be
+\code{NULL} in marginal mode.}
 
 \item{plot}{Logical. When \code{TRUE}, generate standard plots
 (dyad heatmap, crux ranking, cluster embedding when available).
@@ -82,8 +96,12 @@ Defaults to \code{FALSE}.}
 questionnaire before the analysis and prints a programmatic call that
 recreates the selected multiverse.}
 
-\item{constraints, include_bidirectional, time_points, timing_options, }{optional_nodes Registry options forwarded to
+\item{constraints, include_bidirectional, time_points, timing_options}{Registry
+options forwarded to
 \code{build_component_registry()} in programmatic mode.}
+
+\item{optional_nodes}{Character vector of nodes allowed to be absent,
+forwarded to \code{build_component_registry()} in programmatic mode.}
 
 \item{max_models, allow_large}{Expansion safety controls forwarded to
 \code{expand_model_states()}.}

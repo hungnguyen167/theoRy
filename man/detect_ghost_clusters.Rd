@@ -103,13 +103,13 @@ When ghost clusters are detected, a summary message is printed showing
 the number of ghost clusters, total models, and the top ghost cluster
 with representative models.
 
-DBSCAN's \\code{eps} is a sensitivity parameter rather than a fixed
+DBSCAN's \code{eps} is a sensitivity parameter rather than a fixed
 substantive threshold, especially after UMAP because UMAP coordinates have
 arbitrary scale. For small synthetic simulations, use
-\\code{min_samples = 2} and consider a sweep over plausible \\code{eps}
+\code{min_samples = 2} and consider a sweep over plausible \code{eps}
 values. A robust ghost-cluster result should appear across a stable plateau
-of \\code{eps} values, not only at one narrow setting. A practical default
-reporting rule is to choose the smallest \\code{eps} in the plateau that
+of \code{eps} values, not only at one narrow setting. A practical default
+reporting rule is to choose the smallest \code{eps} in the plateau that
 gives the expected number of clusters with no noise points and the same
 ghost-cluster count.
 }

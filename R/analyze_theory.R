@@ -38,10 +38,19 @@
 #'   ranking. Defaults to 10.
 #' @param crux_mode Crux semantics forwarded to
 #'   \code{\link{compute_delta_u}}: \code{"marginal"} (default) ranks
-#'   uncertain components; \code{"global"} resolves every applicable unknown
-#'   edge instance to one status. Not available in symbolic mode.
-#' @param global_status Required status (\code{"causal"} or
-#'   \code{"non-causal"}) for \code{crux_mode = "global"}. Must be
+#'   applicable edges that are unknown in at least one model; \code{"global"}
+#'   ranks each non-preset edge after
+#'   evaluating both causal and non-causal global forcing directions across
+#'   every model where that edge is applicable, including unknown and opposite
+#'   resolved statuses. In either concrete mode, only a hypothetical directed
+#'   causal branch can exclude timing-ineligible model slots (missing endpoint
+#'   timing or source timing greater than or equal to target timing); the
+#'   original baseline is not mutated, and non-causal/bidirected branches do
+#'   not timing-prune. Not available in symbolic mode.
+#' @param global_status Deprecated compatibility argument retained for callers
+#'   of earlier releases. When supplied in global mode it must be
+#'   \code{"causal"} or \code{"non-causal"}, is ignored because both
+#'   directions are evaluated, and is not sent to the backend. It must be
 #'   \code{NULL} in marginal mode.
 #' @param plot Logical. When \code{TRUE}, generate standard plots
 #'   (dyad heatmap, crux ranking, cluster embedding when available).
@@ -75,8 +84,16 @@
 #'   \item{summary}{Character vector of human-readable key findings, including
 #'     model and non-outcome-node counts, available-dyad compatibility
 #'     percentages, the most common MAS, the MAS uniquely enabling the most
-#'     compatible model dyads, the top Delta-U crux, and available ghost-cluster
-#'     counts. With \code{node_policy = "vary"}, the summary also identifies
+#'     compatible model dyads, a single one-line summary entry (with component
+#'     descriptions separated by semicolons) containing the selected concrete
+#'     crux mode heading and up to the top three ranked Delta-U components, and
+#'     available ghost-cluster counts. Each
+#'     reported crux includes its component ID, edge direction/source-target,
+#'     recommended resolution, and Delta-U. With
+#'     timing-pruned models, the selected best-resolution line also reports a
+#'     concise branch-specific timing-pruned model count; per-direction model
+#'     and dyad counts remain available in \code{delta_u_rankings}. With
+#'     \code{node_policy = "vary"}, the summary also identifies
 #'     the relevant node most often differing between identified-incompatible
 #'     pairs where both effects and both relevant-node sets are available.}
 #'   \item{plots}{Named list of \code{ggplot} objects or \code{NULL} when
@@ -132,14 +149,9 @@ analyze_theory <- function(nodes = NULL,
   input_mode <- match.arg(input_mode)
   causal_backend <- match.arg(causal_backend)
   crux_mode <- match.arg(crux_mode)
-  if (!is.null(global_status)) {
+  if (identical(crux_mode, "global") && !is.null(global_status)) {
     global_status <- match.arg(global_status, c("causal", "non-causal"))
-  }
-  if (identical(crux_mode, "global") && is.null(global_status)) {
-    stop("global_status ('causal' or 'non-causal') is required when ",
-         "crux_mode = 'global'.", call. = FALSE)
-  }
-  if (identical(crux_mode, "marginal") && !is.null(global_status)) {
+  } else if (identical(crux_mode, "marginal") && !is.null(global_status)) {
     stop("global_status is only valid with crux_mode = 'global'.",
          call. = FALSE)
   }
@@ -349,27 +361,10 @@ analyze_theory <- function(nodes = NULL,
     )
   )
 
-  if (is.data.frame(delta_u) && nrow(delta_u) > 0) {
-    if (identical(delta_u$crux_mode[1], "global")) {
-      summary <- c(
-        summary,
-        sprintf("Global crux (%s): compatibility %.4f -> %.4f (change %+.4f)",
-                delta_u$target_status[1],
-                delta_u$baseline_compatibility[1],
-                delta_u$post_compatibility[1],
-                delta_u$compatibility_change[1])
-      )
-    } else {
-      top <- delta_u[1, ]
-      src <- top$source %||% ""
-      tgt <- top$target %||% ""
-      resolution <- top$best_resolution %||% "none"
-      summary <- c(summary, sprintf(
-        "Top crux: %s (%s \u2192 %s, resolution = %s, delta_u = %.4f)",
-        top$component_id, src, tgt, resolution, top$delta_u
-      ))
-    }
-  }
+  summary <- c(
+    summary,
+    .analyze_theory_crux_summary(delta_u, crux_mode = crux_mode)
+  )
 
   if (!is.null(ghost_result) &&
       is.data.frame(ghost_result$ghost_clusters) &&
@@ -384,8 +379,7 @@ analyze_theory <- function(nodes = NULL,
     plots <- list()
     plots$dyad_heatmap <- plot_dyad_heatmap(dyads)
 
-    if (is.data.frame(delta_u) && nrow(delta_u) > 0 &&
-        !identical(delta_u$crux_mode[1], "global")) {
+    if (is.data.frame(delta_u) && nrow(delta_u) > 0) {
       plots$crux_ranking <- plot_lynchpin_ranking(delta_u)
     }
 
@@ -406,7 +400,6 @@ analyze_theory <- function(nodes = NULL,
         node_policy = node_policy,
         top_k = top_k,
         crux_mode = crux_mode,
-        global_status = global_status,
         plot = plot,
         eps = eps,
         min_samples = min_samples,
@@ -441,14 +434,17 @@ analyze_theory <- function(nodes = NULL,
                                                node_policy,
                                                top_k,
                                                crux_mode,
-                                               global_status,
                                                plot,
                                                eps,
                                                min_samples,
                                                url,
                                                max_models,
                                                allow_large,
-                                               causal_backend) {
+                                               causal_backend,
+                                               global_status = NULL) {
+  # Retain the internal argument for callers built against the previous
+  # helper signature, but deliberately omit it from the reproduced call.
+  invisible(global_status)
   nodes <- as.character(registry$source[registry$type == "node"])
   timing_options <- attr(registry, "timing_options")
   timing <- unname(vapply(nodes, function(node) {
@@ -469,7 +465,6 @@ analyze_theory <- function(nodes = NULL,
     list("node_policy", node_policy),
     list("top_k", as.integer(top_k)),
     list("crux_mode", crux_mode),
-    list("global_status", global_status),
     list("plot", isTRUE(plot)),
     list("eps", eps),
     list("min_samples", as.integer(min_samples)),
@@ -500,6 +495,121 @@ analyze_theory <- function(nodes = NULL,
   }
 
   c("result <- analyze_theory(", unlist(lines, use.names = FALSE), ")")
+}
+
+
+.analyze_theory_crux_summary <- function(rankings,
+                                         crux_mode,
+                                         top_n = 3L) {
+  if (!is.data.frame(rankings) || nrow(rankings) == 0L) {
+    return(character(0))
+  }
+
+  required <- c("component_id", "source", "target", "delta_u",
+                "best_resolution")
+  if (!all(required %in% names(rankings))) {
+    return(character(0))
+  }
+
+  top_n <- max(1L, as.integer(top_n))
+  rank_values <- if ("rank" %in% names(rankings)) {
+    suppressWarnings(as.numeric(as.character(rankings$rank)))
+  } else {
+    rep(NA_real_, nrow(rankings))
+  }
+  rank_order <- rank_values
+  rank_order[is.na(rank_order)] <- Inf
+  component_values <- as.character(rankings$component_id)
+  source_values <- as.character(rankings$source)
+  target_values <- as.character(rankings$target)
+  direction_values <- if ("direction" %in% names(rankings)) {
+    as.character(rankings$direction)
+  } else {
+    rep(NA_character_, nrow(rankings))
+  }
+  component_values[is.na(component_values)] <- ""
+  source_values[is.na(source_values)] <- ""
+  target_values[is.na(target_values)] <- ""
+  direction_values[is.na(direction_values) | !nzchar(direction_values)] <- "->"
+
+  ordering <- order(
+    rank_order, component_values, source_values, target_values,
+    direction_values, method = "radix"
+  )
+  selected <- ordering[seq_len(min(top_n, length(ordering)))]
+
+  resolution_values <- as.character(rankings$best_resolution)
+  resolution_values[resolution_values %in% c("positive", "causal")] <- "causal"
+  resolution_values[resolution_values %in% c("negative", "non-causal")] <-
+    "non-causal"
+  resolution_values[is.na(resolution_values) | !nzchar(resolution_values)] <-
+    "none"
+
+  lines <- vapply(seq_along(selected), function(position) {
+    i <- selected[[position]]
+    component <- component_values[[i]]
+    if (!nzchar(component)) component <- "unknown component"
+    source <- source_values[[i]]
+    target <- target_values[[i]]
+    direction <- direction_values[[i]]
+    edge_label <- if (nzchar(target)) {
+      paste(source, direction, target)
+    } else {
+      source
+    }
+    if (!nzchar(edge_label)) edge_label <- "unknown edge"
+
+    delta <- suppressWarnings(as.numeric(rankings$delta_u[[i]]))
+    delta_label <- if (is.na(delta)) "NA" else sprintf("%.4f", delta)
+    display_rank <- rank_values[[i]]
+    if (is.na(display_rank)) display_rank <- position
+    pruned_count <- .analyze_theory_crux_pruned_count(
+      rankings, i, resolution_values[[i]]
+    )
+    pruning_label <- if (pruned_count > 0L) {
+      sprintf(", timing-pruned models = %d", pruned_count)
+    } else {
+      ""
+    }
+    sprintf(
+      "%d. %s (%s, resolution = %s, delta_u = %s%s)",
+      as.integer(display_rank), component, edge_label,
+      resolution_values[[i]], delta_label, pruning_label
+    )
+  }, character(1), USE.NAMES = FALSE)
+
+  paste0(
+    sprintf("Top crux components (%s):", crux_mode), " ",
+    paste(lines, collapse = "; ")
+  )
+}
+
+
+.analyze_theory_crux_pruned_count <- function(rankings, row, resolution) {
+  branch <- switch(
+    resolution,
+    causal = "causal",
+    `non-causal` = "non_causal",
+    NULL
+  )
+  if (is.null(branch)) return(0L)
+
+  count_field <- paste0("models_pruned_", branch)
+  ids_field <- paste0("timing_pruned_models_", branch)
+  count <- NA_integer_
+  if (count_field %in% names(rankings)) {
+    count <- suppressWarnings(as.integer(rankings[[count_field]][[row]]))
+  }
+
+  if (is.na(count) && ids_field %in% names(rankings)) {
+    ids <- rankings[[ids_field]][[row]]
+    if (is.list(ids)) {
+      ids <- unlist(ids, recursive = TRUE, use.names = FALSE)
+    }
+    count <- if (is.null(ids)) 0L else as.integer(length(ids))
+  }
+
+  if (is.na(count) || count < 1L) 0L else count
 }
 
 

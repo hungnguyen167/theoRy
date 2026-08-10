@@ -161,6 +161,7 @@ class ModelStateExpander:
             "timing_assignments_considered": 0,
             "timing_assignments_pruned": 0,
             "required_edge_assignments_pruned": 0,
+            "temporal_edge_statuses_pruned": 0,
             "temporal_edge_assignments_pruned": 0,
             "cycle_models_pruned": 0,
             "projected_model_count": 0,
@@ -395,16 +396,21 @@ class ModelStateExpander:
                         fixed_edges.append(cid)
                         continue
 
-                    if directed and strict_timing and not temporally_eligible:
-                        report["temporal_edge_assignments_pruned"] += 1
-                        continue
-
                     statuses = (
                         list(edge_statuses) if directed else list(bidirected_statuses)
                     )
-                    if directed and not strict_timing and not temporally_eligible:
+                    if directed and not temporally_eligible:
+                        before = len(statuses)
                         statuses = [status for status in statuses if status != "causal"]
+                        report["temporal_edge_statuses_pruned"] += before - len(
+                            statuses
+                        )
                     if not statuses:
+                        # No requested status can represent this mutable edge
+                        # under the timing assignment, so the whole timing
+                        # assignment is explicitly discarded.  When any
+                        # non-causal status remains, the edge component stays
+                        # in the model with the reduced status dimension.
                         report["temporal_edge_assignments_pruned"] += 1
                         valid = False
                         break

@@ -35,6 +35,16 @@ def _compute_delta_stats(
     return improved, worsened, mean_delta
 
 
+_DYAD_CHANGE_SCOPE = "retained_aligned_pairs"
+
+
+def _rounded_tensor_mean(scores: torch.Tensor) -> float | None:
+    """Return an order-stable rounded mean for compatibility scores."""
+    if scores.numel() == 0:
+        return None
+    return round(float(scores.double().mean().item()), _ROUND_DECIMALS)
+
+
 class DeltaUEngine:
     """Concrete crux engine with marginal and global resolution semantics.
 
@@ -46,9 +56,11 @@ class DeltaUEngine:
       analysis model where the edge is applicable and unknown is remapped to
       the existing model whose semantic state is identical except for that
       edge. Post-resolution compatibility is computed from the copied dyads.
-    - ``global`` resolves every applicable unknown edge instance in the
-      analysis multiverse to a single user-selected status and compares the
-      remapped multiverse against the unchanged baseline.
+    - ``global`` ranks edge components.  For each component and target status,
+      every applicable model whose current status differs from the target is
+      remapped to an existing model with only that component changed.  The
+      legacy ``compute_global_crux`` method retains its collective,
+      unknown-only behavior for the simulation suite.
     """
 
     def __init__(
@@ -110,25 +122,10 @@ class DeltaUEngine:
         unknown_models = self._models_with_unknown_applicable_edge(
             component_id, state, registry, analysis_ids
         )
-        if not unknown_models:
-            result = {
-                "component_id": component_id,
-                "delta_u_causal": 0.0,
-                "delta_u_non_causal": 0.0,
-                "delta_u": 0.0,
-                "best_resolution": "none",
-                "dyads_improved": 0,
-                "dyads_worsened": 0,
-                "crux_mode": "marginal",
-            }
-            return self._enrich_metadata([result], registry)[0]
-
         self._validate_dyad_universe(dyads, analysis_ids)
         self._validate_baseline_metric(dyads)
         baseline_scores = self._scorer.score_dyads(dyads)
-        baseline_compatibility = round(
-            float(baseline_scores.mean().item()), _ROUND_DECIMALS
-        )
+        baseline_compatibility = _rounded_tensor_mean(baseline_scores)
         index = CompletionIndex(state, registry)
 
         pos = self._marginal_branch(
@@ -155,7 +152,10 @@ class DeltaUEngine:
         )
 
         for target_status, branch in (("causal", pos), ("non-causal", neg)):
-            if branch["mapping_coverage"] < 1.0:
+            if (
+                branch["mapping_coverage"] < 1.0
+                and not branch["insufficient_post_models"]
+            ):
                 missing = branch["invalid_models"] + branch["unmatched_models"]
                 raise DeltaUError(
                     f"Marginal crux is unavailable for {component_id} resolved "
@@ -202,9 +202,14 @@ class DeltaUEngine:
             "best_resolution": best,
             "dyads_improved": best_stats["improved"],
             "dyads_worsened": best_stats["worsened"],
+            "feasible": pos["feasible"] or neg["feasible"],
+            "feasible_causal": pos["feasible"],
+            "feasible_non_causal": neg["feasible"],
             "baseline_compatibility": baseline_compatibility,
             "post_compatibility_causal": pos.get("post_compatibility"),
             "post_compatibility_non_causal": neg.get("post_compatibility"),
+            "compatibility_change_causal": pos.get("delta"),
+            "compatibility_change_non_causal": neg.get("delta"),
             "models_changed_causal": pos.get("models_changed"),
             "models_changed_non_causal": neg.get("models_changed"),
             "instances_forced_causal": pos.get("instances_forced"),
@@ -215,6 +220,28 @@ class DeltaUEngine:
             "invalid_models_non_causal": neg.get("invalid_models"),
             "unmatched_models_causal": pos.get("unmatched_models"),
             "unmatched_models_non_causal": neg.get("unmatched_models"),
+            "timing_pruned_models_causal": pos["timing_pruned_models"],
+            "timing_pruned_models_non_causal": neg["timing_pruned_models"],
+            "models_pruned_causal": len(pos["timing_pruned_models"]),
+            "models_pruned_non_causal": len(neg["timing_pruned_models"]),
+            "model_count": len(analysis_ids),
+            "dyad_count": len(dyads),
+            "post_model_count_causal": pos["post_model_count"],
+            "post_model_count_non_causal": neg["post_model_count"],
+            "post_dyad_count_causal": pos["post_dyad_count"],
+            "post_dyad_count_non_causal": neg["post_dyad_count"],
+            "post_dyad_length_causal": pos["post_dyad_count"],
+            "post_dyad_length_non_causal": neg["post_dyad_count"],
+            "insufficient_post_models_causal": pos["insufficient_post_models"],
+            "insufficient_post_models_non_causal": neg["insufficient_post_models"],
+            # Compatibility changes use the retained post universe, while the
+            # improved/worsened counts below compare only aligned retained pairs.
+            "dyad_change_scope_causal": pos["dyad_change_scope"],
+            "dyad_change_scope_non_causal": neg["dyad_change_scope"],
+            "dyads_improved_causal": pos["improved"],
+            "dyads_improved_non_causal": neg["improved"],
+            "dyads_worsened_causal": pos["worsened"],
+            "dyads_worsened_non_causal": neg["worsened"],
             "crux_mode": "marginal",
         }
         return self._enrich_metadata([result], registry)[0]
@@ -348,10 +375,42 @@ class DeltaUEngine:
         )
         if not unknown_models:
             return [dict(dyad) for dyad in dyads]
-        mapping = self._build_resolution_mapping(
-            component_id, target_status, unknown_models, state, dyads, registry
+
+        timing_pruned = self._timing_pruned_models(
+            component_id,
+            target_status,
+            unknown_models,
+            state,
+            registry,
         )
-        return self._remap_dyads(mapping, dyads, analysis_ids, state, registry)
+        pruned_set = set(timing_pruned)
+        post_model_ids = [mid for mid in analysis_ids if mid not in pruned_set]
+        retained_unknown = [mid for mid in unknown_models if mid not in pruned_set]
+
+        # Marginal causal timing pruning removes model slots from this
+        # hypothetical universe.  A one-model universe has no directed dyads,
+        # but is still a well-defined reduced result for simulation callers.
+        if len(post_model_ids) < 2:
+            return self._subset_dyads(dyads, post_model_ids)
+
+        mapping = self._build_resolution_mapping(
+            component_id,
+            target_status,
+            retained_unknown,
+            state,
+            dyads,
+            registry,
+            allowed_model_ids=set(post_model_ids),
+        )
+        if not mapping:
+            return self._subset_dyads(dyads, post_model_ids)
+        return self._remap_dyads(
+            mapping,
+            dyads,
+            post_model_ids,
+            state,
+            registry,
+        )
 
     def rank_lynchpins(
         self,
@@ -361,12 +420,38 @@ class DeltaUEngine:
         top_k: int = 10,
         mode: str = "exhaustive",
         heatmap_threshold: float | None = None,
+        *,
+        crux_mode: str | None = None,
     ) -> list[dict]:
-        """Rank uncertain components by marginal Delta-U."""
+        """Rank components by marginal or global Delta-U semantics.
+
+        The engine's configured ``crux_mode`` is used by default.  The
+        keyword-only override is retained for callers that select the mode at
+        the ranking call site; it is primarily useful for selecting the new
+        global component-ranking path without changing the engine instance.
+        """
         if top_k <= 0:
             raise DeltaUError("top_k must be positive")
-        if self._crux_mode == "global":
-            raise DeltaUError("global crux does not produce component rankings")
+
+        selected_crux_mode = self._crux_mode if crux_mode is None else crux_mode
+        if selected_crux_mode not in ("marginal", "global"):
+            raise DeltaUError("crux_mode must be 'marginal' or 'global'")
+        if (
+            crux_mode is not None
+            and self._crux_mode == "global"
+            and crux_mode != "global"
+        ):
+            raise DeltaUError("a global Delta-U engine cannot rank marginal components")
+
+        if selected_crux_mode == "global":
+            if mode == "two-stage":
+                raise DeltaUError("global crux does not support two-stage mode")
+            return self._rank_global_lynchpins(
+                state,
+                dyads,
+                registry,
+                top_k=top_k,
+            )
 
         uncertain = self._uncertain_applicable_edges(
             state, registry, self._analysis_model_ids(state)
@@ -398,7 +483,10 @@ class DeltaUEngine:
         for entry in final:
             if (
                 entry.get("mapping_coverage_causal", 1.0) < 1.0
-                or entry.get("mapping_coverage_non_causal", 1.0) < 1.0
+                and not entry.get("insufficient_post_models_causal", False)
+            ) or (
+                entry.get("mapping_coverage_non_causal", 1.0) < 1.0
+                and not entry.get("insufficient_post_models_non_causal", False)
             ):
                 missing = [
                     m
@@ -422,6 +510,458 @@ class DeltaUEngine:
             entry["rank"] = i + 1
 
         return self._enrich_metadata(ranked, registry)
+
+    def _rank_global_lynchpins(
+        self,
+        state: StateTensor,
+        dyads: list[dict],
+        registry: ComponentRegistry,
+        *,
+        top_k: int,
+    ) -> list[dict]:
+        """Rank each applicable, non-fixed edge under global semantics.
+
+        Unlike marginal resolution, a global branch changes every applicable
+        model whose current status differs from the branch target.  The
+        changed model is then remapped to an existing model with exactly the
+        target component changed.  A causal branch may reduce its hypothetical
+        model/dyad universe by pruning timing-ineligible applicable slots; the
+        baseline state and full baseline dyads remain unchanged.
+        """
+        analysis_ids = self._analysis_model_ids(state)
+        candidates = self._global_applicable_edge_ids(state, registry, analysis_ids)
+        if not candidates:
+            logger.info("No applicable non-fixed edges - no global crux candidates")
+            return []
+
+        self._validate_dyad_universe(dyads, analysis_ids)
+        self._validate_baseline_metric(dyads)
+        baseline_scores = self._scorer.score_dyads(dyads)
+        baseline_compatibility = _rounded_tensor_mean(baseline_scores)
+        index = CompletionIndex(state, registry)
+
+        results: list[dict] = []
+        for component_id in candidates:
+            branches = {
+                target: self._global_branch(
+                    component_id,
+                    target,
+                    state,
+                    dyads,
+                    registry,
+                    analysis_ids,
+                    index,
+                    baseline_scores,
+                    baseline_compatibility,
+                )
+                for target in ("causal", "non-causal")
+            }
+
+            causal = branches["causal"]
+            non_causal = branches["non-causal"]
+            causal_delta = causal["delta"] if causal["feasible"] else None
+            non_causal_delta = non_causal["delta"] if non_causal["feasible"] else None
+
+            best, best_branch = self._pick_best_direction(
+                causal_delta,
+                non_causal_delta,
+                causal,
+                non_causal,
+            )
+            feasible_deltas = [
+                delta for delta in (causal_delta, non_causal_delta) if delta is not None
+            ]
+            delta_u = round(max((*feasible_deltas, 0.0)), _ROUND_DECIMALS)
+
+            result = {
+                "component_id": component_id,
+                "delta_u_causal": causal_delta,
+                "delta_u_non_causal": non_causal_delta,
+                "delta_u": delta_u,
+                "best_resolution": best,
+                "feasible": causal["feasible"] or non_causal["feasible"],
+                "dyads_improved": best_branch["improved"],
+                "dyads_worsened": best_branch["worsened"],
+                "baseline_compatibility": baseline_compatibility,
+                "post_compatibility_causal": causal["post_compatibility"],
+                "post_compatibility_non_causal": non_causal["post_compatibility"],
+                "compatibility_change_causal": causal_delta,
+                "compatibility_change_non_causal": non_causal_delta,
+                "models_changed_causal": causal["models_changed"],
+                "models_changed_non_causal": non_causal["models_changed"],
+                "instances_forced_causal": causal["instances_forced"],
+                "instances_forced_non_causal": non_causal["instances_forced"],
+                "mapping_coverage_causal": causal["mapping_coverage"],
+                "mapping_coverage_non_causal": non_causal["mapping_coverage"],
+                "feasible_causal": causal["feasible"],
+                "feasible_non_causal": non_causal["feasible"],
+                "invalid_models_causal": causal["invalid_models"],
+                "invalid_models_non_causal": non_causal["invalid_models"],
+                "unmatched_models_causal": causal["unmatched_models"],
+                "unmatched_models_non_causal": non_causal["unmatched_models"],
+                "dyads_improved_causal": causal["improved"],
+                "dyads_improved_non_causal": non_causal["improved"],
+                "dyads_worsened_causal": causal["worsened"],
+                "dyads_worsened_non_causal": non_causal["worsened"],
+                "timing_pruned_models_causal": causal["timing_pruned_models"],
+                "timing_pruned_models_non_causal": non_causal["timing_pruned_models"],
+                "models_pruned_causal": len(causal["timing_pruned_models"]),
+                "models_pruned_non_causal": len(non_causal["timing_pruned_models"]),
+                "model_count": len(analysis_ids),
+                "dyad_count": len(dyads),
+                "post_model_count_causal": causal["post_model_count"],
+                "post_model_count_non_causal": non_causal["post_model_count"],
+                "post_dyad_count_causal": causal["post_dyad_count"],
+                "post_dyad_count_non_causal": non_causal["post_dyad_count"],
+                "post_dyad_length_causal": causal["post_dyad_count"],
+                "post_dyad_length_non_causal": non_causal["post_dyad_count"],
+                "insufficient_post_models_causal": causal["insufficient_post_models"],
+                "insufficient_post_models_non_causal": non_causal[
+                    "insufficient_post_models"
+                ],
+                "dyad_change_scope_causal": causal["dyad_change_scope"],
+                "dyad_change_scope_non_causal": non_causal["dyad_change_scope"],
+                "crux_mode": "global",
+            }
+            results.append(result)
+
+        results.sort(key=lambda r: (-r["delta_u"], r["component_id"]))
+        ranked = results[:top_k]
+        for i, entry in enumerate(ranked):
+            entry["rank"] = i + 1
+        return self._enrich_metadata(ranked, registry)
+
+    @staticmethod
+    def _pick_best_direction(
+        causal_delta: float | None,
+        non_causal_delta: float | None,
+        causal: dict,
+        non_causal: dict,
+    ) -> tuple[str, dict]:
+        """Select a positive direction with marginal tie behavior."""
+        if causal_delta is None and non_causal_delta is None:
+            return "none", {"improved": 0, "worsened": 0}
+        if causal_delta is None:
+            if non_causal_delta is not None and non_causal_delta > _TOLERANCE:
+                return "non-causal", non_causal
+            return "none", {"improved": 0, "worsened": 0}
+        if non_causal_delta is None:
+            if causal_delta > _TOLERANCE:
+                return "causal", causal
+            return "none", {"improved": 0, "worsened": 0}
+        if causal_delta > non_causal_delta:
+            if causal_delta > _TOLERANCE:
+                return "causal", causal
+            return "none", {"improved": 0, "worsened": 0}
+        if non_causal_delta > causal_delta:
+            if non_causal_delta > _TOLERANCE:
+                return "non-causal", non_causal
+            return "none", {"improved": 0, "worsened": 0}
+        if causal_delta > _TOLERANCE:
+            return "causal", causal
+        return "none", {"improved": 0, "worsened": 0}
+
+    def _global_branch(
+        self,
+        component_id: str,
+        target_status: str,
+        state: StateTensor,
+        dyads: list[dict],
+        registry: ComponentRegistry,
+        analysis_ids: list[str],
+        index: CompletionIndex,
+        baseline_scores: torch.Tensor,
+        baseline_compatibility: float,
+    ) -> dict:
+        """Evaluate one global target status for one component."""
+        if target_status not in ("causal", "non-causal"):
+            raise DeltaUError("global target_status must be 'causal' or 'non-causal'")
+
+        applicable_models = [
+            model_id
+            for model_id in analysis_ids
+            if edge_applicable(state, model_id, component_id, registry)
+        ]
+        timing_pruned = self._timing_pruned_models(
+            component_id,
+            target_status,
+            applicable_models,
+            state,
+            registry,
+        )
+        pruned_set = set(timing_pruned)
+        post_model_ids = [mid for mid in analysis_ids if mid not in pruned_set]
+        changed_models = [
+            model_id
+            for model_id in applicable_models
+            if state.get_status(model_id, component_id) != target_status
+        ]
+        instances_forced = len(changed_models)
+        retained_changed_models = [
+            model_id for model_id in changed_models if model_id not in pruned_set
+        ]
+        mapping: dict[str, str] = {}
+        invalid: list[str] = []
+        unmatched: list[str] = []
+        allowed = set(post_model_ids) & self._dyad_model_ids(dyads)
+
+        # A timing-pruned slot is unavailable before hypothetical resolution,
+        # including an already-causal slot with malformed endpoint timing.  Do
+        # not let the usual signature validator turn that timing issue into a
+        # generic invalid-model result.
+        if len(post_model_ids) < 2:
+            return self._unavailable_branch(
+                timing_pruned=timing_pruned,
+                post_model_ids=post_model_ids,
+                instances_forced=instances_forced,
+                mapping_coverage=1.0,
+                models_changed=0,
+                invalid_models=[],
+                unmatched_models=[],
+                insufficient_post_models=True,
+            )
+
+        for model_id in [
+            model_id for model_id in applicable_models if model_id not in pruned_set
+        ]:
+            assignments = {component_id: target_status}
+            signature = index.signature_after_resolution(model_id, assignments)
+            if not index.is_valid_signature(signature):
+                invalid.append(model_id)
+                continue
+            if state.get_status(model_id, component_id) == target_status:
+                continue
+            source = index.matching_model(model_id, assignments, allowed)
+            if source is None:
+                unmatched.append(model_id)
+                continue
+            mapping[model_id] = source
+
+        coverage = (
+            round(len(mapping) / len(retained_changed_models), _ROUND_DECIMALS)
+            if retained_changed_models
+            else 1.0
+        )
+
+        # A valid retained model with no matching resolution is a strict
+        # resolution-closure error, even if another retained model is
+        # intrinsically invalid (for example because it creates a cycle).
+        if unmatched:
+            raise DeltaUError(
+                f"Global crux ranking is unavailable for {component_id} resolved "
+                f"to {target_status!r}: the multiverse is not resolution-closed "
+                f"(unmatched models: {unmatched}; invalid models: {invalid}; "
+                f"mapping coverage: {coverage:.6f}). Supply a resolution-closed "
+                "multiverse (e.g. exhaustive expansion)."
+            )
+
+        # An intrinsically invalid timing/cycle branch is unavailable, so its
+        # feasible opposite direction can still be ranked.  Timing-pruned
+        # models never reach this diagnostic because they were removed above.
+        if invalid:
+            return {
+                "feasible": False,
+                "delta": None,
+                "post_compatibility": None,
+                "models_changed": len(mapping),
+                "instances_forced": instances_forced,
+                "mapping_coverage": coverage,
+                "invalid_models": invalid,
+                "unmatched_models": unmatched,
+                "improved": 0,
+                "worsened": 0,
+                "post_dyads": None,
+                "post_model_count": len(post_model_ids),
+                "post_dyad_count": self._dyad_count(post_model_ids),
+                "timing_pruned_models": timing_pruned,
+                "insufficient_post_models": False,
+                "dyad_change_scope": _DYAD_CHANGE_SCOPE,
+            }
+
+        if not mapping:
+            post_dyads = self._subset_dyads(dyads, post_model_ids)
+        else:
+            post_dyads = self._remap_dyads(
+                mapping,
+                dyads,
+                post_model_ids,
+                state,
+                registry,
+            )
+
+        self._validate_post_dyad_universe(post_dyads, post_model_ids)
+        post_scores = self._scorer.score_dyads(post_dyads)
+        aligned_baseline = self._align_baseline_scores(
+            dyads,
+            baseline_scores,
+            post_dyads,
+        )
+        # ``delta`` is the branch's mean compatibility impact against the
+        # original full baseline.  The improvement counts intentionally use
+        # only aligned retained pairs because pruned pairs have no post score.
+        improved, worsened, _ = _compute_delta_stats(aligned_baseline, post_scores)
+        post_compatibility = _rounded_tensor_mean(post_scores)
+        delta = round(
+            post_compatibility - baseline_compatibility,
+            _ROUND_DECIMALS,
+        )
+        return {
+            "feasible": True,
+            "delta": delta,
+            "post_compatibility": post_compatibility,
+            "models_changed": len(mapping),
+            "instances_forced": instances_forced,
+            "mapping_coverage": coverage,
+            "invalid_models": invalid,
+            "unmatched_models": unmatched,
+            "improved": improved,
+            "worsened": worsened,
+            "post_dyads": post_dyads,
+            "post_model_count": len(post_model_ids),
+            "post_dyad_count": len(post_dyads),
+            "baseline_compatibility": baseline_compatibility,
+            "timing_pruned_models": timing_pruned,
+            "insufficient_post_models": False,
+            "dyad_change_scope": _DYAD_CHANGE_SCOPE,
+        }
+
+    @staticmethod
+    def _dyad_count(model_ids: list[str]) -> int:
+        return len(model_ids) * (len(model_ids) - 1)
+
+    @staticmethod
+    def _subset_dyads(dyads: list[dict], model_ids: list[str]) -> list[dict]:
+        """Copy baseline dyads whose ego and alter slots are retained."""
+        retained = set(model_ids)
+        return [
+            dict(dyad)
+            for dyad in dyads
+            if dyad.get("ego_id") in retained and dyad.get("alter_id") in retained
+        ]
+
+    @staticmethod
+    def _unavailable_branch(
+        *,
+        timing_pruned: list[str],
+        post_model_ids: list[str],
+        instances_forced: int,
+        mapping_coverage: float,
+        models_changed: int,
+        invalid_models: list[str],
+        unmatched_models: list[str],
+        insufficient_post_models: bool,
+    ) -> dict:
+        """Build a branch result without scoring an unavailable universe."""
+        return {
+            "feasible": False,
+            "delta": None,
+            "post_compatibility": None,
+            "models_changed": models_changed,
+            "instances_forced": instances_forced,
+            "mapping_coverage": mapping_coverage,
+            "invalid_models": list(invalid_models),
+            "unmatched_models": list(unmatched_models),
+            "improved": 0,
+            "worsened": 0,
+            "post_dyads": None,
+            "post_model_count": len(post_model_ids),
+            "post_dyad_count": DeltaUEngine._dyad_count(post_model_ids),
+            "timing_pruned_models": list(timing_pruned),
+            "insufficient_post_models": insufficient_post_models,
+            "dyad_change_scope": _DYAD_CHANGE_SCOPE,
+        }
+
+    @staticmethod
+    def _timing_pruned_models(
+        component_id: str,
+        target_status: str,
+        model_ids: list[str],
+        state: StateTensor,
+        registry: ComponentRegistry,
+    ) -> list[str]:
+        """Return causal directed-edge slots excluded by endpoint timing.
+
+        Timing is deliberately not applied to non-causal branches or
+        bidirected edges.  Callers choose the applicable/unknown model set so
+        marginal and global semantics can keep their distinct scopes.
+        """
+        if target_status != "causal":
+            return []
+
+        edge_rows = registry.data[registry.data["comp_id"] == component_id]
+        if edge_rows.empty:
+            return []
+        edge = edge_rows.iloc[0]
+        if edge.get("type") != "edge" or edge.get("direction") != "->":
+            return []
+
+        node_rows = registry.data[registry.data["type"] == "node"]
+        node_ids = {row["source"]: row["comp_id"] for _, row in node_rows.iterrows()}
+        source_id = node_ids.get(edge.get("source"))
+        target_id = node_ids.get(edge.get("target"))
+        pruned: list[str] = []
+        for model_id in model_ids:
+            if source_id is None or target_id is None:
+                pruned.append(model_id)
+                continue
+            source_timing = state.get_timing(model_id, source_id)
+            target_timing = state.get_timing(model_id, target_id)
+            if (
+                source_timing is None
+                or target_timing is None
+                or source_timing >= target_timing
+            ):
+                pruned.append(model_id)
+        return pruned
+
+    @staticmethod
+    def _global_applicable_edge_ids(
+        state: StateTensor,
+        registry: ComponentRegistry,
+        model_ids: list[str],
+    ) -> list[str]:
+        """Return applicable global candidates, excluding fixed causal edges."""
+        candidates: list[str] = []
+        edge_rows = registry.data[registry.data["type"] == "edge"]
+        for _, row in edge_rows.iterrows():
+            component_id = row["comp_id"]
+            if component_id not in state.component_index:
+                continue
+            if component_id not in state._edge_comp_ids:
+                continue
+            if DeltaUEngine._is_fixed_causal_edge(row):
+                continue
+            if any(
+                edge_applicable(state, model_id, component_id, registry)
+                for model_id in model_ids
+            ):
+                candidates.append(component_id)
+        return candidates
+
+    @staticmethod
+    def _is_fixed_causal_edge(row) -> bool:
+        fixed_status = row.get("fixed_status")
+        return isinstance(fixed_status, str) and fixed_status == "causal"
+
+    @staticmethod
+    def _validate_post_dyad_universe(
+        dyads: list[dict],
+        model_ids: list[str],
+    ) -> None:
+        expected_count = len(model_ids) * (len(model_ids) - 1)
+        if len(dyads) != expected_count:
+            raise DeltaUError(
+                "Resolution changed the dyad count: "
+                f"expected {expected_count}, got {len(dyads)}."
+            )
+        expected_pairs = {
+            (ego, alter) for ego in model_ids for alter in model_ids if ego != alter
+        }
+        actual_pairs = {(d.get("ego_id"), d.get("alter_id")) for d in dyads}
+        if actual_pairs != expected_pairs:
+            raise DeltaUError(
+                "Resolution changed the analysis model slots or dyad universe."
+            )
 
     def compute_synergistic_sets(
         self,
@@ -496,11 +1036,38 @@ class DeltaUEngine:
         baseline_scores: torch.Tensor,
         baseline_compatibility: float,
     ) -> dict:
+        timing_pruned = self._timing_pruned_models(
+            component_id,
+            target_status,
+            unknown_models,
+            state,
+            registry,
+        )
+        pruned_set = set(timing_pruned)
+        analysis_ids = self._analysis_model_ids(state)
+        post_model_ids = [mid for mid in analysis_ids if mid not in pruned_set]
+        retained_unknown = [mid for mid in unknown_models if mid not in pruned_set]
+
+        # Timing pruning is a branch-local removal of model slots.  It is not
+        # an invalid signature and therefore must not enter invalid/unmatched
+        # diagnostics or reduce mapping coverage.
+        if len(post_model_ids) < 2:
+            return self._unavailable_branch(
+                timing_pruned=timing_pruned,
+                post_model_ids=post_model_ids,
+                instances_forced=len(unknown_models),
+                mapping_coverage=1.0,
+                models_changed=0,
+                invalid_models=[],
+                unmatched_models=[],
+                insufficient_post_models=True,
+            )
+
         invalid: list[str] = []
         unmatched: list[str] = []
         mapping: dict[str, str] = {}
-        allowed = self._dyad_model_ids(dyads)
-        for mid in unknown_models:
+        allowed = set(post_model_ids) & self._dyad_model_ids(dyads)
+        for mid in retained_unknown:
             assignments = {component_id: target_status}
             signature = index.signature_after_resolution(mid, assignments)
             if not index.is_valid_signature(signature):
@@ -513,12 +1080,13 @@ class DeltaUEngine:
             mapping[mid] = source
 
         coverage = (
-            round(len(mapping) / len(unknown_models), _ROUND_DECIMALS)
-            if unknown_models
+            round(len(mapping) / len(retained_unknown), _ROUND_DECIMALS)
+            if retained_unknown
             else 1.0
         )
         if invalid or unmatched:
             return {
+                "feasible": False,
                 "delta": None,
                 "post_compatibility": None,
                 "models_changed": len(mapping),
@@ -529,38 +1097,41 @@ class DeltaUEngine:
                 "post_dyads": None,
                 "improved": 0,
                 "worsened": 0,
-            }
-        if not mapping:
-            return {
-                "delta": 0.0,
-                "post_compatibility": baseline_compatibility,
-                "models_changed": 0,
-                "instances_forced": len(unknown_models),
-                "mapping_coverage": coverage,
-                "invalid_models": invalid,
-                "unmatched_models": unmatched,
-                "post_dyads": None,
-                "improved": 0,
-                "worsened": 0,
+                "post_model_count": len(post_model_ids),
+                "post_dyad_count": self._dyad_count(post_model_ids),
+                "timing_pruned_models": timing_pruned,
+                "insufficient_post_models": False,
+                "dyad_change_scope": _DYAD_CHANGE_SCOPE,
             }
 
-        post_dyads = self._remap_dyads(
-            mapping,
-            dyads,
-            self._analysis_model_ids(state),
-            state,
-            registry,
-        )
+        if not mapping:
+            post_dyads = self._subset_dyads(dyads, post_model_ids)
+        else:
+            post_dyads = self._remap_dyads(
+                mapping,
+                dyads,
+                post_model_ids,
+                state,
+                registry,
+            )
+        self._validate_post_dyad_universe(post_dyads, post_model_ids)
         post_scores = self._scorer.score_dyads(post_dyads)
         aligned_baseline = self._align_baseline_scores(
             dyads, baseline_scores, post_dyads
         )
-        improved, worsened, delta = _compute_delta_stats(aligned_baseline, post_scores)
+        # The branch impact is against the full baseline mean, not the mean of
+        # only retained baseline pairs.  Improvement counts remain restricted
+        # to retained aligned pairs because pruned pairs have no post value.
+        improved, worsened, _ = _compute_delta_stats(aligned_baseline, post_scores)
+        post_compatibility = _rounded_tensor_mean(post_scores)
+        delta = round(
+            post_compatibility - baseline_compatibility,
+            _ROUND_DECIMALS,
+        )
         return {
+            "feasible": True,
             "delta": delta,
-            "post_compatibility": round(
-                float(post_scores.mean().item()), _ROUND_DECIMALS
-            ),
+            "post_compatibility": post_compatibility,
             "models_changed": len(mapping),
             "instances_forced": len(unknown_models),
             "mapping_coverage": coverage,
@@ -569,6 +1140,11 @@ class DeltaUEngine:
             "post_dyads": post_dyads,
             "improved": improved,
             "worsened": worsened,
+            "post_model_count": len(post_model_ids),
+            "post_dyad_count": len(post_dyads),
+            "timing_pruned_models": timing_pruned,
+            "insufficient_post_models": False,
+            "dyad_change_scope": _DYAD_CHANGE_SCOPE,
         }
 
     def _build_resolution_mapping(
@@ -579,10 +1155,16 @@ class DeltaUEngine:
         state: StateTensor,
         dyads: list[dict],
         registry: ComponentRegistry,
+        *,
+        allowed_model_ids: set[str] | None = None,
     ) -> dict[str, str]:
         mapping: dict[str, str] = {}
         index = CompletionIndex(state, registry)
-        allowed = self._dyad_model_ids(dyads)
+        allowed = (
+            set(allowed_model_ids)
+            if allowed_model_ids is not None
+            else self._dyad_model_ids(dyads)
+        )
         for mid in unknown_models:
             assignments = {component_id: target_status}
             signature = index.signature_after_resolution(mid, assignments)
@@ -863,6 +1445,9 @@ class DeltaUEngine:
         for cid in state.component_ids:
             if cid not in state._edge_comp_ids:
                 continue
+            rows = registry.data[registry.data["comp_id"] == cid]
+            if not rows.empty and DeltaUEngine._is_fixed_causal_edge(rows.iloc[0]):
+                continue
             for mid in model_ids or state.model_ids:
                 if not edge_applicable(state, mid, cid, registry):
                     continue
@@ -933,10 +1518,14 @@ class DeltaUEngine:
                 entry["type"] = row["type"]
                 entry["source"] = row["source"]
                 entry["target"] = row["target"] if row["target"] is not None else None
+                entry["direction"] = (
+                    row["direction"] if row["direction"] is not None else None
+                )
             else:
                 entry["type"] = None
                 entry["source"] = None
                 entry["target"] = None
+                entry["direction"] = None
         return entries
 
     def _greedy_sets(

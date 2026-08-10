@@ -1294,7 +1294,18 @@ class SimulationSuite:
                         dyads_baseline,
                         registry,
                     )
-                    resolved_model_ids = list(model_ids)
+                    # Marginal causal timing pruning removes model slots from
+                    # this hypothetical branch.  Keep the retained count
+                    # aligned with the reduced dyad universe (and preserve a
+                    # one-model retained count even though it has no dyads).
+                    status_suffix = target_status.replace("-", "_")
+                    pruned_key = f"timing_pruned_models_{status_suffix}"
+                    pruned_models = set(rankings[0].get(pruned_key, []))
+                    resolved_model_ids = [
+                        model_id
+                        for model_id in model_ids
+                        if model_id not in pruned_models
+                    ]
                     post_compat = self._compute_metric_rate(
                         dyads_resolved, compatibility_metric
                     )

@@ -73,11 +73,20 @@ ranking. Defaults to 10.}
 
 \item{crux_mode}{Crux semantics forwarded to
 \code{\link{compute_delta_u}}: \code{"marginal"} (default) ranks
-uncertain components; \code{"global"} resolves every applicable unknown
-edge instance to one status. Not available in symbolic mode.}
+applicable edges that are unknown in at least one model; \code{"global"}
+ranks each non-preset edge after
+evaluating both causal and non-causal global forcing directions across
+every model where that edge is applicable, including unknown and opposite
+resolved statuses. In either concrete mode, only a hypothetical directed
+causal branch can exclude timing-ineligible model slots (missing endpoint
+timing or source timing greater than or equal to target timing); the
+original baseline is not mutated, and non-causal/bidirected branches do
+not timing-prune. Not available in symbolic mode.}
 
-\item{global_status}{Required status (\code{"causal"} or
-\code{"non-causal"}) for \code{crux_mode = "global"}. Must be
+\item{global_status}{Deprecated compatibility argument retained for callers
+of earlier releases. When supplied in global mode it must be
+\code{"causal"} or \code{"non-causal"}, is ignored because both
+directions are evaluated, and is not sent to the backend. It must be
 \code{NULL} in marginal mode.}
 
 \item{plot}{Logical. When \code{TRUE}, generate standard plots
@@ -121,8 +130,16 @@ A list with components:
   \item{summary}{Character vector of human-readable key findings, including
     model and non-outcome-node counts, available-dyad compatibility
     percentages, the most common MAS, the MAS uniquely enabling the most
-    compatible model dyads, the top Delta-U crux, and available ghost-cluster
-    counts. With \code{node_policy = "vary"}, the summary also identifies
+    compatible model dyads, a single one-line summary entry (with component
+    descriptions separated by semicolons) containing the selected concrete
+    crux mode heading and up to the top three ranked Delta-U components, and
+    available ghost-cluster counts. Each
+    reported crux includes its component ID, edge direction/source-target,
+    recommended resolution, and Delta-U. With
+    timing-pruned models, the selected best-resolution line also reports a
+    concise branch-specific timing-pruned model count; per-direction model
+    and dyad counts remain available in \code{delta_u_rankings}. With
+    \code{node_policy = "vary"}, the summary also identifies
     the relevant node most often differing between identified-incompatible
     pairs where both effects and both relevant-node sets are available.}
   \item{plots}{Named list of \code{ggplot} objects or \code{NULL} when

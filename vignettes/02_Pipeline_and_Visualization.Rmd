@@ -116,8 +116,9 @@ head(registry)
 
 ```{r}
 # Exhaustive: enumerate all valid edge-status combinations
+# Include all three statuses so both crux directions are resolution-closed.
 states <- expand_model_states(registry, mode = "exhaustive",
-  edge_statuses = c("causal", "unknown"))
+  edge_statuses = c("causal", "unknown", "non-causal"))
 
 # Or sampled: draw a random subset (kept separate because sampled states do
 # not by themselves prove completion closure for causal metrics)
@@ -139,10 +140,13 @@ head(dyads)
 
 ### Step 4: Compute Delta-U crux rankings
 
-By default, Delta-U uses **marginal crux**: each uncertain component is ranked
-by evaluating both its causal and non-causal resolutions against the unchanged
-baseline. The **global crux** mode instead resolves every applicable unknown
-edge instance to one selected status and reports a single aggregate contrast.
+By default, Delta-U uses **marginal crux**: each applicable edge that is still
+`unknown` in at least one model is ranked by evaluating both its causal and
+non-causal resolutions against the unchanged baseline. The **global crux** mode
+ranks each non-preset edge by forcing all of
+that edge to causal and then to non-causal across every model where the edge is
+applicable, including models where it is unknown or has the opposite resolved
+status. Both directions are evaluated automatically.
 
 ```{r}
 rankings <- compute_delta_u(
@@ -152,19 +156,32 @@ rankings <- compute_delta_u(
 )
 head(rankings)
 
-# One multiverse-wide resolution
+# Global edge ranking (both forcing directions are evaluated automatically)
 global_crux <- compute_delta_u(
   dyads,
   crux_mode = "global",
-  global_status = "causal"
+  top_k = 10
 )
 global_crux
 ```
 
 Both modes remap models to existing multiverse states and reuse their dyad
-records; they never mutate claims or recompute causal profiles. Marginal
-ranking therefore requires a resolution-closed multiverse (e.g. exhaustive
-expansion).
+records; they never mutate claims or recompute causal profiles. The original
+baseline model and dyad counts remain unchanged, with one explicit exception:
+a hypothetical **directed causal** branch excludes timing-ineligible slots
+whose source or target timing is missing, or whose source timing is greater
+than or equal to target timing. Marginal mode applies this only among unknown
+applicable instances; global mode applies it across all applicable models.
+Non-causal and bidirected branches do not timing-prune, and no edge/component
+is removed. For example, if a source is at time 2 and a flexible target may be
+at time 1 or 3, only the time-1 causal slot is pruned. The result reports
+per-direction retained `post_model_count_*` and `post_dyad_count_*` fields,
+along with timing-pruned model IDs/counts and `insufficient_post_models_*`
+flags; baseline `model_count` and `dyad_count` remain the original full
+counts. Post compatibility is compared with that full baseline, and
+improved/worsened counts cover retained aligned pairs. Marginal ranking still
+requires a resolution-closed multiverse (e.g. exhaustive expansion) for every
+retained remapping.
 
 ### Step 5: Detect ghost clusters
 

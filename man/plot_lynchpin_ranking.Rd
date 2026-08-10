@@ -31,8 +31,9 @@ A \code{ggplot} object.
 }
 \description{
 Creates a horizontal bar chart of Delta-U scores showing which theoretical
-components, if resolved, would maximize global compatibility. Bars are
-ordered by \code{delta_u} descending and colored by \code{best_resolution}.
+components, if resolved, would maximize global compatibility. Marginal and
+global component rankings use the same plot. Bars are ordered by
+\code{delta_u} descending and colored by \code{best_resolution}.
 }
 \examples{
 \dontrun{

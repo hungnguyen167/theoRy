@@ -58,14 +58,18 @@ causal metrics require \code{exposure} and \code{outcome} in the dyads'
 \code{theory_context} attribute.}
 
 \item{crux_mode}{Crux semantics: \code{"marginal"} (default) ranks each
-uncertain component by evaluating both causal and non-causal resolutions;
-\code{"global"} resolves every applicable unknown edge instance to a
-single user-selected status and compares the remapped multiverse against
-the unchanged baseline.}
+applicable edge that is unknown in at least one model by evaluating both
+causal and non-causal resolutions;
+\code{"global"} ranks each non-preset edge by evaluating both directions
+while forcing that edge to the selected direction in every model where it
+is applicable, including models where it is unknown or has the opposite
+resolved status.}
 
-\item{global_status}{Required status for \code{crux_mode = "global"}:
-\code{"causal"} or \code{"non-causal"}. Must be \code{NULL} in marginal
-mode.}
+\item{global_status}{Deprecated compatibility argument.  When supplied with
+\code{crux_mode = "global"}, it must be \code{"causal"} or
+\code{"non-causal"}, is ignored because global mode evaluates both
+directions automatically, and is not sent to the backend.  It must be
+\code{NULL} in marginal mode.}
 
 \item{device}{Compute device: \code{"auto"} (default), \code{"cpu"}, or
 \code{"cuda"}.  \code{"cuda"} requires a CUDA-capable GPU with PyTorch.}
@@ -84,7 +88,10 @@ By default, a data frame with columns:
   \item{type}{Component type (\code{"node"} or \code{"edge"})}
   \item{source}{Node source name}
   \item{target}{Node target name (\code{NA} for nodes)}
+  \item{direction}{Edge direction (for example, \code{"->"})}
   \item{delta_u}{Delta-U score (mean compatibility improvement)}
+  \item{delta_u_causal}{Delta-U when forcing the causal resolution}
+  \item{delta_u_non_causal}{Delta-U when forcing the non-causal resolution}
   \item{best_resolution}{Recommended resolution (\code{"causal"},
     \code{"non-causal"}, or \code{"none"})}
   \item{dyads_improved}{Number of dyads that improved}
@@ -93,10 +100,25 @@ By default, a data frame with columns:
   \code{baseline_compatibility}, \code{post_compatibility_causal},
   \code{post_compatibility_non_causal}, \code{models_changed_causal},
   \code{models_changed_non_causal}, \code{mapping_coverage_causal},
-  \code{mapping_coverage_non_causal}, and \code{crux_mode}.
+  \code{mapping_coverage_non_causal}, per-direction feasibility,
+  forcing/count fields, timing-pruning fields, \code{crux_mode},
+  \code{model_count}, and \code{dyad_count}.  The baseline count fields
+  are the original full multiverse counts.  The fields
+  \code{timing_pruned_models_causal} and
+  \code{timing_pruned_models_non_causal} are character list-columns of
+  model IDs and preserve empty arrays.  The corresponding
+  \code{models_pruned_causal}, \code{models_pruned_non_causal},
+  \code{post_model_count_causal}, \code{post_model_count_non_causal},
+  \code{post_dyad_count_causal}, and
+  \code{post_dyad_count_non_causal} fields are integers, while
+  \code{insufficient_post_models_causal} and
+  \code{insufficient_post_models_non_causal} are logical.  Branch
+  diagnostics such as \code{invalid_models_causal} and
+  \code{unmatched_models_causal} are also character list-columns
+  containing model IDs (and may contain empty character vectors).
 
   When \code{component_id} is supplied, a one-row data frame with the
-  same columns plus \code{delta_u_causal} and \code{delta_u_non_causal}.
+  same columns is returned (including the two directional Delta-U fields).
 
   When \code{synergistic_set_size} is supplied, a list with components
   \code{rankings} (data frame) and \code{synergistic_sets} (data frame
@@ -105,13 +127,24 @@ By default, a data frame with columns:
   The returned data frame or list has a \code{compatibility_metric}
   attribute recording the selected metric.
 
-  With \code{crux_mode = "global"}, a one-row data frame with
-  \code{crux_mode}, \code{target_status}, \code{feasible},
-  \code{baseline_compatibility}, \code{post_compatibility},
-  \code{compatibility_change}, \code{delta_u}, \code{model_count},
-  \code{dyad_count}, \code{models_changed}, \code{unknown_instances_forced},
-  \code{dyads_improved}, \code{dyads_worsened}, and
-  \code{mapping_coverage}.
+  With \code{crux_mode = "global"}, the same ranking schema is returned:
+  each row is a non-preset edge and contains the results of forcing that
+  edge across all applicable models in both causal and non-causal directions
+  (including unknown and opposite resolved statuses).  Per-direction fields
+  such as
+  \code{feasible_causal}, \code{feasible_non_causal},
+  \code{post_compatibility_causal}, \code{post_compatibility_non_causal},
+  \code{models_changed_causal}, \code{models_changed_non_causal},
+  \code{instances_forced_causal}, \code{instances_forced_non_causal},
+  \code{mapping_coverage_causal}, and
+  \code{mapping_coverage_non_causal} are included when supplied by the
+  backend.  Timing-pruning fields are reported separately for each
+  direction: causal branches may contain
+  \code{timing_pruned_models_causal}, \code{models_pruned_causal},
+  \code{post_model_count_causal}, and \code{post_dyad_count_causal};
+  non-causal branches report the corresponding \code{*_non_causal}
+  fields and do not timing-prune.  Legacy one-row
+  \code{global_result} responses are still parsed for compatibility.
 }
 \description{
 Identifies which theoretical claims, if resolved, would maximize global
@@ -120,43 +153,73 @@ compatibility across the multiverse. Pass the dyad matrix returned by
 states, and dyad records explicitly.
 }
 \details{
-Delta-U simulates what would happen if each uncertain (unknown)
-\strong{applicable edge} were resolved.  For each edge and each possible
-resolution direction (causal / non-causal), it recomputes dyadic
-compatibility scores and measures the average change in global
-compatibility.  The component with the largest positive delta is
-the \strong{Lynchpin} that maximally reduces theoretical uncertainty.
+Marginal Delta-U simulates what would happen if each uncertain (unknown)
+\strong{applicable edge} were resolved.  For each such edge and each
+possible resolution direction (causal / non-causal), it aggregates the
+remapped dyad records and measures the average change in global
+compatibility.  Global Delta-U applies the same two directional branches
+to each non-preset edge that is applicable in at least one model, forcing
+that edge across every applicable model, including models with unknown or
+opposite resolved statuses.  The component with the largest positive delta
+is the \strong{Lynchpin} that maximally reduces theoretical uncertainty.
 
 Under sparse node semantics, only edge components that are \code{"unknown"}
 in at least one model where the edge is applicable are considered as
-candidates.  Absent nodes and inapplicable edges are excluded from
-default Delta-U candidate selection.
+candidates for marginal Delta-U.  Global Delta-U instead considers each
+non-preset edge that is applicable in at least one model and forces that
+edge in every applicable model.  Absent nodes and inapplicable edges are
+excluded from both candidate sets.
 
 Both crux modes are \emph{model-remapping} analyses: hypothetical
 resolutions never mutate model claims and never recompute causal profiles.
 Each affected model is mapped to the existing multiverse model whose
 semantic state (node presence, applicable edge statuses, timing,
 constraints) is identical except for the resolved edge(s), and the mapped
-models' existing dyad records are reused.  The model and dyad counts are
-preserved.  This requires a \emph{resolution-closed} multiverse; when an
-exact match is missing, marginal ranking and strict resolutions fail with
-a completion-coverage error instead of synthesizing new models.
+models' existing dyad records are reused.  The original baseline model and
+dyad counts are not changed.  There is one explicit branch exception:
+a hypothetical \emph{directed causal} branch excludes timing-ineligible
+model slots whose source or target timing is missing, or whose source
+timing is greater than or equal to its target timing.  Marginal mode applies
+this pruning only among the applicable unknown instances; global mode
+applies it across all applicable models.  Non-causal and bidirected branches
+do not timing-prune.  No edge or component is removed and no baseline state
+or dyad is mutated; only timing-ineligible slots are excluded from the
+hypothetical directed causal branch.  For example, if a source is fixed at
+time 2 and a target can flexibly occur at times 1 or 3, the causal branch
+excludes the time-1 target slot but retains the time-3 slot.  Per-direction
+post model and dyad counts report the retained branch denominators, and
+timing-pruned model IDs and counts identify the excluded slots.  The
+post-compatibility value is compared with the original full baseline when
+computing Delta-U; improved and worsened counts cover retained aligned
+pairs only.  This still requires a \emph{resolution-closed} multiverse for
+every retained remapping; when an exact match is missing, marginal ranking
+and strict resolutions fail with a completion-coverage error instead of
+synthesizing models.
 
 Edge components respect temporal integrity and joint acyclicity: a
 resolution that would violate timing or create a cycle is reported as
-infeasible rather than silently skipped.
+infeasible rather than silently skipped, except that timing-ineligible
+slots in a directed causal branch are explicitly pruned and reported by the
+timing-pruning fields above.  In global mode, each candidate edge is
+evaluated in both directions automatically; \code{top_k} limits the
+returned edge ranking.
 }
 \examples{
 \dontrun{
 start_theory_engine()
 
 reg <- build_component_registry(c("X", "Y", "Z"), timing = c(1, 2, 3))
+# Include all three edge statuses so both forcing directions are closed.
 states <- expand_model_states(reg, mode = "exhaustive",
-  edge_statuses = c("causal", "unknown"))
+  edge_statuses = c("causal", "unknown", "non-causal"))
 dyads <- build_dyad_matrix(reg, states, mode = "basic")
 
 rankings <- compute_delta_u(dyads, top_k = 5)
 head(rankings)
+
+global_rankings <- compute_delta_u(
+  dyads, crux_mode = "global", top_k = 5
+)
 
 single <- compute_delta_u(dyads, component_id = rankings$component_id[1])
 

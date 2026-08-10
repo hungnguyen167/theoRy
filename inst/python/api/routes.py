@@ -638,19 +638,17 @@ async def delta_u(request: DeltaURequest):
             )
 
         if request.crux_mode == "global":
-            global_result = delta_engine.compute_global_crux(
-                request.global_status,
+            rankings = delta_engine.rank_lynchpins(
                 state,
                 dyads,
                 registry,
+                top_k=request.top_k,
+                mode=request.mode,
+                heatmap_threshold=heatmap_threshold,
             )
-            public_global_result = {
-                key: value
-                for key, value in global_result.items()
-                if key != "post_dyads"
-            }
             response_data = {
-                "global_result": public_global_result,
+                "rankings": rankings,
+                "component_count": len(state.component_ids),
                 "crux_mode": "global",
                 "computation_mode": "global",
             }

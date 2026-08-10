@@ -160,11 +160,6 @@ class DeltaURequest(BaseModel):
     @model_validator(mode="after")
     def validate_crux_request(self):
         if self.crux_mode == "global":
-            if self.global_status is None:
-                raise ValueError(
-                    "crux_mode='global' requires global_status "
-                    "('causal' or 'non-causal')"
-                )
             if self.component_id is not None:
                 raise ValueError("global crux does not accept component_id")
             if self.mode == "two-stage":

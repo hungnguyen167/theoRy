@@ -4,8 +4,9 @@
 #' Plot a lynchpin component ranking bar chart
 #'
 #' Creates a horizontal bar chart of Delta-U scores showing which theoretical
-#' components, if resolved, would maximize global compatibility. Bars are
-#' ordered by \code{delta_u} descending and colored by \code{best_resolution}.
+#' components, if resolved, would maximize global compatibility. Marginal and
+#' global component rankings use the same plot. Bars are ordered by
+#' \code{delta_u} descending and colored by \code{best_resolution}.
 #'
 #' @param rankings A data frame from \code{\link{compute_delta_u}} or
 #'   a Delta-U result or a simulation result that provides a lynchpin ranking.
@@ -150,11 +151,14 @@ plot_lynchpin_ranking <- function(rankings,
   comp_id <- as.character(rankings$component_id)
   source <- if ("source" %in% names(rankings)) as.character(rankings$source) else rep("", nrow(rankings))
   target <- if ("target" %in% names(rankings)) as.character(rankings$target) else rep(NA, nrow(rankings))
+  direction <- if ("direction" %in% names(rankings)) as.character(rankings$direction) else rep("->", nrow(rankings))
   type <- if ("type" %in% names(rankings)) as.character(rankings$type) else rep("edge", nrow(rankings))
 
   labels <- vapply(seq_len(nrow(rankings)), function(i) {
+    edge_direction <- direction[i]
+    if (is.na(edge_direction) || !nzchar(edge_direction)) edge_direction <- "->"
     if (!is.na(target[i]) && nzchar(target[i])) {
-      paste0(comp_id[i], " (", source[i], " \u2192 ", target[i], ")")
+      paste0(comp_id[i], " (", source[i], " ", edge_direction, " ", target[i], ")")
     } else if (!is.na(source[i]) && nzchar(source[i])) {
       paste0(comp_id[i], " (", source[i], ")")
     } else {

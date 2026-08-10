@@ -192,31 +192,51 @@ to a user corpus and instead require completion-closed input.
 
 `compute_delta_u()` (and `analyze_theory()`) supports two crux semantics:
 
-- **Marginal crux** (default) ranks each uncertain component by evaluating
-  both the causal and the non-causal resolution of that component.
-- **Global crux** resolves *every* applicable unknown edge instance in the
-  multiverse to a single user-selected status (`global_status = "causal"` or
-  `"non-causal"`) and reports one aggregate contrast against the unchanged
-  baseline.
+- **Marginal crux** (default) ranks each applicable edge that is still
+  `unknown` in at least one model by evaluating both the causal and the
+  non-causal resolution of that component.
+- **Global crux** ranks each non-preset edge by evaluating both directions:
+  the edge is globally forced to causal and then to non-causal across every
+  model where it is applicable, including models where it is unknown or has
+  the opposite resolved status. The two results are compared for the ranking;
+  `top_k` applies in global mode as it does in marginal mode.
+
+`global_status` remains as a deprecated compatibility argument in the R
+signatures. If supplied in global mode it must be `"causal"` or
+`"non-causal"`, is ignored with a warning, and is not sent to the backend.
+It is still rejected in marginal mode.
 
 Both modes are model-remapping analyses: they never mutate model claims and
 never recompute adjustment sets or identification. Each hypothetically
 resolved model is mapped to the existing multiverse model whose semantic state
 matches the resolution, and the mapped models' precomputed dyad records are
-reused. Model and dyad counts are preserved. This requires a
-*resolution-closed* multiverse (e.g. exhaustive expansion); when an exact
-match is missing, marginal ranking fails with a completion-coverage error
-instead of synthesizing new models. Global and explicit single-component
-resolutions use the same strict coverage policy.
+reused. The original baseline model and dyad counts are not changed. The one
+exception is a hypothetical **directed causal** branch: timing-ineligible
+model slots whose source or target timing is missing, or whose source timing is
+greater than or equal to its target timing, are excluded from that branch.
+Marginal mode applies this only among applicable unknown instances; global mode
+applies it across all applicable models. Non-causal and bidirected branches do
+not timing-prune. No edge or component is removed and no baseline state or dyad
+is mutated.
+
+For example, if a source is fixed at time 2 and a target can flexibly occur at
+times 1 or 3, the causal branch excludes the time-1 target slot but retains the
+time-3 slot. Results report `timing_pruned_models_causal` (or the corresponding
+non-causal field), `models_pruned_*`, and per-direction
+`post_model_count_*`/`post_dyad_count_*`, plus
+`insufficient_post_models_*` flags; baseline `model_count` and `dyad_count`
+remain the original full counts. Post compatibility is compared with that
+original full baseline, while improved/worsened counts cover retained aligned
+pairs. A *resolution-closed* multiverse (e.g. exhaustive expansion) is still
+required for every retained remapping; when an exact match is missing, ranking
+fails with a completion-coverage error instead of synthesizing new models.
+Global and explicit single-component resolutions use the same strict coverage
+policy.
 
 ```r
 rankings <- compute_delta_u(dyads, crux_mode = "marginal", top_k = 10)
 
-global <- compute_delta_u(
-  dyads,
-  crux_mode = "global",
-  global_status = "causal"
-)
+global <- compute_delta_u(dyads, crux_mode = "global", top_k = 10)
 ```
 
 

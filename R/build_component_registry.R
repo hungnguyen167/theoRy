@@ -1,17 +1,17 @@
 #' Build a component registry from a causal theory specification
 #'
-#' Builds a registry programmatically from named variables and their temporal
-#' positions. An exposure and outcome are always required; their directed path
-#' is fixed as causal in every generated model. Use
+#' Builds a registry programmatically from named variables and their positive
+#' temporal positions (integer values >= 1). An exposure and outcome are always
+#' required; their directed path is fixed as causal in every generated model. Use
 #' \code{build_component_registry_interactive()} for a guided alternative.
 #'
 #' @param nodes A character vector of variable names, or a data frame with
-#'   columns \code{name}, \code{timing} (integer), and optionally
+#'   columns \code{name}, \code{timing} (integer >= 1), and optionally
 #'   \code{description}.
-#' @param timing Integer vector of fixed chronological positions parallel to
-#'   \code{nodes}. Use \code{NA} for a non-focal node whose possible positions
-#'   are supplied by \code{time_points}. Ignored when \code{nodes} is a data
-#'   frame.
+#' @param timing Integer vector of fixed chronological positions (all values
+#'   >= 1) parallel to \code{nodes}. Use \code{NA} for a non-focal node whose
+#'   possible positions are supplied by \code{time_points}. Ignored when
+#'   \code{nodes} is a data frame.
 #' @param descriptions Optional character vector of descriptions parallel to
 #'   \code{nodes}. Ignored when \code{nodes} is a data frame.
 #' @param respect_timing When \code{TRUE} (default), directed candidates must
@@ -33,11 +33,12 @@
 #'   allowed time.
 #' @param outcome Name of the focal outcome. Must be a node with exactly one
 #'   allowed time later than \code{exposure}.
-#' @param time_points Finite integer vector available to non-focal nodes whose
-#'   \code{timing} is \code{NA}. Required whenever timing is unspecified.
-#' @param timing_options Optional named list of allowed integer positions. It
-#'   overrides \code{timing} for named nodes. Each model chooses one position
-#'   from each present node's options.
+#' @param time_points Finite integer vector of positions >= 1 available to
+#'   non-focal nodes whose \code{timing} is \code{NA}. Required whenever timing
+#'   is unspecified.
+#' @param timing_options Optional named list of allowed integer positions (all
+#'   values >= 1). It overrides \code{timing} for named nodes. Each model
+#'   chooses one position from each present node's options.
 #' @param optional_nodes Node names that may be absent in subset models.
 #'   Exposure, outcome, and endpoints of required paths cannot be optional.
 #' @param url Base URL of the theoRy Python backend.
@@ -227,9 +228,10 @@ build_component_registry <- function(nodes,
 
 #' Build a component registry through a guided questionnaire
 #'
-#' Collects named variables, a required exposure/outcome pair, chronological
-#' positions, theory constraints, required or possible latent confounding, and
-#' optional nodes. The answers are validated and delegated to
+#' Collects named variables, a required exposure/outcome pair, positive
+#' chronological positions (integers >= 1), theory constraints, required or
+#' possible latent confounding, and optional nodes. The answers are validated and
+#' delegated to
 #' \code{build_component_registry()}, so interactive and programmatic results
 #' share the same backend contract.
 #'
@@ -264,7 +266,7 @@ build_component_registry_interactive <- function(
   multi_time_nodes <- character()
   for (name in nodes) {
     values <- .registry_parse_times(ask(paste0("Time for ", name,
-                                              " (one integer; up to two for non-focal nodes): ")))
+                                              " (one integer >= 1; up to two for non-focal nodes): ")))
     if (name %in% c(exposure, outcome) && length(values) != 1L) {
       stop("Exposure and outcome must each have exactly one time.", call. = FALSE)
     }
@@ -371,11 +373,17 @@ build_component_registry_interactive <- function(
   if (is.null(timing)) {
     timing <- rep(NA_integer_, length(names))
   }
-  if (length(timing) != length(names) ||
-      any(!is.na(timing) & (!is.finite(timing) | timing != as.integer(timing)))) {
-    stop("timing must be an integer vector parallel to nodes, with NA allowed.",
+  all_logical_na <- is.logical(timing) && length(timing) > 0L &&
+    all(is.na(timing))
+  if (((!is.numeric(timing) || is.complex(timing)) && !all_logical_na) ||
+      length(timing) != length(names)) {
+    stop("timing must be an integer vector parallel to nodes, with values >= 1; ",
+         "NA is allowed for unspecified nodes.",
          call. = FALSE)
   }
+  .registry_validate_timing_values(
+    timing, "timing", allow_na = TRUE
+  )
   if (is.null(descriptions)) {
     descriptions <- rep(NA_character_, length(names))
   }
@@ -392,10 +400,12 @@ build_component_registry_interactive <- function(
 
 .registry_timing_options <- function(node_names, timing, time_points, timing_options) {
   if (!is.null(time_points)) {
-    if (!is.numeric(time_points) || !length(time_points) || anyNA(time_points) ||
-        any(!is.finite(time_points)) || any(time_points != as.integer(time_points))) {
-      stop("time_points must be a non-empty integer vector.", call. = FALSE)
+    if (!is.numeric(time_points) || is.complex(time_points) ||
+        !length(time_points)) {
+      stop("time_points must be a non-empty integer vector with values >= 1.",
+           call. = FALSE)
     }
+    .registry_validate_timing_values(time_points, "time_points")
     time_points <- sort(unique(as.integer(time_points)))
   }
   supplied <- stats::setNames(vector("list", length(node_names)), node_names)
@@ -410,11 +420,13 @@ build_component_registry_interactive <- function(
     }
     for (name in names(timing_options)) {
       values <- timing_options[[name]]
-      if (!is.numeric(values) || !length(values) || anyNA(values) ||
-          any(!is.finite(values)) || any(values != as.integer(values))) {
-        stop("timing_options for ", name, " must be non-empty integers.",
-             call. = FALSE)
+      if (!is.numeric(values) || is.complex(values) || !length(values)) {
+        stop("timing_options for ", name,
+             " must be non-empty integers with values >= 1.", call. = FALSE)
       }
+      .registry_validate_timing_values(
+        values, paste0("timing_options for ", name)
+      )
       supplied[[name]] <- sort(unique(as.integer(values)))
     }
   }
@@ -482,12 +494,45 @@ build_component_registry_interactive <- function(
 }
 
 
+.registry_validate_timing_values <- function(values, label, allow_na = FALSE) {
+  ordinary_na <- is.na(values) & !is.nan(values)
+  all_logical_na <- is.logical(values) && length(values) > 0L &&
+    all(ordinary_na)
+  if ((!is.numeric(values) || is.complex(values)) &&
+      !(isTRUE(allow_na) && all_logical_na)) {
+    stop(label, " must contain integer values >= 1.", call. = FALSE)
+  }
+
+  valid <- ordinary_na & isTRUE(allow_na)
+  non_na <- !ordinary_na
+  if (any(non_na)) {
+    integer_values <- suppressWarnings(as.integer(values[non_na]))
+    valid[non_na] <- is.finite(values[non_na]) &
+      values[non_na] == floor(values[non_na]) &
+      values[non_na] >= 1L &
+      !is.na(integer_values) &
+      as.numeric(integer_values) == values[non_na]
+  }
+
+  if (any(!valid)) {
+    stop(label, " must contain integer values >= 1.", call. = FALSE)
+  }
+  invisible(values)
+}
+
+
 .registry_parse_times <- function(value) {
   pieces <- trimws(strsplit(value, ",", fixed = TRUE)[[1]])
   if (!length(pieces) || any(!grepl("^-?[0-9]+$", pieces))) {
-    stop("Times must be one or two comma-separated integers.", call. = FALSE)
+    stop("Times must be one or two comma-separated integers >= 1.",
+         call. = FALSE)
   }
-  sort(unique(as.integer(pieces)))
+  values <- suppressWarnings(as.integer(pieces))
+  if (anyNA(values) || any(values < 1L)) {
+    stop("Times must be one or two comma-separated integers >= 1.",
+         call. = FALSE)
+  }
+  sort(unique(values))
 }
 
 

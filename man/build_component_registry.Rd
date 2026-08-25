@@ -22,13 +22,13 @@ build_component_registry(
 }
 \arguments{
 \item{nodes}{A character vector of variable names, or a data frame with
-columns \code{name}, \code{timing} (integer), and optionally
+columns \code{name}, \code{timing} (integer >= 1), and optionally
 \code{description}.}
 
-\item{timing}{Integer vector of fixed chronological positions parallel to
-\code{nodes}. Use \code{NA} for a non-focal node whose possible positions
-are supplied by \code{time_points}. Ignored when \code{nodes} is a data
-frame.}
+\item{timing}{Integer vector of fixed chronological positions (all values
+>= 1) parallel to \code{nodes}. Use \code{NA} for a non-focal node whose
+possible positions are supplied by \code{time_points}. Ignored when
+\code{nodes} is a data frame.}
 
 \item{descriptions}{Optional character vector of descriptions parallel to
 \code{nodes}. Ignored when \code{nodes} is a data frame.}
@@ -57,12 +57,13 @@ allowed time.}
 \item{outcome}{Name of the focal outcome. Must be a node with exactly one
 allowed time later than \code{exposure}.}
 
-\item{time_points}{Finite integer vector available to non-focal nodes whose
-\code{timing} is \code{NA}. Required whenever timing is unspecified.}
+\item{time_points}{Finite integer vector of positions >= 1 available to
+non-focal nodes whose \code{timing} is \code{NA}. Required whenever timing
+is unspecified.}
 
-\item{timing_options}{Optional named list of allowed integer positions. It
-overrides \code{timing} for named nodes. Each model chooses one position
-from each present node's options.}
+\item{timing_options}{Optional named list of allowed integer positions (all
+values >= 1). It overrides \code{timing} for named nodes. Each model
+chooses one position from each present node's options.}
 
 \item{optional_nodes}{Node names that may be absent in subset models.
 Exposure, outcome, and endpoints of required paths cannot be optional.}
@@ -78,9 +79,9 @@ A registry data frame. It retains \code{exposure}, \code{outcome},
   \code{constraints} attributes for downstream expansion.
 }
 \description{
-Builds a registry programmatically from named variables and their temporal
-positions. An exposure and outcome are always required; their directed path
-is fixed as causal in every generated model. Use
+Builds a registry programmatically from named variables and their positive
+temporal positions (integer values >= 1). An exposure and outcome are always
+required; their directed path is fixed as causal in every generated model. Use
 \code{build_component_registry_interactive()} for a guided alternative.
 }
 \examples{

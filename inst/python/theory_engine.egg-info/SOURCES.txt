@@ -5,6 +5,7 @@ api/middleware.py
 api/models.py
 api/routes.py
 api/session.py
+api/version.py
 clustering/__init__.py
 clustering/engine.py
 clustering/ghost.py

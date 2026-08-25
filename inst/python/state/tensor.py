@@ -25,6 +25,15 @@ class StateError(Exception):
     pass
 
 
+def validate_timing_value(timing_value: object) -> int:
+    """Validate and return a one-based integer timing value."""
+    if isinstance(timing_value, bool) or not isinstance(timing_value, int):
+        raise StateError(f"Timing must be integer, got {type(timing_value).__name__}")
+    if timing_value < 1:
+        raise StateError("Timing must be a positive integer (at least 1)")
+    return timing_value
+
+
 class StateTensor:
     """Represents the theoretical state of multiple models using a uint8 tensor.
 
@@ -55,6 +64,9 @@ class StateTensor:
         edge_to_nodes: dict[str, tuple[str, str]] | None = None,
         bidirected_edge_comp_ids: set[str] | None = None,
     ):
+        for timing_value in timing.values():
+            validate_timing_value(timing_value)
+
         self.tensor = tensor
         self.model_index = model_index
         self.component_index = component_index
@@ -457,12 +469,7 @@ class StateTensor:
             raise StateError(f"Unknown model ID: {model_id}")
         if comp_id not in self.component_index:
             raise StateError(f"Unknown component ID: {comp_id}")
-        if not isinstance(timing_value, int):
-            raise StateError(
-                f"Timing must be integer, got {type(timing_value).__name__}"
-            )
-
-        self.timing[(model_id, comp_id)] = timing_value
+        self.timing[(model_id, comp_id)] = validate_timing_value(timing_value)
 
     def get_timing(self, model_id: str, comp_id: str) -> int | None:
         if model_id not in self.model_index:

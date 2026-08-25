@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from registry.schema import ComponentRegistry
-from state.tensor import StateError
+from state.tensor import StateError, validate_timing_value
 
 # ---------------------------------------------------------------------------
 # Canonical status constants
@@ -142,6 +142,10 @@ def normalize_sparse_records(
         for r in model_records:
             comp_id = r["comp_id"]
             status = r["status"]
+            timing_val = r.get("timing")
+
+            if timing_val is not None:
+                validate_timing_value(timing_val)
 
             if comp_id not in valid_comp_ids:
                 raise StateError(f"Unknown component ID: {comp_id}")
@@ -154,7 +158,6 @@ def normalize_sparse_records(
                         explicit_absent_nodes.add(comp_id)
                 else:
                     raise StateError(f"Invalid status for node {comp_id}: {status!r}")
-                timing_val = r.get("timing")
                 if timing_val is not None:
                     ns.timing[comp_id] = timing_val
             else:

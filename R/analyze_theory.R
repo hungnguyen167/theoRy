@@ -10,10 +10,11 @@
 #'
 #' @param nodes Character vector of variable names in \code{"programmatic"}
 #'   input mode. Omit it in \code{"interactive"} mode.
-#' @param timing Integer vector of chronological positions, parallel to
-#'   \code{nodes}. When \code{NULL} and both \code{exposure} and
-#'   \code{outcome} are supplied, programmatic mode requires
-#'   \code{time_points} for unspecified non-focal nodes.
+#' @param timing Integer vector of chronological positions (all values >= 1),
+#'   parallel to \code{nodes}. Use \code{NA} for a non-focal node whose
+#'   possible positions are supplied by \code{time_points}. When \code{NULL}
+#'   and both \code{exposure} and \code{outcome} are supplied, programmatic
+#'   mode requires \code{time_points} for unspecified non-focal nodes.
 #' @param exposure Name of the exposure variable. Required in programmatic
 #'   mode and collected in interactive mode.
 #' @param outcome Name of the outcome variable. Required in programmatic mode
@@ -47,6 +48,11 @@
 #'   timing or source timing greater than or equal to target timing); the
 #'   original baseline is not mutated, and non-causal/bidirected branches do
 #'   not timing-prune. Not available in symbolic mode.
+#' @param compatibility_metric Compatibility metric used to score each dyad:
+#'   \code{"similarity_rate"} (default), \code{"mas_compatible"}, or
+#'   \code{"identified_compatible"}. The two causal metrics require
+#'   \code{exposure} and \code{outcome} in the dyads' theory context. Non-default
+#'   metrics are not available in symbolic mode.
 #' @param global_status Deprecated compatibility argument retained for callers
 #'   of earlier releases. When supplied in global mode it must be
 #'   \code{"causal"} or \code{"non-causal"}, is ignored because both
@@ -64,15 +70,17 @@
 #'   questionnaire before the analysis and prints a programmatic call that
 #'   recreates the selected multiverse.
 #' @param constraints,include_bidirectional,time_points,timing_options Registry
-#'   options forwarded to
-#'   \code{build_component_registry()} in programmatic mode.
+#'   options forwarded to \code{build_component_registry()} in programmatic
+#'   mode. Values in \code{time_points} and \code{timing_options} must be
+#'   integer positions >= 1.
 #' @param optional_nodes Character vector of nodes allowed to be absent,
 #'   forwarded to \code{build_component_registry()} in programmatic mode.
 #' @param max_models,allow_large Expansion safety controls forwarded to
 #'   \code{expand_model_states()}.
 #' @param causal_backend Causal backend passed to \code{build_dyad_matrix()}.
-#'   Defaults to \code{"r"} for general identification through
-#'   Dagitty/CausalEffect.
+#'   Defaults to \code{"r"} for adjustment-set computation through
+#'   Dagitty/CausalEffect. The identified-compatibility predicate uses native
+#'   fixed-direct complete-conditioning d-separation.
 #'
 #' @return A list with components:
 #'   \item{registry}{Data frame from \code{\link{build_component_registry}}.}
@@ -94,8 +102,8 @@
 #'     concise branch-specific timing-pruned model count; per-direction model
 #'     and dyad counts remain available in \code{delta_u_rankings}. With
 #'     \code{node_policy = "vary"}, the summary also identifies
-#'     the relevant node most often differing between identified-incompatible
-#'     pairs where both effects and both relevant-node sets are available.}
+#'     the declared node most often differing between identified-incompatible
+#'     pairs where both effects and both node-presence sets are available.}
 #'   \item{plots}{Named list of \code{ggplot} objects or \code{NULL} when
 #'     \code{plot = FALSE}.}
 #'
@@ -143,12 +151,16 @@ analyze_theory <- function(nodes = NULL,
                              optional_nodes = character(),
                              max_models = 10000L,
                              allow_large = FALSE,
-                             causal_backend = c("r", "auto", "native")) {
+                             causal_backend = c("r", "auto", "native"),
+                             compatibility_metric = c("similarity_rate",
+                                                      "mas_compatible",
+                                                      "identified_compatible")) {
   mode <- match.arg(mode)
   node_policy <- match.arg(node_policy)
   input_mode <- match.arg(input_mode)
   causal_backend <- match.arg(causal_backend)
   crux_mode <- match.arg(crux_mode)
+  compatibility_metric <- match.arg(compatibility_metric)
   if (identical(crux_mode, "global") && !is.null(global_status)) {
     global_status <- match.arg(global_status, c("causal", "non-causal"))
   } else if (identical(crux_mode, "marginal") && !is.null(global_status)) {
@@ -174,6 +186,10 @@ analyze_theory <- function(nodes = NULL,
          call. = FALSE)
   }
   if (identical(mode, "symbolic")) {
+    if (!identical(compatibility_metric, "similarity_rate")) {
+      stop("Non-default compatibility_metric is not available in symbolic mode.",
+           call. = FALSE)
+    }
     if (is.null(exposure) || is.null(outcome)) {
       stop("exposure and outcome are required.", call. = FALSE)
     }
@@ -313,6 +329,7 @@ analyze_theory <- function(nodes = NULL,
     top_k = as.integer(top_k),
     crux_mode = crux_mode,
     global_status = global_status,
+    compatibility_metric = compatibility_metric,
     url = url
   )
 
@@ -325,6 +342,7 @@ analyze_theory <- function(nodes = NULL,
       prior_model = prior_model,
       eps = eps,
       min_samples = as.integer(min_samples),
+      score_field = compatibility_metric,
       url = url
     )
   } else {
@@ -406,7 +424,8 @@ analyze_theory <- function(nodes = NULL,
         url = url,
         max_models = max_models,
         allow_large = allow_large,
-        causal_backend = causal_backend
+        causal_backend = causal_backend,
+        compatibility_metric = compatibility_metric
       ),
       sep = "\n"
     )
@@ -441,7 +460,9 @@ analyze_theory <- function(nodes = NULL,
                                                max_models,
                                                allow_large,
                                                causal_backend,
-                                               global_status = NULL) {
+                                               global_status = NULL,
+                                               compatibility_metric =
+                                                 "similarity_rate") {
   # Retain the internal argument for callers built against the previous
   # helper signature, but deliberately omit it from the reproduced call.
   invisible(global_status)
@@ -472,6 +493,7 @@ analyze_theory <- function(nodes = NULL,
     list("max_models", as.integer(max_models)),
     list("allow_large", isTRUE(allow_large)),
     list("causal_backend", causal_backend),
+    list("compatibility_metric", compatibility_metric),
     list("input_mode", "programmatic")
   )
   if (identical(mode, "sampled")) {

@@ -5,6 +5,21 @@ from dataclasses import dataclass, field
 import pandas as pd
 
 
+def _validate_timing_mapping(
+    timing: dict[str, int | None] | None,
+    field_name: str = "timing",
+) -> None:
+    if timing is None:
+        return
+    for node, value in timing.items():
+        if value is None:
+            continue
+        if isinstance(value, bool) or not isinstance(value, int):
+            raise ValueError(f"{field_name}[{node!r}] must be an integer")
+        if value < 1:
+            raise ValueError(f"{field_name}[{node!r}] must be at least 1")
+
+
 @dataclass(frozen=True)
 class EdgeVar:
     name: str
@@ -23,6 +38,9 @@ class SymbolicUniverse:
     comp_to_edge: dict[str, tuple[str, str]] = field(default_factory=dict)
     fixed_causal_edges: set[tuple[str, str]] = field(default_factory=set)
     observed_nodes: frozenset[str] = field(default_factory=frozenset)
+
+    def __post_init__(self) -> None:
+        _validate_timing_mapping(self.timing)
 
     @property
     def variable_names(self) -> list[str]:
@@ -49,6 +67,8 @@ def build_symbolic_universe(
     outcome: str | None = None,
     comp_to_timing: dict[str, int | None] | None = None,
 ) -> SymbolicUniverse:
+    _validate_timing_mapping(timing)
+    _validate_timing_mapping(comp_to_timing, "comp_to_timing")
     if registry is not None:
         return _from_registry(registry, exposure, outcome)
     if nodes is None or timing is None or exposure is None or outcome is None:
@@ -115,6 +135,8 @@ def _from_nodes(
     outcome: str,
     comp_to_timing: dict[str, int | None] | None = None,
 ) -> SymbolicUniverse:
+    _validate_timing_mapping(timing)
+    _validate_timing_mapping(comp_to_timing, "comp_to_timing")
     if (not exposure) != (not outcome):
         raise ValueError("Both or neither of exposure and outcome must be provided")
     if exposure and outcome:

@@ -7,7 +7,7 @@ from registry.loader import RegistryLoader
 from registry.schema import ComponentRegistry, RegistryError
 from state.tensor import StateError, StateTensor
 from state.completions import materialize_missing_completions
-from dyadic.engine import DyadicEngine
+from dyadic.engine import DyadicEngine, DyadicError
 from simulation.delta_u import DeltaUEngine
 from simulation.scoring import CompatibilityScorer
 from clustering.engine import ClusteringEngine
@@ -139,16 +139,67 @@ class SimulationSuite:
     def _build_synthetic_registry(
         self,
         n_components: int,
+        exposure: str | None = None,
+        outcome: str | None = None,
     ) -> ComponentRegistry:
-        """Build a registry with exactly n_components rows."""
+        """Build a registry with exactly ``n_components`` rows.
+
+        When a causal query is supplied, the direct ``exposure -> outcome``
+        edge is included as a fixed causal component.  It is selected before
+        filler edges so adding the query contract never changes the requested
+        component count.
+        """
         if n_components < 5:
             raise SimulationError("n_components must be at least 5")
 
+        if (exposure is None) != (outcome is None):
+            raise SimulationInputError(
+                "Both exposure and outcome are required for a causal synthetic "
+                "registry"
+            )
+        if exposure is not None and exposure == outcome:
+            raise SimulationInputError(
+                "Exposure and outcome must be distinct synthetic nodes"
+            )
+
+        def candidate_node_names(candidate: int) -> list[str]:
+            if exposure is None or outcome is None:
+                return [f"X{i}" for i in range(1, candidate + 1)]
+
+            names: list[str] = []
+            if "X1" not in {exposure, outcome}:
+                names.append("X1")
+            else:
+                confounder = "__synthetic_confounder"
+                suffix = 1
+                while confounder in {exposure, outcome}:
+                    suffix += 1
+                    confounder = f"__synthetic_confounder{suffix}"
+                names.append(confounder)
+            names.extend((exposure, outcome))
+            next_index = 2
+            while len(names) < candidate:
+                name = f"X{next_index}"
+                next_index += 1
+                if name not in names:
+                    names.append(name)
+            return names
+
         n_nodes = None
         for candidate in range(3, n_components):
-            max_edges = candidate * (candidate - 1) // 2
             target_edges = n_components - candidate
-            if target_edges >= 2 and max_edges >= target_edges:
+            candidate_names = candidate_node_names(candidate)
+            available_edges = [
+                (source, target)
+                for source_index, source in enumerate(candidate_names)
+                for target_index, target in enumerate(candidate_names)
+                if source != target
+                and (
+                    source_index < target_index
+                    or (source, target) == (exposure, outcome)
+                )
+            ]
+            if target_edges >= 2 and len(available_edges) >= target_edges:
                 n_nodes = candidate
                 break
 
@@ -158,20 +209,33 @@ class SimulationSuite:
             )
 
         nodes = [
-            {"name": f"X{i}", "timing": i, "description": f"Variable {i}"}
-            for i in range(1, n_nodes + 1)
+            {"name": name, "timing": index, "description": f"Variable {index}"}
+            for index, name in enumerate(candidate_node_names(n_nodes), start=1)
         ]
+        node_names = [node["name"] for node in nodes]
         target_edges = n_components - n_nodes
 
-        pairs = [
-            (f"X{i}", f"X{j}")
-            for i in range(1, n_nodes + 1)
-            for j in range(i + 1, n_nodes + 1)
+        available_edges = [
+            (source, target)
+            for source_index, source in enumerate(node_names)
+            for target_index, target in enumerate(node_names)
+            if source != target
+            and (source_index < target_index or (source, target) == (exposure, outcome))
         ]
-
-        selected_edges = pairs[:target_edges]
+        selected_edges = []
+        if exposure is not None and outcome is not None:
+            selected_edges.append((exposure, outcome))
+        selected_edges.extend(
+            edge for edge in available_edges if edge not in selected_edges
+        )
+        selected_edges = selected_edges[:target_edges]
         constraints = [
-            {"source": src, "target": tgt, "direction": "->", "rule": "allow"}
+            {
+                "source": src,
+                "target": tgt,
+                "direction": "->",
+                "rule": ("require" if (src, tgt) == (exposure, outcome) else "allow"),
+            }
             for src, tgt in selected_edges
         ]
 
@@ -180,27 +244,53 @@ class SimulationSuite:
             respect_timing=True,
             include_bidirectional=False,
             constraints=constraints,
+            exposure=exposure,
+            outcome=outcome,
         )
         if len(registry.data) != n_components:
             raise SimulationError(
                 f"Expected {n_components} registry rows, got {len(registry.data)}"
             )
+        if exposure is not None and outcome is not None:
+            direct = registry.data[
+                (registry.data["type"] == "edge")
+                & (registry.data["direction"] == "->")
+                & (registry.data["source"] == exposure)
+                & (registry.data["target"] == outcome)
+            ]
+            if len(direct) != 1 or direct.iloc[0]["fixed_status"] != "causal":
+                raise SimulationError(
+                    "Causal synthetic registry did not create the fixed direct "
+                    f"edge {exposure} -> {outcome}"
+                )
+        registry.data.attrs["synthetic_node_timing"] = {
+            node["name"]: node["timing"] for node in nodes
+        }
         return registry
 
     def _build_identified_crux_registry(
         self, n_components: int, exposure: str, outcome: str
     ) -> ComponentRegistry:
+        """Build an identified-compatibility crux with a non-query collider.
+
+        The direct ``exposure -> outcome`` edge is fixed causal.  The crux is
+        the separate ``exposure -> collider`` edge, paired with a fixed
+        ``outcome -> collider`` edge.  Complete conditioning on the collider
+        therefore changes the native d-separation result without ever making
+        the queried direct effect uncertain.
+        """
         if n_components < 9:
             raise SimulationError(
                 "identified_compatible crux requires at least 9 components"
             )
 
-        latent = "__U"
-        mediator = "__M"
+        collider = "__C"
+        while collider in {exposure, outcome}:
+            collider = f"_{collider}"
         n_nodes = None
-        for candidate in range(4, n_components - 4):
+        for candidate in range(3, n_components):
             target_edges = n_components - candidate
-            if target_edges >= 5 and target_edges <= candidate * (candidate - 1) // 2:
+            if target_edges >= 3 and target_edges <= candidate * (candidate - 1) // 2:
                 n_nodes = candidate
                 break
         if n_nodes is None:
@@ -209,21 +299,18 @@ class SimulationSuite:
             )
 
         nodes = [
-            {"name": latent, "description": "Latent common cause", "observed": False},
             {"name": exposure, "description": "Exposure"},
-            {"name": mediator, "description": "Mediator"},
             {"name": outcome, "description": "Outcome"},
+            {"name": collider, "description": "Potential collider"},
             *[
                 {"name": f"__B{i}", "description": "Background variable"}
-                for i in range(1, n_nodes - 3)
+                for i in range(1, n_nodes - 2)
             ],
         ]
         core_edges = [
-            (latent, exposure),
-            (latent, outcome),
-            (exposure, mediator),
-            (mediator, outcome),
             (exposure, outcome),
+            (outcome, collider),
+            (exposure, collider),
         ]
         node_names = [node["name"] for node in nodes]
         filler_edges = [
@@ -235,15 +322,47 @@ class SimulationSuite:
         target_edge_count = n_components - n_nodes
         edges = core_edges + filler_edges[: target_edge_count - len(core_edges)]
         constraints = [
-            {"source": source, "target": target, "direction": "->", "rule": "allow"}
+            {
+                "source": source,
+                "target": target,
+                "direction": "->",
+                "rule": (
+                    "require"
+                    if (source, target)
+                    in {
+                        (exposure, outcome),
+                        (outcome, collider),
+                    }
+                    else "allow"
+                ),
+            }
             for source, target in edges
         ]
-        return ComponentRegistryBuilder.from_nodes(
+        registry = ComponentRegistryBuilder.from_nodes(
             nodes,
             respect_timing=False,
             include_bidirectional=False,
             constraints=constraints,
+            exposure=exposure,
+            outcome=outcome,
         )
+        if len(registry.data) != n_components:
+            raise SimulationError(
+                f"Expected {n_components} identified-crux registry rows, "
+                f"got {len(registry.data)}"
+            )
+        direct = registry.data[
+            (registry.data["type"] == "edge")
+            & (registry.data["direction"] == "->")
+            & (registry.data["source"] == exposure)
+            & (registry.data["target"] == outcome)
+        ]
+        if len(direct) != 1 or direct.iloc[0]["fixed_status"] != "causal":
+            raise SimulationError(
+                "Identified crux registry did not create the fixed direct "
+                f"edge {exposure} -> {outcome}"
+            )
+        return registry
 
     # ── threshold enforcement ──────────────────────────────────────────────────
 
@@ -399,37 +518,48 @@ class SimulationSuite:
         synthesize_completion_support=False,
     ):
         all_records = list(state_records)
+        analysis_model_ids = sorted(set(model_ids))
         initial_state = StateTensor.from_records(
             registry,
             all_records,
-            model_ids=sorted({r["model_id"] for r in all_records}),
+            model_ids=sorted(
+                set(analysis_model_ids) | {r["model_id"] for r in all_records}
+            ),
         )
         support_records = []
         if compatibility_metric != "similarity_rate" and synthesize_completion_support:
             support_records = materialize_missing_completions(
-                initial_state, registry, list(model_ids)
+                initial_state, registry, analysis_model_ids
             )
             all_records.extend(support_records)
 
         all_model_ids = sorted({r["model_id"] for r in all_records})
         state = StateTensor.from_records(registry, all_records, model_ids=all_model_ids)
         mode = "basic" if compatibility_metric == "similarity_rate" else "full"
+        scorer = CompatibilityScorer(compatibility_metric=compatibility_metric)
         causal_wrapper = None
         identification_wrapper = None
         if mode == "full":
             causal_wrapper = self._make_causal_wrapper()
-            if compatibility_metric == "identified_compatible":
-                identification_wrapper = self._make_identification_wrapper()
 
         from dyadic.profiles import CausalProfileBuilder
         from dyadic.tensor_engine import structural_similarity_matrix
 
         validator = DyadicEngine()
-        for model_id in model_ids:
+        if scorer.requires_causal():
+            self._validate_causal_query(
+                validator,
+                state,
+                registry,
+                exposure,
+                outcome,
+                all_model_ids,
+            )
+        for model_id in all_model_ids:
             validator._validate_acyclic(model_id, state, registry)
         profiles = None
         if mode == "full":
-            profiles = DyadicEngine()._build_causal_profiles(
+            profiles = validator._build_causal_profiles(
                 state,
                 registry,
                 mode=mode,
@@ -437,9 +567,10 @@ class SimulationSuite:
                 identification_wrapper=identification_wrapper,
                 exposure=exposure,
                 outcome=outcome,
+                model_ids=all_model_ids,
             )
         similarity, ordered_ids = structural_similarity_matrix(
-            state, registry, model_ids=list(model_ids)
+            state, registry, model_ids=analysis_model_ids
         )
         dyads = []
         for i, ego_id in enumerate(ordered_ids):
@@ -459,7 +590,6 @@ class SimulationSuite:
                         )
                     )
                 dyads.append(dyad)
-        scorer = CompatibilityScorer(compatibility_metric=compatibility_metric)
         scores = scorer.score_dyads(dyads)
         unavailable = sum(d.get(compatibility_metric) is None for d in dyads)
         diagnostics = {
@@ -470,7 +600,7 @@ class SimulationSuite:
             "n_unavailable_dyads": unavailable,
             "exposure": exposure,
             "outcome": outcome,
-            "analysis_model_count": len(model_ids),
+            "analysis_model_count": len(analysis_model_ids),
             "completion_support_model_count": len(
                 {r["model_id"] for r in support_records}
             ),
@@ -518,14 +648,8 @@ class SimulationSuite:
             design = "mas_adjustment_sets"
         else:
             nodes = [
-                {
-                    "name": "U",
-                    "timing": 0,
-                    "description": "Latent common cause",
-                    "observed": False,
-                },
-                {"name": "X1", "timing": 1, "description": "Exposure"},
-                {"name": "X2", "timing": 2, "description": "Mediator"},
+                {"name": "X2", "timing": 1, "description": "Observed confounder"},
+                {"name": "X1", "timing": 2, "description": "Exposure"},
                 *[
                     {
                         "name": f"X{i}",
@@ -535,15 +659,16 @@ class SimulationSuite:
                     for i in range(3, 6)
                 ],
                 {"name": "Y", "timing": 6, "description": "Outcome"},
+                {"name": "X6", "timing": 7, "description": "Post-outcome collider"},
             ]
             fixed_edges = [
-                ("U", "X1"),
-                ("U", "Y"),
-                ("X1", "X2"),
+                ("X2", "X1"),
                 ("X2", "Y"),
+                ("X1", "Y"),
+                ("Y", "X6"),
             ]
             variable_edges = [
-                ("X1", "Y"),
+                ("X1", "X6"),
                 ("X3", "X4"),
                 ("X3", "X5"),
                 ("X4", "X5"),
@@ -551,17 +676,24 @@ class SimulationSuite:
                 ("X4", "Y"),
                 ("X5", "Y"),
             ]
-            design = "front_door_identification"
+            design = "forced_conditioning_collider"
 
         constraints = [
-            {"source": source, "target": target, "direction": "->", "rule": "allow"}
+            {
+                "source": source,
+                "target": target,
+                "direction": "->",
+                "rule": "require" if (source, target) in fixed_edges else "allow",
+            }
             for source, target in fixed_edges + variable_edges
         ]
         registry = ComponentRegistryBuilder.from_nodes(
             nodes,
-            respect_timing=False,
+            respect_timing=True,
             include_bidirectional=False,
             constraints=constraints,
+            exposure="X1",
+            outcome="Y",
         )
         edge_ids = {
             (row["source"], row["target"]): row["comp_id"]
@@ -629,13 +761,22 @@ class SimulationSuite:
         from dyadic.tensor_engine import structural_similarity_matrix
 
         state = StateTensor.from_records(registry, state_records, model_ids=model_ids)
+        scorer = CompatibilityScorer(compatibility_metric=compatibility_metric)
+        validator = DyadicEngine()
+        if scorer.requires_causal():
+            self._validate_causal_query(
+                validator,
+                state,
+                registry,
+                exposure,
+                outcome,
+                list(model_ids),
+            )
+        for model_id in model_ids:
+            validator._validate_acyclic(model_id, state, registry)
         causal_wrapper = self._make_causal_wrapper()
-        identification_wrapper = (
-            self._make_identification_wrapper()
-            if compatibility_metric == "identified_compatible"
-            else None
-        )
-        profiles = DyadicEngine()._build_causal_profiles(
+        identification_wrapper = None
+        profiles = validator._build_causal_profiles(
             state,
             registry,
             mode="full",
@@ -643,6 +784,7 @@ class SimulationSuite:
             identification_wrapper=identification_wrapper,
             exposure=exposure,
             outcome=outcome,
+            model_ids=list(model_ids),
         )
         similarity, ordered_ids = structural_similarity_matrix(
             state, registry, model_ids=model_ids
@@ -902,10 +1044,29 @@ class SimulationSuite:
         return CausalWrapper()
 
     @staticmethod
-    def _make_identification_wrapper():
-        from dyadic.identification import IdentificationWrapper
-
-        return IdentificationWrapper()
+    def _validate_causal_query(
+        validator,
+        state,
+        registry,
+        exposure,
+        outcome,
+        model_ids,
+    ):
+        """Apply the shared causal-query contract to a simulation universe."""
+        if exposure is None or outcome is None:
+            raise SimulationInputError(
+                "Causal simulations require both exposure and outcome"
+            )
+        try:
+            validator.validate_causal_query(
+                state,
+                registry,
+                exposure,
+                outcome,
+                model_ids=model_ids,
+            )
+        except DyadicError as exc:
+            raise SimulationInputError(f"Invalid causal query: {exc}") from exc
 
     # ── scenario B: lynchpin of certainty ──────────────────────────────────────
 
@@ -1012,7 +1173,13 @@ class SimulationSuite:
                 n_components, exposure, outcome
             )
         else:
-            registry = self._build_synthetic_registry(n_components)
+            registry = self._build_synthetic_registry(
+                n_components,
+                exposure=(
+                    exposure if compatibility_metric == "mas_compatible" else None
+                ),
+                outcome=(outcome if compatibility_metric == "mas_compatible" else None),
+            )
 
         def _try(seed):
             self._rng.seed(seed)
@@ -1498,6 +1665,13 @@ class SimulationSuite:
         crux_id = edge_id(confounder, exposure)
         confounder_outcome_id = edge_id(confounder, outcome)
         exposure_outcome_id = edge_id(exposure, outcome)
+        fixed_edge_ids = set(
+            registry.data.loc[
+                (registry.data["type"] == "edge")
+                & (registry.data["fixed_status"] == "causal"),
+                "comp_id",
+            ]
+        )
         node_ids = set(registry.data[registry.data["type"] == "node"]["comp_id"])
         records = []
         statuses = ("unknown", "causal", "non-causal")
@@ -1510,7 +1684,10 @@ class SimulationSuite:
                     status = "present"
                 elif comp_id == crux_id:
                     status = crux_status
-                elif comp_id in (confounder_outcome_id, exposure_outcome_id):
+                elif comp_id in fixed_edge_ids or comp_id in (
+                    confounder_outcome_id,
+                    exposure_outcome_id,
+                ):
                     status = "causal"
                 else:
                     status = "non-causal"
@@ -1519,61 +1696,59 @@ class SimulationSuite:
                         "model_id": model_id,
                         "comp_id": comp_id,
                         "status": status,
-                        "timing": self._timing_from_comp(component),
+                        "timing": self._timing_from_comp(component, registry),
                     }
                 )
         return records, crux_id
 
     def _generate_identified_crux_states(self, registry, n_models, exposure, outcome):
-        """Create a directed latent front-door crux with an unknown direct edge.
+        """Create a resolution-closed non-query collider crux.
 
-        The crux edge cycles through unknown / causal / non-causal so that
-        every unknown model has exact causal and non-causal matches inside the
-        multiverse (marginal crux).
+        The direct ``exposure -> outcome`` edge remains causal in every model.
+        A variable ``exposure -> collider`` edge is paired with a fixed
+        ``outcome -> collider`` edge, so complete conditioning on the collider
+        makes the causal identification predicate switch between true and
+        false.  The crux cycles through unknown / causal / non-causal and each
+        unknown state has exact causal and non-causal matches in the generated
+        multiverse.
         """
-        node_rows = registry.data[registry.data["type"] == "node"]
-        latent_rows = node_rows[node_rows["observed"] == False]  # noqa: E712
-        if latent_rows.empty:
-            raise SimulationError("Identified crux requires an explicit latent node")
-        latent = latent_rows.iloc[0]["source"]
-        mediator_candidates = set(node_rows["source"]) - {latent, exposure, outcome}
         edge_rows = registry.data[registry.data["type"] == "edge"]
 
-        def edge_id(source, target):
+        def directed_edge_rows(source, target):
             rows = edge_rows[
                 (edge_rows["source"] == source)
                 & (edge_rows["target"] == target)
                 & (edge_rows["direction"] == "->")
             ]
-            if rows.empty:
-                raise SimulationError(
-                    f"Identified crux requires edge {source} -> {target}"
-                )
-            return rows.iloc[0]["comp_id"]
+            return rows
 
-        mediator = next(
-            (
-                node
-                for node in mediator_candidates
-                if not edge_rows[
-                    (edge_rows["source"] == exposure) & (edge_rows["target"] == node)
-                ].empty
-                and not edge_rows[
-                    (edge_rows["source"] == node) & (edge_rows["target"] == outcome)
-                ].empty
-            ),
-            None,
-        )
-        if mediator is None:
-            raise SimulationError("Identified crux requires a front-door mediator")
+        direct_rows = directed_edge_rows(exposure, outcome)
+        if len(direct_rows) != 1 or direct_rows.iloc[0]["fixed_status"] != "causal":
+            raise SimulationError(
+                "Identified crux requires a fixed causal direct edge "
+                f"{exposure} -> {outcome}"
+            )
 
-        crux_id = edge_id(exposure, outcome)
-        fixed_ids = {
-            edge_id(latent, exposure),
-            edge_id(latent, outcome),
-            edge_id(exposure, mediator),
-            edge_id(mediator, outcome),
-        }
+        collider_candidates = edge_rows[
+            (edge_rows["source"] == outcome)
+            & (edge_rows["direction"] == "->")
+            & (edge_rows["target"] != exposure)
+            & (edge_rows["target"] != outcome)
+            & (edge_rows["fixed_status"] == "causal")
+        ]
+        if collider_candidates.empty:
+            raise SimulationError(
+                "Identified crux requires a fixed outcome -> collider edge"
+            )
+        collider = sorted(collider_candidates["target"].tolist())[0]
+        crux_rows = directed_edge_rows(exposure, collider)
+        crux_rows = crux_rows[crux_rows["fixed_status"] != "causal"]
+        if len(crux_rows) != 1:
+            raise SimulationError(
+                "Identified crux requires one variable exposure -> collider edge"
+            )
+        crux_id = crux_rows.iloc[0]["comp_id"]
+        fixed_ids = set(edge_rows.loc[edge_rows["fixed_status"] == "causal", "comp_id"])
         node_ids = set(registry.data[registry.data["type"] == "node"]["comp_id"])
         records = []
         statuses = ("unknown", "causal", "non-causal")
@@ -1644,7 +1819,7 @@ class SimulationSuite:
                         "model_id": model_id,
                         "comp_id": comp_id,
                         "status": status,
-                        "timing": self._timing_from_comp(comp_row),
+                        "timing": self._timing_from_comp(comp_row, registry),
                     }
                 )
 
@@ -1746,7 +1921,11 @@ class SimulationSuite:
         if enforce_thresholds is None:
             enforce_thresholds = True
 
-        registry = self._build_synthetic_registry(n_components)
+        registry = self._build_synthetic_registry(
+            n_components,
+            exposure=(exposure if compatibility_metric != "similarity_rate" else None),
+            outcome=(outcome if compatibility_metric != "similarity_rate" else None),
+        )
 
         def _try(seed):
             self._rng.seed(seed)
@@ -2114,6 +2293,13 @@ class SimulationSuite:
         """Generate multiverse with mainstream, ghost, and noise clusters."""
         all_comp_ids = list(registry.data["comp_id"])
         node_comps = set(registry.data[registry.data["type"] == "node"]["comp_id"])
+        fixed_edge_comps = set(
+            registry.data.loc[
+                (registry.data["type"] == "edge")
+                & (registry.data["fixed_status"] == "causal"),
+                "comp_id",
+            ]
+        )
 
         records = []
         model_idx = 1
@@ -2124,6 +2310,8 @@ class SimulationSuite:
             for comp_id in all_comp_ids:
                 if comp_id in node_comps:
                     status = "present"
+                elif comp_id in fixed_edge_comps:
+                    status = "causal"
                 elif comp_id in mainstream_edges:
                     status = "causal"
                 elif comp_id in ghost_edges:
@@ -2138,7 +2326,7 @@ class SimulationSuite:
                     )
 
                 comp_row = registry.data[registry.data["comp_id"] == comp_id].iloc[0]
-                timing = self._timing_from_comp(comp_row)
+                timing = self._timing_from_comp(comp_row, registry)
                 records.append(
                     {
                         "model_id": model_id,
@@ -2154,6 +2342,8 @@ class SimulationSuite:
             for comp_id in all_comp_ids:
                 if comp_id in node_comps:
                     status = "present"
+                elif comp_id in fixed_edge_comps:
+                    status = "causal"
                 elif comp_id in ghost_edges:
                     status = "causal"
                 elif comp_id in mainstream_edges:
@@ -2168,7 +2358,7 @@ class SimulationSuite:
                     )
 
                 comp_row = registry.data[registry.data["comp_id"] == comp_id].iloc[0]
-                timing = self._timing_from_comp(comp_row)
+                timing = self._timing_from_comp(comp_row, registry)
                 records.append(
                     {
                         "model_id": model_id,
@@ -2184,6 +2374,8 @@ class SimulationSuite:
             for comp_id in all_comp_ids:
                 if comp_id in node_comps:
                     status = "present"
+                elif comp_id in fixed_edge_comps:
+                    status = "causal"
                 else:
                     status = self._rng.choice(
                         ["causal", "unknown", "non-causal"]
@@ -2192,7 +2384,7 @@ class SimulationSuite:
                     )
 
                 comp_row = registry.data[registry.data["comp_id"] == comp_id].iloc[0]
-                timing = self._timing_from_comp(comp_row)
+                timing = self._timing_from_comp(comp_row, registry)
                 records.append(
                     {
                         "model_id": model_id,
@@ -2204,11 +2396,15 @@ class SimulationSuite:
 
         return records
 
-    def _timing_from_comp(self, comp_row):
+    def _timing_from_comp(self, comp_row, registry=None):
         source = comp_row["source"]
+        if registry is not None:
+            timing = registry.data.attrs.get("synthetic_node_timing", {}).get(source)
+            if timing is not None:
+                return timing
         if source and source.startswith("X"):
             try:
                 return int(source[1:])
             except ValueError:
-                return 0
-        return 0
+                return None
+        return None

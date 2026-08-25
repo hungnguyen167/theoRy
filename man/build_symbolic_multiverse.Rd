@@ -18,9 +18,11 @@ build_symbolic_multiverse(
 )
 }
 \arguments{
-\item{nodes}{A data frame or list of nodes with name and optional timing columns.}
+\item{nodes}{A data frame or list of nodes with name and optional timing
+columns containing integer values >= 1; \code{NA} means unspecified.}
 
-\item{timing}{An optional named list/vector of integer timing values.}
+\item{timing}{An optional named list/vector of integer timing values >= 1;
+\code{NA} means unspecified.}
 
 \item{registry}{An optional registry data frame (from build_component_registry).}
 
@@ -43,7 +45,8 @@ A list with class "theory_symbolic_multiverse".
 }
 \description{
 Constructs a symbolic multiverse either from a component registry
-(\code{registry}) or directly from nodes and timing. When no timing is
+(\code{registry}) or directly from nodes and positive timing positions
+(integer values >= 1). When no timing is
 supplied and both \code{exposure} and \code{outcome} are provided, an
 implicit \code{exposure -> outcome} edge variable is created and fixed as
 causal in the symbolic universe, enforcing the causal ordering constraint

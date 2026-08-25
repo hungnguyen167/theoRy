@@ -3,8 +3,9 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from api.routes import router
 from api.middleware import configure_logging, add_request_logging_middleware
+from api.version import API_VERSION
 
-app = FastAPI(title="Theory Engine", version="0.1.0")
+app = FastAPI(title="Theory Engine", version=API_VERSION)
 
 configure_logging()
 add_request_logging_middleware(app)

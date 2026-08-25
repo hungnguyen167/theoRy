@@ -27,13 +27,14 @@ from state.expander import ModelStateExpander
 from state.tensor import StateError, StateTensor
 from dyadic.engine import DyadicEngine, DyadicError
 from dyadic.causal import CausalWrapper, CausalError
-from dyadic.identification import IdentificationWrapper, IdentificationError
 from dyadic.hybrid import HybridDyadicEngine
 from api.session import (
+    DyadContext,
     update_latest_dyad_context,
     get_latest_dyad_context,
     update_latest_symbolic_context,
 )
+from api.version import API_VERSION
 from simulation.delta_u import DeltaUEngine, DeltaUError
 from simulation.suite import SimulationSuite, SimulationError, SimulationInputError
 from clustering.engine import ClusteringEngine, ClusteringError
@@ -72,6 +73,30 @@ def _sanitize_record(record: dict) -> dict:
     return {k: _sanitize_null(v) for k, v in record.items()}
 
 
+def _validate_causal_query_or_http(
+    state: StateTensor,
+    registry,
+    exposure: str,
+    outcome: str,
+    *,
+    model_ids: list[str] | tuple[str, ...] | None = None,
+) -> None:
+    """Apply the shared fixed-direct-edge contract at API boundaries."""
+    try:
+        engine.validate_causal_query(
+            state,
+            registry,
+            exposure,
+            outcome,
+            model_ids=model_ids,
+        )
+    except DyadicError as e:
+        raise HTTPException(
+            status_code=422,
+            detail={"code": "INVALID_CAUSAL_QUERY", "message": str(e)},
+        ) from e
+
+
 def _json_mass(value):
     if isinstance(value, int) and abs(value) > 10**15:
         return str(value)
@@ -80,7 +105,7 @@ def _json_mass(value):
 
 @router.get("/health")
 async def health():
-    return {"status": "success", "data": {"status": "healthy", "version": "0.1.0"}}
+    return {"status": "success", "data": {"status": "healthy", "version": API_VERSION}}
 
 
 @router.post("/component-registry")
@@ -251,6 +276,17 @@ async def dyad_matrix(request: DyadMatrixRequest):
             },
         )
 
+    if request.mode == "full" and exposure is None:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": "INVALID_CAUSAL_TARGET",
+                "message": (
+                    f"mode='{request.mode}' requires both exposure and outcome"
+                ),
+            },
+        )
+
     if exposure is not None and outcome is not None:
         node_names = set(
             registry.data[registry.data["type"] == "node"]["source"].tolist()
@@ -272,6 +308,14 @@ async def dyad_matrix(request: DyadMatrixRequest):
                     "message": f"Invalid exposure/outcome node(s): {invalid}",
                 },
             )
+        if request.mode in ("full", "two-stage"):
+            _validate_causal_query_or_http(
+                state,
+                registry,
+                exposure,
+                outcome,
+                model_ids=state.model_ids,
+            )
 
     causal_wrapper = None
     identification_wrapper = None
@@ -283,16 +327,9 @@ async def dyad_matrix(request: DyadMatrixRequest):
                 status_code=400,
                 detail={"code": "CAUSAL_ERROR", "message": str(e)},
             )
-        if exposure is not None and outcome is not None:
-            try:
-                identification_wrapper = IdentificationWrapper(
-                    causal_backend=request.causal_backend
-                )
-            except IdentificationError as e:
-                raise HTTPException(
-                    status_code=400,
-                    detail={"code": "IDENTIFICATION_ERROR", "message": str(e)},
-                )
+        # identified_compatible uses the native complete-conditioning
+        # predicate.  The legacy IdentificationWrapper remains available to
+        # callers but is intentionally not initialized for this metric.
 
     try:
         if request.mode == "basic":
@@ -346,6 +383,14 @@ async def dyad_matrix(request: DyadMatrixRequest):
                         "message": "top_k must be positive for mode='two-stage'",
                     },
                 )
+            if exposure is None:
+                raise HTTPException(
+                    status_code=422,
+                    detail={
+                        "code": "INVALID_CAUSAL_TARGET",
+                        "message": "mode='two-stage' requires both exposure and outcome",
+                    },
+                )
             two_stage_result = hybrid.compare_two_stage(
                 state,
                 registry,
@@ -374,12 +419,6 @@ async def dyad_matrix(request: DyadMatrixRequest):
         raise HTTPException(
             status_code=500,
             detail={"code": "CAUSAL_ERROR", "message": str(e)},
-        )
-    except IdentificationError as e:
-        logger.error(f"Identification error: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=500,
-            detail={"code": "IDENTIFICATION_ERROR", "message": str(e)},
         )
     except HTTPException:
         raise
@@ -435,6 +474,7 @@ async def dyad_matrix(request: DyadMatrixRequest):
 
 @router.post("/delta-u")
 async def delta_u(request: DeltaURequest):
+    context = None
     if request.registry_data is not None or request.state_data is not None:
         if request.registry_data is None or request.state_data is None:
             raise HTTPException(
@@ -477,7 +517,7 @@ async def delta_u(request: DeltaURequest):
         exposure = request.exposure or context.exposure
         outcome = request.outcome or context.outcome
 
-    if not dyads:
+    if not dyads and context is None:
         raise HTTPException(
             status_code=400,
             detail={
@@ -586,6 +626,14 @@ async def delta_u(request: DeltaURequest):
             },
         )
     if requires_causal:
+        _validate_causal_query_or_http(
+            state,
+            registry,
+            exposure,
+            outcome,
+            model_ids=state.model_ids,
+        )
+    if requires_causal:
         try:
             causal_wrapper = CausalWrapper()
         except CausalError as e:
@@ -593,19 +641,8 @@ async def delta_u(request: DeltaURequest):
                 status_code=400,
                 detail={"code": "CAUSAL_ERROR", "message": str(e)},
             )
-        if compatibility_metric == "identified_compatible":
-            try:
-                from dyadic.identification import IdentificationWrapper
-
-                identification_wrapper = IdentificationWrapper()
-            except Exception as e:
-                raise HTTPException(
-                    status_code=400,
-                    detail={
-                        "code": "IDENTIFICATION_ERROR",
-                        "message": f"Failed to initialize identification: {e}",
-                    },
-                )
+        # identified_compatible is computed by native complete-conditioning
+        # d-separation; the legacy identification wrapper is not involved.
 
     delta_engine = DeltaUEngine(
         dyadic_engine=engine,
@@ -765,8 +802,35 @@ async def clusters(request: ClustersRequest):
     model_ids = request.model_ids
     context = None
 
-    if dyads is None:
-        context = get_latest_dyad_context()
+    if dyads is None or (not dyads and request.registry_data is not None):
+        if request.registry_data is not None:
+            try:
+                registry = RegistryLoader.from_records(
+                    [record.model_dump() for record in request.registry_data]
+                )
+                state = StateTensor.from_records(
+                    registry,
+                    [record.model_dump() for record in request.state_data],
+                    model_ids,
+                )
+            except (RegistryError, StateError, ValueError) as e:
+                raise HTTPException(
+                    status_code=400,
+                    detail={
+                        "code": "INVALID_CLUSTER_CONTEXT",
+                        "message": str(e),
+                    },
+                ) from e
+            context = DyadContext(
+                registry=registry,
+                state=state,
+                dyads=[],
+                mode="explicit",
+                exposure=None,
+                outcome=None,
+            )
+        else:
+            context = get_latest_dyad_context()
         if context is None:
             raise HTTPException(
                 status_code=400,
@@ -779,14 +843,11 @@ async def clusters(request: ClustersRequest):
         if model_ids is None:
             model_ids = list(context.state.model_ids)
 
-    if not dyads:
-        raise HTTPException(
-            status_code=400,
-            detail={
-                "code": "NO_DYADS",
-                "message": "Dyad records are required for clustering",
-            },
-        )
+    exposure = request.exposure
+    outcome = request.outcome
+    if context is not None and exposure is None and outcome is None:
+        exposure = context.exposure
+        outcome = context.outcome
 
     if model_ids is None:
         model_ids = sorted(
@@ -866,65 +927,62 @@ async def clusters(request: ClustersRequest):
         )
 
     if request.score_field in ("mas_compatible", "identified_compatible"):
-        if request.dyads is not None and all(request.score_field in d for d in dyads):
-            pass
-        elif request.exposure is None or request.outcome is None:
-            raise HTTPException(
-                status_code=422,
-                detail={
-                    "code": "MISSING_EXPOSURE_OUTCOME",
-                    "message": (
-                        f"score_field '{request.score_field}' requires "
-                        "exposure and outcome to be specified"
-                    ),
-                },
-            )
-        if context is not None and request.dyads is None:
-            node_names = set(
-                context.registry.data[context.registry.data["type"] == "node"][
-                    "source"
-                ].tolist()
-            )
-            if request.exposure == request.outcome:
+        if exposure is None or outcome is None:
+            if (
+                request.dyads is not None
+                and dyads
+                and all(request.score_field in d for d in dyads)
+            ):
+                pass  # Raw dyad-only calls are trusted as already computed.
+            else:
                 raise HTTPException(
                     status_code=422,
                     detail={
-                        "code": "INVALID_CAUSAL_TARGET",
-                        "message": "Exposure and outcome must be distinct nodes",
+                        "code": "MISSING_EXPOSURE_OUTCOME",
+                        "message": (
+                            f"score_field '{request.score_field}' requires "
+                            "exposure and outcome to be specified"
+                        ),
                     },
                 )
-            invalid = [
-                n for n in (request.exposure, request.outcome) if n not in node_names
-            ]
-            if invalid:
-                raise HTTPException(
-                    status_code=422,
-                    detail={
-                        "code": "INVALID_CAUSAL_TARGET",
-                        "message": f"Invalid exposure/outcome node(s): {invalid}",
-                    },
-                )
-            try:
-                dyads = engine.compare_pairs(
-                    context.state,
-                    context.registry,
-                    model_ids,
-                    mode="full",
-                    causal_wrapper=CausalWrapper(),
-                    identification_wrapper=(
-                        IdentificationWrapper()
-                        if request.score_field == "identified_compatible"
-                        else None
-                    ),
-                    exposure=request.exposure,
-                    outcome=request.outcome,
-                )
-            except CausalError as e:
-                raise HTTPException(
-                    status_code=500,
-                    detail={"code": "CAUSAL_ERROR", "message": str(e)},
-                )
-        elif any(request.score_field not in d for d in dyads):
+        elif context is not None and not request.dyads:
+            _validate_causal_query_or_http(
+                context.state,
+                context.registry,
+                exposure,
+                outcome,
+                model_ids=model_ids,
+            )
+            same_query = context.exposure == exposure and context.outcome == outcome
+            has_metric = bool(dyads) and all(
+                d.get(request.score_field) is not None for d in dyads
+            )
+            if context.mode != "full" or not same_query or not has_metric:
+                try:
+                    dyads = engine.compare_pairs(
+                        context.state,
+                        context.registry,
+                        model_ids,
+                        mode="full",
+                        causal_wrapper=CausalWrapper(),
+                        identification_wrapper=None,
+                        exposure=exposure,
+                        outcome=outcome,
+                    )
+                except CausalError as e:
+                    raise HTTPException(
+                        status_code=500,
+                        detail={"code": "CAUSAL_ERROR", "message": str(e)},
+                    ) from e
+                except DyadicError as e:
+                    raise HTTPException(
+                        status_code=422,
+                        detail={"code": "DYAD_ERROR", "message": str(e)},
+                    ) from e
+        elif any(
+            request.score_field not in d or d[request.score_field] is None
+            for d in dyads
+        ):
             raise HTTPException(
                 status_code=422,
                 detail={
@@ -935,6 +993,28 @@ async def clusters(request: ClustersRequest):
                     ),
                 },
             )
+    elif context is not None and not request.dyads and not dyads:
+        try:
+            dyads = engine.compare_pairs(
+                context.state,
+                context.registry,
+                model_ids,
+                mode="basic",
+            )
+        except DyadicError as e:
+            raise HTTPException(
+                status_code=422,
+                detail={"code": "DYAD_ERROR", "message": str(e)},
+            ) from e
+
+    if not dyads:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "code": "NO_DYADS",
+                "message": "Dyad records are required for clustering",
+            },
+        )
 
     if len(model_ids) < 2:
         raise HTTPException(
@@ -989,6 +1069,10 @@ async def clusters(request: ClustersRequest):
         "profile_variance": result["profile_variance"],
         "degenerate_metric": result["degenerate_metric"],
     }
+    if exposure is not None:
+        response_data["exposure"] = exposure
+    if outcome is not None:
+        response_data["outcome"] = outcome
 
     ghost_clusters = []
     if request.prior_model_id is not None:

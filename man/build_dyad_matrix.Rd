@@ -22,7 +22,8 @@ or a path to a Parquet file containing the component registry.}
 
 \item{states}{A list of state records or a data frame (from
 \code{\link{expand_model_states}}) with columns \code{model_id},
-\code{comp_id}, \code{status}, and optionally \code{timing}.
+\code{comp_id}, \code{status}, and optionally \code{timing} (an integer
+position >= 1; omitted or \code{NA} means unspecified).
 Under sparse semantics, node components use \code{"present"} status
 and edge components use \code{"causal"}, \code{"unknown"}, or
 \code{"non-causal"}.  Missing node records mean absent.}
@@ -40,20 +41,22 @@ used as the ego model for pairwise comparisons.}
 similarity pairs to compute full causal metrics for. Defaults to 100.}
 
 \item{exposure}{Optional name of the exposure (cause) variable for causal
-metrics. Must be a node in the registry. When omitted, defaults to the
-first node in the registry.}
+metrics. Must be a node in the registry. Required for full and two-stage
+modes.}
 
 \item{outcome}{Optional name of the outcome variable for causal metrics.
-Must be a node in the registry. When omitted, defaults to the last node
-in the registry. Both or neither of \code{exposure} and \code{outcome}
-must be provided.}
+Must be a node in the registry. Required for full and two-stage modes.
+Both or neither of \code{exposure} and \code{outcome}
+must be provided. Full causal queries additionally require exactly one
+fixed causal \code{exposure -> outcome} registry edge applicable in every
+queried model.}
 
-\item{causal_backend}{Causal-identification backend: \code{"r"} (default)
-requires the Dagitty/CausalEffect stack and supports general
-identification. \code{"auto"} uses the native NetworkX implementation
-when it supports the model and falls back to the R stack when available;
-if the fallback is unavailable, affected causal fields are unavailable.
-\code{"native"} never loads R and supports backdoor identification only.}
+\item{causal_backend}{Causal backend for adjustment-set computation:
+\code{"r"} (default) requires the Dagitty/CausalEffect stack;
+\code{"auto"} uses the native NetworkX implementation when supported and
+falls back to the R stack when available; \code{"native"} never loads R
+and supports backdoor adjustment only. The \code{identified_compatible}
+predicate itself uses native complete-conditioning d-separation.}
 
 \item{url}{Base URL of the theoRy Python backend API. Defaults to
 \code{getOption("theoRy.engine_url", "http://localhost:8000")}.}
@@ -82,20 +85,23 @@ For \code{mode = "basic"}, \code{"full"}, or \code{"single-ref"}:
     identified}
   \item{identified_alter}{Whether the alter model's exposure-outcome effect
     is identified}
-  \item{identification_nodes_ego}{Relevant declared node set used to compare
-    identified compatibility for the ego model (list-column).}
-  \item{identification_nodes_alter}{Relevant declared node set used to compare
-    identified compatibility for the alter model (list-column).}
-  \item{identified_compatible}{Whether the exposure-outcome effect is
-    identified in both models and the two models' relevant declared node
-    sets are exactly equal after removing robust directed-path
-    intermediates. The relevant set uses all declared present nodes
-    (observed and latent); a node is a directed-path intermediate only
-    when it lies on at least one directed exposure-outcome path in the
-    declared directed graph (bidirected edges never qualify). For partial
-    models, a node is removed only when it is an intermediate in every
-    valid represented completion; incomplete completion coverage returns
-    unavailable. Two non-identified models are not compatible.}
+  \item{identification_nodes_ego}{Complete-conditioning node set used for
+    the ego model (all declared present nodes except exposure and outcome;
+    list-column).}
+  \item{identification_nodes_alter}{Complete-conditioning node set used for
+    the alter model (list-column).}
+  \item{identification_method_ego,identification_method_alter}{Method
+    metadata for the native complete-conditioning predicate.}
+  \item{identification_formula_ego,identification_formula_alter}{Formula
+    metadata describing the direct-edge removal and d-separation test.}
+  \item{identified_compatible}{Whether both models satisfy the fixed-direct
+    exposure-to-outcome complete-conditioning d-separation predicate and
+    their node sets are exactly equal. The predicate removes only the
+    mandatory direct exposure -> outcome edge, then tests d-separation given
+    every other declared present node, including mediators, confounders, and
+    colliders. Partial models require complete, nonempty completion coverage;
+    any false descendant makes the result false. Two non-identified models
+    are not compatible.}
 
   For \code{"two-stage"}: a list with components
   \code{heatmap_summary} and \code{detailed_comparisons} (data frame).
@@ -131,7 +137,8 @@ Self-dyads are not computed.  Both \code{ego -> alter} and
   (\code{attr(states, "exposure")}, \code{attr(states, "outcome")}) and
   then from the \code{registry} attributes. Explicit arguments always
   take precedence. A warning is issued if the resolved exposure/outcome
-  differs from the metadata found on the inputs.
+  differs from the metadata found on the inputs. Causal modes error when
+  no complete query can be resolved.
 }
 \examples{
 \dontrun{
@@ -143,10 +150,7 @@ states <- expand_model_states(reg, mode = "exhaustive",
 dyads <- build_dyad_matrix(reg, states)
 head(dyads)
 
-# Full mode with causal metrics
-full <- build_dyad_matrix(reg, states, mode = "full")
-
-# Full mode with explicit exposure and outcome
+# Full mode with causal metrics and explicit exposure/outcome
 full <- build_dyad_matrix(reg, states, mode = "full",
   exposure = "X", outcome = "Z")
 
@@ -156,7 +160,7 @@ single <- build_dyad_matrix(reg, states, mode = "single-ref",
 
 # Two-stage top-K detailed comparisons
 two_stage <- build_dyad_matrix(reg, states, mode = "two-stage",
-  top_k = 5)
+  top_k = 5, exposure = "X", outcome = "Z")
 }
 
 }

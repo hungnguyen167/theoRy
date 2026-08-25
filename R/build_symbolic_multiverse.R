@@ -1,14 +1,17 @@
 #' Build a Symbolic Multiverse
 #'
 #' Constructs a symbolic multiverse either from a component registry
-#' (\code{registry}) or directly from nodes and timing. When no timing is
+#' (\code{registry}) or directly from nodes and positive timing positions
+#' (integer values >= 1). When no timing is
 #' supplied and both \code{exposure} and \code{outcome} are provided, an
 #' implicit \code{exposure -> outcome} edge variable is created and fixed as
 #' causal in the symbolic universe, enforcing the causal ordering constraint
 #' in every symbolic query.
 #'
-#' @param nodes A data frame or list of nodes with name and optional timing columns.
-#' @param timing An optional named list/vector of integer timing values.
+#' @param nodes A data frame or list of nodes with name and optional timing
+#'   columns containing integer values >= 1; \code{NA} means unspecified.
+#' @param timing An optional named list/vector of integer timing values >= 1;
+#'   \code{NA} means unspecified.
 #' @param registry An optional registry data frame (from build_component_registry).
 #' @param exposure Name of the exposure variable.
 #' @param outcome Name of the outcome variable.
@@ -31,6 +34,10 @@ build_symbolic_multiverse <- function(nodes = NULL,
                                       url = getOption("theoRy.engine_url", "http://localhost:8000")) {
   mode <- match.arg(mode)
 
+  if (!is.null(timing)) {
+    .symbolic_validate_timing_values(timing, "timing")
+  }
+
   body <- list()
   body$exposure <- exposure
   body$outcome <- outcome
@@ -39,11 +46,29 @@ build_symbolic_multiverse <- function(nodes = NULL,
 
   if (!is.null(nodes)) {
     if (is.data.frame(nodes)) {
+      if ("timing" %in% names(nodes)) {
+        .symbolic_validate_timing_values(nodes$timing, "nodes timing")
+      }
       body$nodes <- lapply(seq_len(nrow(nodes)), function(i) {
         list(name = as.character(nodes[i, "name", drop = TRUE]),
              timing = if ("timing" %in% names(nodes)) nodes[i, "timing", drop = TRUE] else NULL)
       })
     } else {
+      if (is.list(nodes)) {
+        if (!is.null(names(nodes)) && "timing" %in% names(nodes) &&
+            !is.null(nodes$timing)) {
+          .symbolic_validate_timing_values(nodes$timing, "nodes timing")
+        }
+        for (i in seq_along(nodes)) {
+          node <- nodes[[i]]
+          if (is.list(node) && "timing" %in% names(node) &&
+              !is.null(node$timing)) {
+            .symbolic_validate_timing_values(
+              node$timing, paste0("nodes[[", i, "]] timing")
+            )
+          }
+        }
+      }
       body$nodes <- nodes
     }
   }
@@ -87,4 +112,31 @@ build_symbolic_multiverse <- function(nodes = NULL,
 
   result <- httr2::resp_body_json(resp)
   structure(result$data, class = "theory_symbolic_multiverse")
+}
+
+
+.symbolic_validate_timing_values <- function(values, label) {
+  values <- if (is.list(values)) unlist(values, use.names = FALSE) else values
+  ordinary_na <- is.na(values) & !is.nan(values)
+  all_logical_na <- is.logical(values) && length(values) > 0L &&
+    all(ordinary_na)
+  if ((!is.numeric(values) || is.complex(values)) && !all_logical_na) {
+    stop(label, " must contain integer values >= 1.", call. = FALSE)
+  }
+
+  valid <- ordinary_na
+  non_na <- !ordinary_na
+  if (any(non_na)) {
+    integer_values <- suppressWarnings(as.integer(values[non_na]))
+    valid[non_na] <- is.finite(values[non_na]) &
+      values[non_na] == floor(values[non_na]) &
+      values[non_na] >= 1L &
+      !is.na(integer_values) &
+      as.numeric(integer_values) == values[non_na]
+  }
+
+  if (any(!valid)) {
+    stop(label, " must contain integer values >= 1.", call. = FALSE)
+  }
+  invisible(values)
 }

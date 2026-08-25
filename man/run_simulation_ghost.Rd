@@ -47,7 +47,10 @@ of generating synthetic components.}
 
 \item{states}{Optional model-state records from
 \code{\link{expand_model_states}}. Required when \code{registry} is
-supplied. The simulation computes dyads from these states internally.}
+supplied. The simulation computes dyads from these states internally. A
+supplied data frame must contain \code{model_id}, \code{comp_id}, and
+\code{status}; when present, \code{timing} must contain integer positions
+>= 1, with \code{NA} marking an unspecified position.}
 
 \item{sample_n}{Optional positive integer. In seeded mode, number of
 distinct model IDs to sample without replacement from \code{states}.

@@ -47,6 +47,15 @@ def _resolve_endpoints(dag_spec: dict) -> tuple[str | None, str | None]:
 
 
 def _native_graph(dag_spec: dict) -> tuple[nx.DiGraph, set[str], str, str]:
+    """Build the native graph used by the causal helpers.
+
+    Adjustment-set computation uses the observed graph with bidirected
+    relations expanded to latent common causes, while complete-conditioning
+    identification needs to remove one *specific* directed edge before
+    testing the resolved graph. Keeping the declared latent nodes in that
+    latter graph prevents a directed path through a latent node from being
+    mistaken for the mandatory direct edge.
+    """
     nodes = dag_spec.get("nodes", [])
     directed_edges = dag_spec.get("edges", [])
     bidirected_edges = dag_spec.get("bidirected_edges", [])
@@ -112,6 +121,10 @@ def _is_d_separated(
     graph: nx.DiGraph, exposure: str, outcome: str, adjustment: set[str]
 ) -> bool:
     """Use ancestral moralization to test d-separation in a DAG."""
+    # A caller may carry metadata for nodes that were projected out of the
+    # graph.  Such nodes cannot be conditioned on in the native graph, so they
+    # are ignored rather than causing NetworkX to reject the query.
+    adjustment = set(adjustment) & set(graph.nodes)
     ancestors = {exposure, outcome, *adjustment}
     for node in tuple(ancestors):
         ancestors.update(nx.ancestors(graph, node))
@@ -126,6 +139,54 @@ def _is_d_separated(
 
     moral_graph.remove_nodes_from(adjustment)
     return not nx.has_path(moral_graph, exposure, outcome)
+
+
+def native_complete_conditioning_identified(
+    dag_spec: dict,
+    conditioning_set: set[str] | frozenset[str] | list[str] | tuple[str, ...],
+) -> bool:
+    """Test the fixed-direct-edge complete-conditioning predicate.
+
+    The query is the direct exposure -> outcome effect.  The mandatory direct
+    edge is removed from a resolved graph and exposure/outcome are tested for
+    d-separation given every other declared present node supplied in
+    ``conditioning_set``.  Bidirected edges are represented by latent common
+    causes in :func:`_native_graph`, so they participate in the same native
+    d-separation test as directed paths.
+
+    ``dag_spec`` may provide ``declared_nodes``/``declared_directed_edges`` and
+    ``declared_bidirected_edges`` metadata.  Those fields are preferred over a
+    projected ``nodes``/``edges`` view so that removing the mandatory edge does
+    not also remove a projected path that happens to have the same endpoints.
+    If the mandatory direct edge is absent, the predicate is false; query-level
+    validation is responsible for returning the more actionable client error
+    for malformed causal queries.
+    """
+    declared_nodes = dag_spec.get("declared_nodes")
+    declared_edges = dag_spec.get("declared_directed_edges")
+    declared_bidirected = dag_spec.get("declared_bidirected_edges")
+
+    graph_spec = dict(dag_spec)
+    if declared_nodes is not None:
+        graph_spec["nodes"] = list(declared_nodes)
+    if declared_edges is not None:
+        graph_spec["edges"] = list(declared_edges)
+    if declared_bidirected is not None:
+        graph_spec["bidirected_edges"] = list(declared_bidirected)
+
+    graph, _observed_nodes, exposure, outcome = _native_graph(graph_spec)
+    direct_edge = (exposure, outcome)
+    if not graph.has_edge(*direct_edge):
+        return False
+
+    # Remove only the mandatory directed edge.  Bidirected common-cause paths
+    # are represented by synthetic latent parents and therefore remain.
+    graph.remove_edge(*direct_edge)
+    # The compatibility contract is based on declared node presence, not on
+    # observed/latent status.  Synthetic parents used to represent bidirected
+    # edges are not declared nodes and therefore cannot enter Z.
+    adjustment = set(conditioning_set) & set(graph.nodes)
+    return _is_d_separated(graph, exposure, outcome, adjustment)
 
 
 def native_backdoor_adjustment_sets(dag_spec: dict) -> list[list[str]]:

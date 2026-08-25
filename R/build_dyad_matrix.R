@@ -7,7 +7,8 @@
 #'   or a path to a Parquet file containing the component registry.
 #' @param states A list of state records or a data frame (from
 #'   \code{\link{expand_model_states}}) with columns \code{model_id},
-#'   \code{comp_id}, \code{status}, and optionally \code{timing}.
+#'   \code{comp_id}, \code{status}, and optionally \code{timing} (an integer
+#'   position >= 1; omitted or \code{NA} means unspecified).
 #'   Under sparse semantics, node components use \code{"present"} status
 #'   and edge components use \code{"causal"}, \code{"unknown"}, or
 #'   \code{"non-causal"}.  Missing node records mean absent.
@@ -21,18 +22,20 @@
 #' @param top_k Required when \code{mode = "two-stage"}. Number of top
 #'   similarity pairs to compute full causal metrics for. Defaults to 100.
 #' @param exposure Optional name of the exposure (cause) variable for causal
-#'   metrics. Must be a node in the registry. When omitted, defaults to the
-#'   first node in the registry.
+#'   metrics. Must be a node in the registry. Required for full and two-stage
+#'   modes.
 #' @param outcome Optional name of the outcome variable for causal metrics.
-#'   Must be a node in the registry. When omitted, defaults to the last node
-#'   in the registry. Both or neither of \code{exposure} and \code{outcome}
-#'   must be provided.
-#' @param causal_backend Causal-identification backend: \code{"r"} (default)
-#'   requires the Dagitty/CausalEffect stack and supports general
-#'   identification. \code{"auto"} uses the native NetworkX implementation
-#'   when it supports the model and falls back to the R stack when available;
-#'   if the fallback is unavailable, affected causal fields are unavailable.
-#'   \code{"native"} never loads R and supports backdoor identification only.
+#'   Must be a node in the registry. Required for full and two-stage modes.
+#'   Both or neither of \code{exposure} and \code{outcome}
+#'   must be provided. Full causal queries additionally require exactly one
+#'   fixed causal \code{exposure -> outcome} registry edge applicable in every
+#'   queried model.
+#' @param causal_backend Causal backend for adjustment-set computation:
+#'   \code{"r"} (default) requires the Dagitty/CausalEffect stack;
+#'   \code{"auto"} uses the native NetworkX implementation when supported and
+#'   falls back to the R stack when available; \code{"native"} never loads R
+#'   and supports backdoor adjustment only. The \code{identified_compatible}
+#'   predicate itself uses native complete-conditioning d-separation.
 #' @param url Base URL of the theoRy Python backend API. Defaults to
 #'   \code{getOption("theoRy.engine_url", "http://localhost:8000")}.
 #'
@@ -59,20 +62,23 @@
 #'     identified}
 #'   \item{identified_alter}{Whether the alter model's exposure-outcome effect
 #'     is identified}
-#'   \item{identification_nodes_ego}{Relevant declared node set used to compare
-#'     identified compatibility for the ego model (list-column).}
-#'   \item{identification_nodes_alter}{Relevant declared node set used to compare
-#'     identified compatibility for the alter model (list-column).}
-#'   \item{identified_compatible}{Whether the exposure-outcome effect is
-#'     identified in both models and the two models' relevant declared node
-#'     sets are exactly equal after removing robust directed-path
-#'     intermediates. The relevant set uses all declared present nodes
-#'     (observed and latent); a node is a directed-path intermediate only
-#'     when it lies on at least one directed exposure-outcome path in the
-#'     declared directed graph (bidirected edges never qualify). For partial
-#'     models, a node is removed only when it is an intermediate in every
-#'     valid represented completion; incomplete completion coverage returns
-#'     unavailable. Two non-identified models are not compatible.}
+#'   \item{identification_nodes_ego}{Complete-conditioning node set used for
+#'     the ego model (all declared present nodes except exposure and outcome;
+#'     list-column).}
+#'   \item{identification_nodes_alter}{Complete-conditioning node set used for
+#'     the alter model (list-column).}
+#'   \item{identification_method_ego,identification_method_alter}{Method
+#'     metadata for the native complete-conditioning predicate.}
+#'   \item{identification_formula_ego,identification_formula_alter}{Formula
+#'     metadata describing the direct-edge removal and d-separation test.}
+#'   \item{identified_compatible}{Whether both models satisfy the fixed-direct
+#'     exposure-to-outcome complete-conditioning d-separation predicate and
+#'     their node sets are exactly equal. The predicate removes only the
+#'     mandatory direct exposure -> outcome edge, then tests d-separation given
+#'     every other declared present node, including mediators, confounders, and
+#'     colliders. Partial models require complete, nonempty completion coverage;
+#'     any false descendant makes the result false. Two non-identified models
+#'     are not compatible.}
 #'
 #'   For \code{"two-stage"}: a list with components
 #'   \code{heatmap_summary} and \code{detailed_comparisons} (data frame).
@@ -103,7 +109,8 @@
 #'   (\code{attr(states, "exposure")}, \code{attr(states, "outcome")}) and
 #'   then from the \code{registry} attributes. Explicit arguments always
 #'   take precedence. A warning is issued if the resolved exposure/outcome
-#'   differs from the metadata found on the inputs.
+#'   differs from the metadata found on the inputs. Causal modes error when
+#'   no complete query can be resolved.
 #'
 #' @examples
 #' \dontrun{
@@ -115,10 +122,7 @@
 #' dyads <- build_dyad_matrix(reg, states)
 #' head(dyads)
 #'
-#' # Full mode with causal metrics
-#' full <- build_dyad_matrix(reg, states, mode = "full")
-#'
-#' # Full mode with explicit exposure and outcome
+#' # Full mode with causal metrics and explicit exposure/outcome
 #' full <- build_dyad_matrix(reg, states, mode = "full",
 #'   exposure = "X", outcome = "Z")
 #'
@@ -128,7 +132,7 @@
 #'
 #' # Two-stage top-K detailed comparisons
 #' two_stage <- build_dyad_matrix(reg, states, mode = "two-stage",
-#'   top_k = 5)
+#'   top_k = 5, exposure = "X", outcome = "Z")
 #' }
 #'
 #' @export
@@ -186,10 +190,17 @@ build_dyad_matrix <- function(registry,
     if ("fixed_status" %in% names(row) && !is.null(row$fixed_status) && !is.na(row$fixed_status)) {
       entry$fixed_status <- row$fixed_status
     }
+    if ("observed" %in% names(row) && !is.null(row$observed) && !is.na(row$observed)) {
+      entry$observed <- isTRUE(row$observed)
+    }
     entry
   })
 
   if (is.data.frame(states)) {
+    has_timing <- "timing" %in% names(states)
+    if (has_timing) {
+      .dyad_validate_state_timing(states$timing, "states timing")
+    }
     state_list <- lapply(seq_len(nrow(states)), function(i) {
       row <- states[i, ]
       entry <- list(
@@ -197,13 +208,34 @@ build_dyad_matrix <- function(registry,
         comp_id = row$comp_id,
         status = row$status
       )
-      if (!is.null(row$timing) && !is.na(row$timing)) {
-        entry$timing <- as.integer(row$timing)
+      if (has_timing) {
+        timing <- row$timing
+        if (length(timing) != 1L) {
+          stop("states timing must be a single integer value >= 1; NA is allowed ",
+               "for unspecified states.", call. = FALSE)
+        }
+        .dyad_validate_state_timing(timing, "states timing")
+        if (!is.na(timing)) {
+          entry$timing <- as.integer(timing)
+        }
       }
       entry
     })
   } else {
-    state_list <- states
+    state_list <- lapply(seq_along(states), function(i) {
+      entry <- states[[i]]
+      if (is.list(entry) && "timing" %in% names(entry) &&
+          !is.null(entry$timing)) {
+        timing <- entry$timing
+        if (length(timing) != 1L) {
+          stop("states timing must be a single integer value >= 1; NA is allowed ",
+               "for unspecified states.", call. = FALSE)
+        }
+        .dyad_validate_state_timing(timing, "states timing")
+        entry$timing <- as.integer(timing)
+      }
+      entry
+    })
   }
 
   # Resolve exposure/outcome: explicit > state attrs > registry attrs
@@ -263,6 +295,34 @@ build_dyad_matrix <- function(registry,
     }
     if (identical(exposure, outcome)) {
       stop("Exposure and outcome must be distinct nodes.", call. = FALSE)
+    }
+  }
+
+  if (mode %in% c("full", "two-stage")) {
+    if (is.null(exposure) || is.null(outcome)) {
+      stop(
+        "mode = '", mode, "' requires both exposure and outcome.",
+        call. = FALSE
+      )
+    }
+    direct <- registry_df[
+      registry_df$type == "edge" &
+        registry_df$direction == "->" &
+        registry_df$source == exposure &
+        registry_df$target == outcome,
+      , drop = FALSE
+    ]
+    fixed_status <- if ("fixed_status" %in% names(direct) && nrow(direct) == 1L) {
+      as.character(direct$fixed_status[[1L]])
+    } else {
+      NA_character_
+    }
+    if (nrow(direct) != 1L || !identical(fixed_status, "causal")) {
+      stop(
+        "Causal dyad queries require exactly one fixed causal direct edge ",
+        exposure, " -> ", outcome, " (fixed_status = 'causal').",
+        call. = FALSE
+      )
     }
   }
 
@@ -408,6 +468,34 @@ build_dyad_matrix <- function(registry,
 }
 
 
+.dyad_validate_state_timing <- function(values, label) {
+  ordinary_na <- is.na(values) & !is.nan(values)
+  all_logical_na <- is.logical(values) && length(values) > 0L &&
+    all(ordinary_na)
+  if ((!is.numeric(values) || is.complex(values)) && !all_logical_na) {
+    stop(label, " must contain integer values >= 1; NA is allowed for ",
+         "unspecified states.", call. = FALSE)
+  }
+
+  valid <- ordinary_na
+  non_na <- !ordinary_na
+  if (any(non_na)) {
+    integer_values <- suppressWarnings(as.integer(values[non_na]))
+    valid[non_na] <- is.finite(values[non_na]) &
+      values[non_na] == floor(values[non_na]) &
+      values[non_na] >= 1L &
+      !is.na(integer_values) &
+      as.numeric(integer_values) == values[non_na]
+  }
+
+  if (any(!valid)) {
+    stop(label, " must contain integer values >= 1; NA is allowed for ",
+         "unspecified states.", call. = FALSE)
+  }
+  invisible(values)
+}
+
+
 .parse_dyads_to_df <- function(dyads, full = FALSE) {
   base_fields <- list(
     dyad_id = vapply(dyads, function(d) d$dyad_id, character(1), USE.NAMES = FALSE),
@@ -470,6 +558,22 @@ build_dyad_matrix <- function(registry,
         as.character(unlist(d$identification_nodes_alter, use.names = FALSE))
       }
     })),
+    identification_method_ego = vapply(dyads, function(d) {
+      if (is.null(d$identification_method_ego)) NA_character_ else
+        as.character(d$identification_method_ego)
+    }, character(1), USE.NAMES = FALSE),
+    identification_method_alter = vapply(dyads, function(d) {
+      if (is.null(d$identification_method_alter)) NA_character_ else
+        as.character(d$identification_method_alter)
+    }, character(1), USE.NAMES = FALSE),
+    identification_formula_ego = vapply(dyads, function(d) {
+      if (is.null(d$identification_formula_ego)) NA_character_ else
+        as.character(d$identification_formula_ego)
+    }, character(1), USE.NAMES = FALSE),
+    identification_formula_alter = vapply(dyads, function(d) {
+      if (is.null(d$identification_formula_alter)) NA_character_ else
+        as.character(d$identification_formula_alter)
+    }, character(1), USE.NAMES = FALSE),
     identified_compatible = vapply(dyads, function(d) {
       if (is.null(d$identified_compatible)) NA else d$identified_compatible
     }, logical(1), USE.NAMES = FALSE),

@@ -1,9 +1,13 @@
-from pydantic import BaseModel, ConfigDict, model_validator
-from typing import Literal
+from typing import Annotated, Literal
+
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 CompatibilityMetric = Literal[
     "similarity_rate", "mas_compatible", "identified_compatible"
 ]
+
+MAX_API_TIMING = 2_147_483_647
+ApiTiming = Annotated[int, Field(strict=True, ge=1, le=MAX_API_TIMING)]
 
 
 class ComponentRecord(BaseModel):
@@ -25,7 +29,7 @@ class StateRecord(BaseModel):
     model_id: str
     comp_id: str
     status: Literal["present", "absent", "causal", "unknown", "non-causal"]
-    timing: int | None = None
+    timing: ApiTiming | None = None
     seeded: bool | None = None
 
 
@@ -62,8 +66,8 @@ class ApiErrorResponse(BaseModel):
 
 class NodeSpec(BaseModel):
     name: str
-    timing: int | None = None
-    timing_options: list[int] | None = None
+    timing: ApiTiming | None = None
+    timing_options: list[ApiTiming] | None = None
     description: str | None = None
     observed: bool = True
 
@@ -99,8 +103,8 @@ class ExpandModelStatesRequest(BaseModel):
     registry_data: list[ComponentRecord]
     mode: Literal["sampled", "exhaustive"] = "sampled"
     seed_claims: list[StateRecord] | None = None
-    node_timing: dict[str, int] | None = None
-    timing_options: dict[str, list[int]] | None = None
+    node_timing: dict[str, ApiTiming] | None = None
+    timing_options: dict[str, list[ApiTiming]] | None = None
     optional_nodes: list[str] | None = None
     max_models: int = 10000
     n_models: int | None = None
@@ -195,6 +199,16 @@ class ClustersRequest(BaseModel):
     score_field: CompatibilityMetric = "similarity_rate"
     exposure: str | None = None
     outcome: str | None = None
+
+    @model_validator(mode="after")
+    def validate_exposure_outcome(self):
+        if (self.exposure is None) != (self.outcome is None):
+            raise ValueError("Both or neither of exposure and outcome must be provided")
+        if (self.registry_data is None) != (self.state_data is None):
+            raise ValueError(
+                "Both registry_data and state_data are required for explicit clustering context"
+            )
+        return self
 
 
 # --- Story 5.4 Simulate request model -----------------------------------------
@@ -354,7 +368,7 @@ class DagSpec(BaseModel):
     edges: list[tuple[str, str]]
     exposure: str
     outcome: str
-    timing: dict[str, int | None] | None = None
+    timing: dict[str, ApiTiming | None] | None = None
     unmentioned_edges: Literal["non-causal", "unknown"] = "non-causal"
 
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import math
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from itertools import combinations, product
 
@@ -108,6 +109,7 @@ class DeltaUEngine:
         registry: ComponentRegistry,
     ) -> dict:
         """Marginal crux for a single component (evaluates both directions)."""
+        self._validate_causal_query_contract(state, registry)
         if self._crux_mode == "global":
             raise DeltaUError("global crux does not evaluate single components")
         if component_id not in state.component_index:
@@ -254,6 +256,7 @@ class DeltaUEngine:
         registry: ComponentRegistry,
     ) -> dict:
         """Resolve every applicable unknown edge instance to one status."""
+        self._validate_causal_query_contract(state, registry)
         if target_status not in ("causal", "non-causal"):
             raise DeltaUError("global target_status must be 'causal' or 'non-causal'")
 
@@ -365,6 +368,7 @@ class DeltaUEngine:
         registry: ComponentRegistry,
     ) -> list[dict]:
         """Return remapped post-resolution dyads for a marginal resolution."""
+        self._validate_causal_query_contract(state, registry)
         if target_status not in ("causal", "non-causal"):
             raise DeltaUError("target_status must be 'causal' or 'non-causal'")
         analysis_ids = self._analysis_model_ids(state)
@@ -430,6 +434,7 @@ class DeltaUEngine:
         the ranking call site; it is primarily useful for selecting the new
         global component-ranking path without changing the engine instance.
         """
+        self._validate_causal_query_contract(state, registry)
         if top_k <= 0:
             raise DeltaUError("top_k must be positive")
 
@@ -529,13 +534,13 @@ class DeltaUEngine:
         baseline state and full baseline dyads remain unchanged.
         """
         analysis_ids = self._analysis_model_ids(state)
+        self._validate_dyad_universe(dyads, analysis_ids)
+        self._validate_baseline_metric(dyads)
         candidates = self._global_applicable_edge_ids(state, registry, analysis_ids)
         if not candidates:
             logger.info("No applicable non-fixed edges - no global crux candidates")
             return []
 
-        self._validate_dyad_universe(dyads, analysis_ids)
-        self._validate_baseline_metric(dyads)
         baseline_scores = self._scorer.score_dyads(dyads)
         baseline_compatibility = _rounded_tensor_mean(baseline_scores)
         index = CompletionIndex(state, registry)
@@ -973,6 +978,7 @@ class DeltaUEngine:
         search_strategy: str = "greedy",
         beam_width: int = 5,
     ) -> list[dict]:
+        self._validate_causal_query_contract(state, registry)
         if set_size < 2:
             raise DeltaUError("set_size must be at least 2")
         if top_n <= 0:
@@ -1019,6 +1025,38 @@ class DeltaUEngine:
             )
 
         return sets
+
+    def _validate_causal_query_contract(
+        self,
+        state: StateTensor,
+        registry: ComponentRegistry,
+    ) -> None:
+        """Enforce the shared fixed-direct-edge contract for causal Delta-U."""
+        if not self._scorer.requires_causal():
+            return
+        # API callers pass the shared engine, while direct/library callers may
+        # construct DeltaUEngine without one.  Both paths must use the same
+        # fixed-direct-edge validator rather than silently skipping validation.
+        if self._exposure is None or self._outcome is None:
+            return
+        validator = self._dyadic_engine
+        if validator is None:
+            from dyadic.engine import DyadicEngine
+
+            validator = DyadicEngine()
+
+        from dyadic.engine import DyadicError
+
+        try:
+            validator.validate_causal_query(
+                state,
+                registry,
+                self._exposure,
+                self._outcome,
+                model_ids=self._analysis_model_ids(state),
+            )
+        except DyadicError as e:
+            raise DeltaUError(str(e)) from e
 
     # ------------------------------------------------------------------
     # marginal machinery
@@ -1254,12 +1292,16 @@ class DeltaUEngine:
                 "mas": d.get("mas_ego"),
                 "identified": identified,
                 "id_nodes": d.get("identification_nodes_ego"),
+                "id_method": d.get("identification_method_ego"),
+                "id_formula": d.get("identification_formula_ego"),
                 "has_causal": any(
                     field in d
                     for field in (
                         "mas_ego",
                         "identified_ego",
                         "identification_nodes_ego",
+                        "identification_method_ego",
+                        "identification_formula_ego",
                     )
                 ),
             }
@@ -1315,6 +1357,10 @@ class DeltaUEngine:
             record["identified_alter"] = identified
             record["identification_nodes_ego"] = profile["id_nodes"]
             record["identification_nodes_alter"] = profile["id_nodes"]
+            record["identification_method_ego"] = profile["id_method"]
+            record["identification_method_alter"] = profile["id_method"]
+            record["identification_formula_ego"] = profile["id_formula"]
+            record["identification_formula_alter"] = profile["id_formula"]
             if identified is None:
                 record["identified_compatible"] = None
             elif identified is False:
@@ -1383,6 +1429,24 @@ class DeltaUEngine:
                 "(build_dyad_matrix(mode='full')) with exposure/outcome; "
                 "hypothetical resolutions never recompute causal profiles."
             )
+
+        for index, dyad in enumerate(dyads):
+            value = dyad.get(self._compatibility_metric)
+            if isinstance(value, bool):
+                continue
+            try:
+                numeric = float(value)
+            except (TypeError, ValueError, OverflowError) as exc:
+                raise DeltaUError(
+                    f"Compatibility metric {self._compatibility_metric!r} must "
+                    f"contain finite numeric values; dyad {index} has {value!r}."
+                ) from exc
+            if not math.isfinite(numeric):
+                raise DeltaUError(
+                    f"Compatibility metric {self._compatibility_metric!r} must "
+                    f"contain finite numeric values; dyad {index} has {value!r}."
+                )
+
         if not self._scorer.requires_causal():
             return
         if self._compatibility_metric == "mas_compatible":

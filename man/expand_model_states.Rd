@@ -32,7 +32,8 @@ or \code{"exhaustive"} (all valid edge-status combinations).}
 
 \item{seed_claims}{Optional data frame or list of state claims with
   \code{model_id}, \code{comp_id}, \code{status}, and optionally
-  \code{timing}.  When provided, the engine searches for each seeded
+  \code{timing} (an integer position >= 1; \code{NA} means unspecified).
+  When provided, the engine searches for each seeded
   model in the generated multiverse.  Found models are promoted to the
   top and flagged with \code{seeded = TRUE}.  Models not found in the
   multiverse are appended at the top with \code{seeded = TRUE}.
@@ -47,12 +48,14 @@ or \code{"exhaustive"} (all valid edge-status combinations).}
   default to unknown.}
 
 \item{node_timing}{Optional named integer vector mapping node names to
-chronological positions, e.g. \code{c(SolarRad = 1, Temp = 2)}.
+positive chronological positions (>= 1); \code{NA} entries are omitted as
+unspecified. For example, \code{c(SolarRad = 1, Temp = 2)}.
 Used for temporal validation in exhaustive / sampled modes.}
 
-\item{timing_options}{Optional named list of allowed integer positions per
-node. When supplied, each generated model selects one allowed position
-for every present node. This overrides \code{node_timing} for named nodes.}
+\item{timing_options}{Optional named list of allowed integer positions (all
+values >= 1) per node. When supplied, each generated model selects one
+allowed position for every present node. This overrides \code{node_timing}
+for named nodes.}
 
 \item{optional_nodes}{Optional names of nodes that may be absent. When
 supplied, this takes precedence over \code{node_policy}; all other nodes

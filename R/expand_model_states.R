@@ -11,7 +11,8 @@
 #'   or \code{"exhaustive"} (all valid edge-status combinations).
 #' @param seed_claims Optional data frame or list of state claims with
 #'   \code{model_id}, \code{comp_id}, \code{status}, and optionally
-#'   \code{timing}.  When provided, the engine searches for each seeded
+#'   \code{timing} (an integer position >= 1; \code{NA} means unspecified).
+#'   When provided, the engine searches for each seeded
 #'   model in the generated multiverse.  Found models are promoted to the
 #'   top and flagged with \code{seeded = TRUE}.  Models not found in the
 #'   multiverse are appended at the top with \code{seeded = TRUE}.
@@ -25,11 +26,13 @@
 #'   Omitted nodes default to absent; omitted edges among present nodes
 #'   default to unknown.
 #' @param node_timing Optional named integer vector mapping node names to
-#'   chronological positions, e.g. \code{c(SolarRad = 1, Temp = 2)}.
+#'   positive chronological positions (>= 1); \code{NA} entries are omitted as
+#'   unspecified. For example, \code{c(SolarRad = 1, Temp = 2)}.
 #'   Used for temporal validation in exhaustive / sampled modes.
-#' @param timing_options Optional named list of allowed integer positions per
-#'   node. When supplied, each generated model selects one allowed position
-#'   for every present node. This overrides \code{node_timing} for named nodes.
+#' @param timing_options Optional named list of allowed integer positions (all
+#'   values >= 1) per node. When supplied, each generated model selects one
+#'   allowed position for every present node. This overrides \code{node_timing}
+#'   for named nodes.
 #' @param optional_nodes Optional names of nodes that may be absent. When
 #'   supplied, this takes precedence over \code{node_policy}; all other nodes
 #'   remain present.
@@ -174,6 +177,25 @@ expand_model_states <- function(registry,
   if (is.null(timing_options) && !is.null(attr(registry_df, "timing_options"))) {
     timing_options <- attr(registry_df, "timing_options")
   }
+
+  if (!is.null(node_timing)) {
+    .expand_validate_timing_values(
+      node_timing, "node_timing", allow_na = TRUE
+    )
+  }
+  if (!is.null(timing_options)) {
+    if (!is.list(timing_options) || is.null(names(timing_options))) {
+      stop("timing_options must be a named list.", call. = FALSE)
+    }
+    for (name in names(timing_options)) {
+      values <- timing_options[[name]]
+      if (length(values)) {
+        .expand_validate_timing_values(
+          values, paste0("timing_options for ", name), allow_na = FALSE
+        )
+      }
+    }
+  }
   if (is.null(optional_nodes) && !is.null(attr(registry_df, "optional_nodes"))) {
     optional_nodes <- attr(registry_df, "optional_nodes")
   }
@@ -252,9 +274,6 @@ expand_model_states <- function(registry,
   }
 
   if (!is.null(timing_options)) {
-    if (!is.list(timing_options) || is.null(names(timing_options))) {
-      stop("timing_options must be a named list.", call. = FALSE)
-    }
     payload$timing_options <- lapply(timing_options, function(values) {
       unname(as.list(as.integer(values)))
     })
@@ -327,6 +346,33 @@ expand_model_states <- function(registry,
 }
 
 
+.expand_validate_timing_values <- function(values, label, allow_na = FALSE) {
+  ordinary_na <- is.na(values) & !is.nan(values)
+  all_logical_na <- is.logical(values) && length(values) > 0L &&
+    all(ordinary_na)
+  if ((!is.numeric(values) || is.complex(values)) &&
+      !(isTRUE(allow_na) && all_logical_na)) {
+    stop(label, " must contain integer values >= 1.", call. = FALSE)
+  }
+
+  valid <- ordinary_na & isTRUE(allow_na)
+  non_na <- !ordinary_na
+  if (any(non_na)) {
+    integer_values <- suppressWarnings(as.integer(values[non_na]))
+    valid[non_na] <- is.finite(values[non_na]) &
+      values[non_na] == floor(values[non_na]) &
+      values[non_na] >= 1L &
+      !is.na(integer_values) &
+      as.numeric(integer_values) == values[non_na]
+  }
+
+  if (any(!valid)) {
+    stop(label, " must contain integer values >= 1.", call. = FALSE)
+  }
+  invisible(values)
+}
+
+
 seed_claims_to_records <- function(seed_claims) {
   required <- c("model_id", "comp_id", "status")
 
@@ -343,8 +389,18 @@ seed_claims_to_records <- function(seed_claims) {
         comp_id = as.character(row$comp_id),
         status = as.character(row$status)
       )
-      if ("timing" %in% names(row) && !is.na(row$timing)) {
-        entry$timing <- as.integer(row$timing)
+      if ("timing" %in% names(row)) {
+        timing <- row$timing
+        if (length(timing) != 1L) {
+          stop("seed_claims timing must be a single integer value >= 1.",
+               call. = FALSE)
+        }
+        .expand_validate_timing_values(
+          timing, "seed_claims timing", allow_na = TRUE
+        )
+        if (!is.na(timing)) {
+          entry$timing <- as.integer(timing)
+        }
       }
       entry
     }))
@@ -370,8 +426,17 @@ seed_claims_to_records <- function(seed_claims) {
       comp_id = cl$comp_id,
       status = cl$status
     )
-    if (!is.null(cl$timing) && !is.na(cl$timing)) {
-      entry$timing <- as.integer(cl$timing)
+    if (!is.null(cl$timing)) {
+      if (length(cl$timing) != 1L) {
+        stop("seed_claims timing must be a single integer value >= 1.",
+             call. = FALSE)
+      }
+      .expand_validate_timing_values(
+        cl$timing, "seed_claims timing", allow_na = TRUE
+      )
+      if (!is.na(cl$timing)) {
+        entry$timing <- as.integer(cl$timing)
+      }
     }
     entry
   })

@@ -30,9 +30,9 @@ Install the cross-platform Python engine dependencies from a source checkout:
 python -m pip install -e inst/python
 ```
 
-Full causal analyses default to the R backend so that identification is not
-limited to the backdoor criterion. Install the Python-to-R bridge and the
-Dagitty/CausalEffect R packages:
+Full causal analyses default to the R backend for adjustment-set computation.
+Install the Python-to-R bridge and the Dagitty/CausalEffect R packages when
+using the optional R-backed compatibility paths:
 
 ```bash
 python -m pip install -e 'inst/python[rpy2]'
@@ -43,10 +43,11 @@ install.packages(c("dagitty", "causaleffect"))
 ```
 
 Select `causal_backend = "r"`, `"auto"`, or `"native"` in
-`build_dyad_matrix()`. `"r"` is the default and uses Dagitty plus
-`causaleffect` for general identification. `"auto"` first uses native
-backdoor identification and falls back to R when needed; `"native"` never
-loads R and supports backdoor identification only.
+`build_dyad_matrix()`. `"r"` is the default and uses Dagitty for adjustment
+sets. `"auto"` first uses native backdoor adjustment and falls back to R when
+needed; `"native"` never loads R and supports backdoor adjustment only.
+`identified_compatible` always uses the native fixed-direct
+complete-conditioning predicate.
 
 ## Engine Lifecycle
 
@@ -134,6 +135,9 @@ variables eligible to be absent.
 Exposure and outcome must always be declared and have one fixed time. For
 non-focal variables, `NA` timing values require an explicit finite
 `time_points` vector; `timing_options` can give a node a smaller allowed set.
+All non-`NA` values supplied through `timing`, `time_points`, and
+`timing_options` must be integers >= 1; `NA` in `timing` marks an unspecified
+non-focal node.
 The engine reports timing assignments pruned by required paths and applies a
 global model-count limit before exhaustive expansion.
 
@@ -157,7 +161,7 @@ The modern compatibility API exposes exactly three pairwise metrics:
 |---|---|---|
 | `similarity_rate` | numeric in `[0, 1]` | Component-level structural agreement. An edge applicable in exactly one model contributes one disagreement and one repair; an edge inapplicable in both models is ignored. |
 | `mas_compatible` | logical or unavailable | Both models retain at least one common minimal adjustment strategy for the same total-effect query. For partial models, the strategy must survive every valid resolved completion. |
-| `identified_compatible` | logical or unavailable | Both models support general identification of the same total-effect query **and** have equal declared relevant node sets after removing robust directed-path intermediates. Two non-identified models are not compatible. |
+| `identified_compatible` | logical or unavailable | Both models satisfy the fixed-direct exposure-to-outcome complete-conditioning d-separation predicate **and** have exactly equal declared node-presence sets (all present nodes except exposure/outcome). Two non-identified models are not compatible. |
 
 `repair_cost` is a helper, not a fourth compatibility metric. It counts
 component-level edits, so a missing node and each one-sided incident edge each
@@ -245,16 +249,16 @@ global <- compute_delta_u(dyads, crux_mode = "global", top_k = 10)
 `mas_compatible` and `identified_compatible` generally require both `exposure`
 and `outcome`; `similarity_rate` does not. Generated Precision Illusion
 simulations are the exception: their fixed design lets the backend infer
-exposure `X1` and outcome `Y`. The causal query is the total effect
-`P(Y | do(X = x))` in an observed ADMG. A query node absent from one model
-makes that model's profile unavailable rather than non-identified.
+exposure `X1` and outcome `Y`. MAS queries target the total effect
+`P(Y | do(X = x))`; `identified_compatible` targets the fixed direct
+`X -> Y` effect. Causal queries require that direct registry edge to be fixed
+as causal and applicable in every queried model. A query node absent from one
+model makes that model's profile unavailable rather than non-identified.
 
 The native backend supports tested backdoor-adjustment queries, including
-declared bidirected latent-confounding relations. General identification,
-including effects identifiable beyond adjustment such as front-door cases,
-uses the optional R `causaleffect` backend. Native-only requests outside that
-scope return an explicit unsupported result rather than silently using a
-structural comparison.
+declared bidirected latent-confounding relations. The optional R
+`causaleffect` dependency remains available for legacy/general-ID callers, but
+it is not used to determine `identified_compatible`.
 
 ## Simulations
 
@@ -313,27 +317,24 @@ relabeled incorrectly.
 ## Breaking Change
 
 The former strict/full modern dyad metric and its model helper fields were
-removed, not aliased. `identified_compatible` has different general-ID
-semantics, and the old composite scoring controls were replaced by the single
+removed, not aliased. `identified_compatible` has fixed-direct
+complete-conditioning semantics, and the old composite scoring controls were replaced by the single
 `compatibility_metric` selector. Restart the engine after upgrading: in-memory
 sessions created by the previous backend schema are incompatible with current
 requests and responses.
 
-As of `0.2.0`, `identified_compatible` is stricter: two models are identified-
-compatible only when **both** independently identify the same total-effect
-query **and** their relevant declared node sets are exactly equal after
-removing robust directed-path intermediates. For each resolved model, the
-relevant set is all declared present nodes (observed **and** latent) minus
-nodes that lie on at least one directed exposure-outcome path in the declared
-directed graph; bidirected edges never make a node an intermediate. For a
-partial model, a node is removed only when it is a directed-path intermediate
-in **every** valid represented completion (the robust union rule), so an
-uncertain possible mediator is retained rather than ignored; incomplete
-completion coverage makes the relevant set unavailable. Identification itself
-is still computed by `causaleffect` over the observed latent-projected ADMG;
-only cross-model comparability uses the declared node set. Two non-identified
-models are not compatible, and either unavailable identification or an
-unavailable relevant set returns unavailable.
+As of `0.2.0`, causal queries require exactly one registry edge
+`exposure -> outcome` with `fixed_status = "causal"`, and that edge must be
+causal and applicable in every queried model. `identified_compatible` removes
+only this mandatory direct edge from each resolved graph, then tests
+d-separation given every other declared present node, including mediators,
+confounders, and colliders. For partial models, the node-presence set is taken
+before edge completion; identification is true only with complete nonempty
+completion coverage and all valid descendants true, while any false descendant
+makes it false. Incomplete or empty coverage is unavailable. Bidirected paths
+remain in the d-separation graph, and the legacy general-ID wrapper is not used
+for this metric. Basic structural mode does not require the causal query
+contract.
 
 ## Deprecated Legacy API
 

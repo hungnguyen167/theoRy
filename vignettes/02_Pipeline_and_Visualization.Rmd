@@ -31,10 +31,10 @@ start_theory_engine()
 ```
 
 The backend also calls R through `rpy2`: Dagitty computes minimal adjustment
-sets, and `causaleffect` performs general identification in ADMGs. Install the
-latter with `install.packages("causaleffect")`. After upgrading theoRy, restart
-the engine because in-memory sessions from the previous dyad schema are not
-compatible with the current API.
+sets. The optional `causaleffect` dependency remains available for legacy or
+general-ID callers, but it does not determine `identified_compatible`. After
+upgrading theoRy, restart the engine because in-memory sessions from the
+previous dyad schema are not compatible with the current API.
 
 ## Compatibility Contract
 
@@ -44,14 +44,16 @@ The modern API exposes exactly three pairwise metrics:
 |---|---|
 | `similarity_rate` | Numeric component-level structural agreement. An edge applicable in only one model is one disagreement and one repair; an edge inapplicable in both is ignored. |
 | `mas_compatible` | Both models have a robust shared minimal adjustment strategy for the same total-effect query. |
-| `identified_compatible` | Both models generally identify the same total-effect query **and** have equal relevant declared node sets after removing robust directed-path intermediates. The relevant set uses all declared present nodes (observed **and** latent); a node is a directed-path intermediate only when it lies on at least one directed exposure-outcome path in the declared directed graph (bidirected edges never qualify). For partial models, a node is removed only when it is an intermediate in every valid represented completion; incomplete coverage returns unavailable. Two non-identified models are not compatible. |
+| `identified_compatible` | Both models satisfy the fixed-direct exposure-to-outcome complete-conditioning d-separation predicate and have exactly equal node-presence sets (all declared present nodes except exposure/outcome). The predicate removes only the mandatory direct edge and conditions on every other declared node, including mediators, confounders, and colliders; bidirected paths remain. Partial models require complete nonempty coverage and all valid descendants true; any false descendant is false and incomplete/empty coverage is unavailable. |
 
 For MAS output, `[[]]` represents one valid empty adjustment set `{}`, whereas
 `[]` means no valid adjustment set. Empty-set/empty-set can be compatible;
 no-set/no-set is not. An unavailable profile becomes `NA` in R and is never
 treated as a neutral score.
 
-The causal metrics require both `exposure` and `outcome`. Unknown edges are
+The causal metrics require both `exposure` and `outcome`, and causal queries
+require a fixed causal `exposure -> outcome` registry edge applicable in every
+queried model. Unknown edges are
 evaluated through valid fully resolved descendants already in the multiverse,
 and a positive necessary result requires complete descendant coverage.
 Synthetic causal simulations can add support-only descendants to prove that
@@ -132,7 +134,7 @@ sampled_states <- expand_model_states(registry, mode = "sampled",
 # Basic: structural metrics only
 dyads <- build_dyad_matrix(registry, states, mode = "basic")
 
-# Full is a computation/transport mode: include MAS and general-ID profiles
+# Full is a computation/transport mode: include MAS and fixed-direct profiles
 dyads <- build_dyad_matrix(registry, states, mode = "full",
   exposure = "X1", outcome = "Y")
 head(dyads)
@@ -315,8 +317,8 @@ degenerate/no-cluster result rather than arbitrary UMAP output.
 Simulation values are measured without clamping baseline or post-resolution
 compatibility to acceptance bounds. Synthetic structural scenarios may retry a
 seed when their calibrated threshold is missed. Symbolic simulations support
-`similarity_rate` only because their identification logic is adjustment-only,
-not the general ID used by `identified_compatible`.
+`similarity_rate` only because they do not materialize the fixed-direct
+complete-conditioning profiles used by `identified_compatible`.
 
 Simulations currently support directed components only, so
 `include_bidirectional = TRUE` is rejected in both concrete and symbolic mode.

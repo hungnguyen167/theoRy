@@ -49,6 +49,15 @@ class DyadicEngine:
         if mode not in self._VALID_MODES:
             raise DyadicError("Mode must be one of: basic, full")
 
+        if mode == "full" and exposure is not None and outcome is not None:
+            self.validate_causal_query(
+                state,
+                registry,
+                exposure,
+                outcome,
+                model_ids=[ego_id, alter_id],
+            )
+
         self._validate_acyclic(ego_id, state, registry)
         self._validate_acyclic(alter_id, state, registry)
 
@@ -169,9 +178,19 @@ class DyadicEngine:
             model_ids = state.model_ids
         model_ids = sorted(model_ids)
 
+        if mode == "full" and exposure is not None and outcome is not None:
+            self.validate_causal_query(
+                state,
+                registry,
+                exposure,
+                outcome,
+                model_ids=model_ids,
+            )
+
         profiles = self._build_causal_profiles(
             state,
             registry,
+            model_ids=model_ids,
             mode=mode,
             causal_wrapper=causal_wrapper,
             identification_wrapper=identification_wrapper,
@@ -219,9 +238,19 @@ class DyadicEngine:
         all_models = sorted(all_models)
         affected_set = set(affected_models)
 
+        if mode == "full" and exposure is not None and outcome is not None:
+            self.validate_causal_query(
+                state,
+                registry,
+                exposure,
+                outcome,
+                model_ids=all_models,
+            )
+
         profiles = self._build_causal_profiles(
             state,
             registry,
+            model_ids=all_models,
             mode=mode,
             causal_wrapper=causal_wrapper,
             identification_wrapper=identification_wrapper,
@@ -267,9 +296,18 @@ class DyadicEngine:
         """Return ordered, non-self dyad records (convenience wrapper)."""
         if model_ids is None:
             model_ids = state.model_ids
+        if mode == "full" and exposure is not None and outcome is not None:
+            self.validate_causal_query(
+                state,
+                registry,
+                exposure,
+                outcome,
+                model_ids=model_ids,
+            )
         profiles = self._build_causal_profiles(
             state,
             registry,
+            model_ids=model_ids,
             mode=mode,
             causal_wrapper=causal_wrapper,
             identification_wrapper=identification_wrapper,
@@ -312,9 +350,18 @@ class DyadicEngine:
         """Return an M x M dyadic comparison matrix including self-dyads."""
         if model_ids is None:
             model_ids = state.model_ids
+        if mode == "full" and exposure is not None and outcome is not None:
+            self.validate_causal_query(
+                state,
+                registry,
+                exposure,
+                outcome,
+                model_ids=model_ids,
+            )
         profiles = self._build_causal_profiles(
             state,
             registry,
+            model_ids=model_ids,
             mode=mode,
             causal_wrapper=causal_wrapper,
             identification_wrapper=identification_wrapper,
@@ -409,6 +456,10 @@ class DyadicEngine:
                     "bidirected_edges": bidirected_edges,
                     "declared_nodes": list(node_names),
                     "declared_directed_edges": list(edges),
+                    "declared_bidirected_edges": list(bidirected_edges),
+                    "declared_observed_nodes": [
+                        node for node in node_names if observed_by_node.get(node, True)
+                    ],
                     "exposure": exposure,
                     "outcome": outcome,
                     "query_nodes_missing": True,
@@ -434,6 +485,10 @@ class DyadicEngine:
 
         declared_nodes = list(node_names)
         declared_directed_edges = list(edges)
+        declared_bidirected_edges = list(bidirected_edges)
+        declared_observed_nodes = [
+            node for node in node_names if observed_by_node.get(node, True)
+        ]
 
         node_names, edges, bidirected_edges = self._project_latent_nodes(
             node_names, edges, bidirected_edges, observed_by_node
@@ -450,10 +505,107 @@ class DyadicEngine:
             "bidirected_edges": bidirected_edges,
             "declared_nodes": declared_nodes,
             "declared_directed_edges": declared_directed_edges,
+            "declared_bidirected_edges": declared_bidirected_edges,
+            "declared_observed_nodes": declared_observed_nodes,
             "exposure": exposure,
             "outcome": outcome,
             "query_nodes_missing": False,
         }
+
+    def validate_causal_query(
+        self,
+        state: StateTensor,
+        registry: ComponentRegistry,
+        exposure: str,
+        outcome: str,
+        *,
+        model_ids: list[str] | tuple[str, ...] | None = None,
+    ) -> str:
+        """Validate the fixed direct edge required by causal dyad queries.
+
+        The structural/basic mode intentionally does not call this validator.
+        Causal modes, however, must use a registry whose unique direct
+        ``exposure -> outcome`` component is marked ``fixed_status='causal'``
+        and whose state makes that edge causal and applicable in every queried
+        model.  Keeping this check in the dyadic engine gives full dyads,
+        Delta-U, and clustering the same contract.
+        """
+        if exposure is None or outcome is None:
+            raise DyadicError(
+                "Both exposure and outcome are required for causal queries"
+            )
+        if exposure == outcome:
+            raise DyadicError("Exposure and outcome must be distinct nodes")
+
+        df = registry.data
+        node_rows = df[df["type"] == "node"]
+        for node_name, role in ((exposure, "Exposure"), (outcome, "Outcome")):
+            matches = node_rows[node_rows["source"] == node_name]
+            if len(matches) != 1:
+                raise DyadicError(
+                    f"{role} {node_name!r} must map to exactly one registry node"
+                )
+            if not bool(matches.iloc[0].get("observed", True)):
+                raise DyadicError(
+                    f"{role} {node_name!r} must be an observed registry node"
+                )
+
+        direct_rows = df[
+            (df["type"] == "edge")
+            & (df["direction"] == "->")
+            & (df["source"] == exposure)
+            & (df["target"] == outcome)
+        ]
+        if len(direct_rows) != 1:
+            raise DyadicError(
+                "Causal query requires exactly one direct exposure -> outcome "
+                f"edge ({exposure} -> {outcome}) in the registry"
+            )
+
+        direct_row = direct_rows.iloc[0]
+        if direct_row.get("fixed_status") != "causal":
+            raise DyadicError(
+                "Causal query requires the direct exposure -> outcome edge "
+                f"({exposure} -> {outcome}) to have fixed_status='causal'"
+            )
+        direct_cid = direct_row["comp_id"]
+
+        queried_models = list(state.model_ids if model_ids is None else model_ids)
+        if not queried_models:
+            raise DyadicError("Causal query requires at least one model")
+
+        invalid_status: list[str] = []
+        inapplicable: list[str] = []
+        exp_cid = node_rows[node_rows["source"] == exposure].iloc[0]["comp_id"]
+        out_cid = node_rows[node_rows["source"] == outcome].iloc[0]["comp_id"]
+        for model_id in queried_models:
+            if model_id not in state.model_index:
+                invalid_status.append(model_id)
+                continue
+            if not self._node_is_present(
+                state, model_id, exp_cid
+            ) or not self._node_is_present(state, model_id, out_cid):
+                inapplicable.append(model_id)
+                continue
+            if not edge_applicable(state, model_id, direct_cid, registry):
+                inapplicable.append(model_id)
+                continue
+            if state.get_status(model_id, direct_cid) != "causal":
+                invalid_status.append(model_id)
+
+        if invalid_status:
+            raise DyadicError(
+                "Causal query requires the fixed direct exposure -> outcome edge "
+                f"to be causal in every model; invalid model(s): "
+                f"{sorted(set(invalid_status))}"
+            )
+        if inapplicable:
+            raise DyadicError(
+                "Causal query requires the fixed direct exposure -> outcome edge "
+                f"to be applicable in every model; missing endpoint(s) in model(s): "
+                f"{sorted(set(inapplicable))}"
+            )
+        return direct_cid
 
     @staticmethod
     def _project_latent_nodes(
@@ -562,12 +714,14 @@ class DyadicEngine:
         identification_wrapper,
         exposure: str | None,
         outcome: str | None,
+        model_ids: list[str] | tuple[str, ...] | None = None,
     ) -> dict | None:
         if mode != "full" or exposure is None or outcome is None:
             return None
         if causal_wrapper is None:
             raise DyadicError("causal_wrapper is required for mode='full'")
 
+        queried_models = list(state.model_ids if model_ids is None else model_ids)
         builder = CausalProfileBuilder(
             state=state,
             registry=registry,
@@ -575,7 +729,7 @@ class DyadicEngine:
             causal_wrapper=causal_wrapper,
             identification_wrapper=identification_wrapper,
         )
-        return builder.build_all(state.model_ids, exposure, outcome)
+        return builder.build_all(queried_models, exposure, outcome)
 
     # ------------------------------------------------------------------
     # internal helpers

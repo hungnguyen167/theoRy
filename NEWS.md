@@ -4,22 +4,20 @@
 
 ### Breaking changes
 
-- `identified_compatible` now uses a stricter compatibility contract. Two
-  models are identified-compatible only when **both** independently identify
-  the same total-effect query **and** their relevant declared node sets are
-  exactly equal after removing robust directed-path intermediates.
-  - For a resolved model, the relevant set is all declared present nodes
-    (observed **and** latent) minus nodes that lie on at least one directed
-    exposure-outcome path in the declared directed graph; bidirected edges
-    never make a node a directed-path intermediate.
-  - For a partial model, a node is removed only when it is a directed-path
-    intermediate in **every** valid represented completion (the robust
-    intersection rule), so an uncertain possible mediator is retained rather
-    than ignored. Incomplete completion coverage, an empty descendant set,
-    or any unavailable descendant relevant set returns unavailable.
-  - Identification itself continues to be computed by R `causaleffect` over
-    the observed latent-projected ADMG; only cross-model comparability uses
-    the declared (pre-projection) node set.
+- `identified_compatible` now targets a fixed direct effect rather than a
+  general total-effect ID query. Causal queries require exactly one registry
+  `exposure -> outcome` edge with `fixed_status = "causal"`, causal and
+  applicable in every queried model.
+  - For each resolved model, remove only that mandatory direct edge and test
+    native d-separation given every other declared present node. Mediators,
+    confounders, colliders, latent nodes, and bidirected paths remain part of
+    the specified graph semantics.
+  - For a partial model, compute the node set from node presence before edge
+    completion. Identification is true only with complete nonempty completion
+    coverage and all valid descendants true; any false descendant is false,
+    while incomplete or empty coverage is unavailable.
+  - The legacy `IdentificationWrapper`/causaleffect path is not used to
+    determine this metric; it remains available for compatibility elsewhere.
   - The dyadic truth table is now: unavailable if either identification
     status is unavailable; `FALSE` if either model is not identified;
     unavailable if either relevant node set is unavailable; otherwise the

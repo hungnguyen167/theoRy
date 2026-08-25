@@ -40,7 +40,10 @@
 #'   of generating synthetic components.
 #' @param states Optional model-state records from
 #'   \code{\link{expand_model_states}}. Required when \code{registry} is
-#'   supplied. The simulation computes dyads from these states internally.
+#'   supplied. The simulation computes dyads from these states internally. A
+#'   supplied data frame must contain \code{model_id}, \code{comp_id}, and
+#'   \code{status}; when present, \code{timing} must contain integer positions
+#'   >= 1, with \code{NA} marking an unspecified position.
 #' @param sample_n Optional positive integer. In seeded mode, number of
 #'   distinct model IDs to sample without replacement from \code{states}.
 #'   If \code{NULL}, all supplied models are used.
@@ -464,12 +467,44 @@ run_simulation <- function(scenario = c("illusion_of_precision",
          paste(missing_states, collapse = ", "), call. = FALSE)
   }
 
+  if ("timing" %in% names(states)) {
+    .validate_seeded_simulation_timing(states$timing)
+  }
+
   if (!is.null(sample_n)) {
     if (!is.numeric(sample_n) || length(sample_n) != 1L || is.na(sample_n) ||
         sample_n < 1 || sample_n != as.integer(sample_n)) {
       stop("sample_n must be a positive integer or NULL.", call. = FALSE)
     }
   }
+}
+
+
+.validate_seeded_simulation_timing <- function(values) {
+  if ((!is.numeric(values) || is.complex(values)) &&
+      !(is.logical(values) && length(values) > 0L && all(is.na(values)))) {
+    stop("states timing must contain integer values >= 1; NA is allowed for ",
+         "unspecified states.", call. = FALSE)
+  }
+
+  ordinary_na <- is.na(values) & !is.nan(values)
+  valid <- ordinary_na
+  non_na <- !ordinary_na
+  if (any(non_na)) {
+    integer_values <- suppressWarnings(as.integer(values[non_na]))
+    valid[non_na] <- is.finite(values[non_na]) &
+      values[non_na] == floor(values[non_na]) &
+      values[non_na] >= 1L &
+      values[non_na] <= .Machine$integer.max &
+      !is.na(integer_values) &
+      as.numeric(integer_values) == values[non_na]
+  }
+
+  if (any(!valid)) {
+    stop("states timing must contain integer values >= 1; NA is allowed for ",
+         "unspecified states.", call. = FALSE)
+  }
+  invisible(values)
 }
 
 

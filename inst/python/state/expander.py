@@ -102,6 +102,9 @@ class ModelStateExpander:
         edge_comps = df[df["type"] == "edge"]
         node_names = dict(zip(node_comps["source"], node_comps["comp_id"]))
         node_names_by_cid = {cid: name for name, cid in node_names.items()}
+        normalized_node_timing = ModelStateExpander._validate_node_timing(
+            node_timing,
+        )
 
         edge_ids = edge_comps["comp_id"].tolist()
         edge_sources = edge_comps.set_index("comp_id")["source"].to_dict()
@@ -172,7 +175,7 @@ class ModelStateExpander:
             node_subsets=node_subsets,
             node_names=node_names,
             node_names_by_cid=node_names_by_cid,
-            node_timing=node_timing or {},
+            node_timing=normalized_node_timing,
             timing_options=normalized_timing_options,
             strict_timing=timing_options is not None,
             edge_ids=edge_ids,
@@ -232,7 +235,7 @@ class ModelStateExpander:
                 generated_records=records,
                 seed_claims=seed_claims,
                 registry=registry,
-                node_timing=node_timing or {},
+                node_timing=normalized_node_timing,
                 timing_options=normalized_timing_options,
                 required_node_cids=required_node_cids,
                 fixed_causal_edge_ids=fixed_causal_edge_ids,
@@ -279,12 +282,31 @@ class ModelStateExpander:
                 raise StateError(
                     f"timing_options[{name!r}] must contain integers only."
                 )
+            if any(value < 1 for value in values):
+                raise StateError(
+                    f"timing_options[{name!r}] must contain values at least 1."
+                )
             if len(set(values)) != len(values):
                 raise StateError(
                     f"Duplicate values in timing_options[{name!r}] are not allowed."
                 )
             normalized[name] = list(values)
         return normalized
+
+    @staticmethod
+    def _validate_node_timing(
+        node_timing: dict[str, int] | None,
+    ) -> dict[str, int]:
+        if node_timing is None:
+            return {}
+        for name, value in node_timing.items():
+            if value is None:
+                continue
+            if isinstance(value, bool) or not isinstance(value, int):
+                raise StateError(f"node_timing[{name!r}] must be an integer.")
+            if value < 1:
+                raise StateError(f"node_timing[{name!r}] must be at least 1.")
+        return dict(node_timing)
 
     @staticmethod
     def _optional_node_cids(
@@ -649,6 +671,15 @@ class ModelStateExpander:
                         f"Invalid edge status in seed claim for {cid}: {status!r}"
                     )
             timing = claim.get("timing")
+            if timing is not None:
+                if isinstance(timing, bool) or not isinstance(timing, int):
+                    raise StateError(
+                        f"Seed timing for component {cid} must be an integer."
+                    )
+                if timing < 1:
+                    raise StateError(
+                        f"Seed timing for component {cid} must be at least 1."
+                    )
             if timing is not None and cid in node_names_by_cid:
                 name = node_names_by_cid[cid]
                 if name in timing_options and timing not in timing_options[name]:

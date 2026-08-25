@@ -1,12 +1,16 @@
 from __future__ import annotations
 
+import math
+
 import torch
 
-_VALID_COMPATIBILITY_METRICS = frozenset({
-    "similarity_rate",
-    "mas_compatible",
-    "identified_compatible",
-})
+_VALID_COMPATIBILITY_METRICS = frozenset(
+    {
+        "similarity_rate",
+        "mas_compatible",
+        "identified_compatible",
+    }
+)
 
 
 class CompatibilityScorer:
@@ -43,6 +47,18 @@ class CompatibilityScorer:
             if isinstance(val, bool):
                 scores.append(1.0 if val else 0.0)
             else:
-                scores.append(float(val))
+                try:
+                    numeric = float(val)
+                except (TypeError, ValueError, OverflowError) as exc:
+                    raise ValueError(
+                        f"Compatibility metric {metric!r} must contain finite "
+                        f"numeric values; dyad {i} has {val!r}."
+                    ) from exc
+                if not math.isfinite(numeric):
+                    raise ValueError(
+                        f"Compatibility metric {metric!r} must contain finite "
+                        f"numeric values; dyad {i} has {val!r}."
+                    )
+                scores.append(numeric)
 
         return torch.tensor(scores, dtype=torch.float32)

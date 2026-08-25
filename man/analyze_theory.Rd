@@ -29,17 +29,19 @@ analyze_theory(
   optional_nodes = character(),
   max_models = 10000L,
   allow_large = FALSE,
-  causal_backend = c("r", "auto", "native")
+  causal_backend = c("r", "auto", "native"),
+  compatibility_metric = c("similarity_rate", "mas_compatible", "identified_compatible")
 )
 }
 \arguments{
 \item{nodes}{Character vector of variable names in \code{"programmatic"}
 input mode. Omit it in \code{"interactive"} mode.}
 
-\item{timing}{Integer vector of chronological positions, parallel to
-\code{nodes}. When \code{NULL} and both \code{exposure} and
-\code{outcome} are supplied, programmatic mode requires
-\code{time_points} for unspecified non-focal nodes.}
+\item{timing}{Integer vector of chronological positions (all values >= 1),
+parallel to \code{nodes}. Use \code{NA} for a non-focal node whose
+possible positions are supplied by \code{time_points}. When \code{NULL}
+and both \code{exposure} and \code{outcome} are supplied, programmatic
+mode requires \code{time_points} for unspecified non-focal nodes.}
 
 \item{exposure}{Name of the exposure variable. Required in programmatic
 mode and collected in interactive mode.}
@@ -106,8 +108,9 @@ questionnaire before the analysis and prints a programmatic call that
 recreates the selected multiverse.}
 
 \item{constraints, include_bidirectional, time_points, timing_options}{Registry
-options forwarded to
-\code{build_component_registry()} in programmatic mode.}
+options forwarded to \code{build_component_registry()} in programmatic
+mode. Values in \code{time_points} and \code{timing_options} must be
+integer positions >= 1.}
 
 \item{optional_nodes}{Character vector of nodes allowed to be absent,
 forwarded to \code{build_component_registry()} in programmatic mode.}
@@ -116,8 +119,15 @@ forwarded to \code{build_component_registry()} in programmatic mode.}
 \code{expand_model_states()}.}
 
 \item{causal_backend}{Causal backend passed to \code{build_dyad_matrix()}.
-Defaults to \code{"r"} for general identification through
-Dagitty/CausalEffect.}
+Defaults to \code{"r"} for adjustment-set computation through
+Dagitty/CausalEffect. The identified-compatibility predicate uses native
+fixed-direct complete-conditioning d-separation.}
+
+\item{compatibility_metric}{Compatibility metric used to score each dyad:
+\code{"similarity_rate"} (default), \code{"mas_compatible"}, or
+\code{"identified_compatible"}. The two causal metrics require
+\code{exposure} and \code{outcome} in the dyads' theory context. Non-default
+metrics are not available in symbolic mode.}
 }
 \value{
 A list with components:
@@ -140,8 +150,8 @@ A list with components:
     concise branch-specific timing-pruned model count; per-direction model
     and dyad counts remain available in \code{delta_u_rankings}. With
     \code{node_policy = "vary"}, the summary also identifies
-    the relevant node most often differing between identified-incompatible
-    pairs where both effects and both relevant-node sets are available.}
+    the declared node most often differing between identified-incompatible
+    pairs where both effects and both node-presence sets are available.}
   \item{plots}{Named list of \code{ggplot} objects or \code{NULL} when
     \code{plot = FALSE}.}
 }

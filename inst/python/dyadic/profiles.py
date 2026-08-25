@@ -4,8 +4,7 @@ import inspect
 from dataclasses import dataclass, replace
 from typing import Any
 
-from dyadic.causal import CausalError
-from dyadic.identification import IdentificationError
+from dyadic.causal import CausalError, native_complete_conditioning_identified
 from state.completions import CompletionDiagnostics, CompletionIndex, SemanticSignature
 
 NormalizedMAS = frozenset[frozenset[str]]
@@ -86,25 +85,24 @@ def _directed_path_intermediates(
 
 
 def identification_nodes_from_dag_spec(dag_spec: dict) -> frozenset[str] | None:
-    """Compute the relevant (non-intermediate) declared node set for a DAG spec.
+    """Compute complete-conditioning ``Z`` from declared node presence.
 
-    Returns ``None`` when the declared pre-projection metadata is absent, the
-    query is not specified, or a query node is missing from the declared set.
+    The public field retains its historical name for compatibility, but its
+    value is now the set of every declared present node except exposure and
+    outcome.  Edge status, timing, and directed-path roles deliberately do not
+    affect membership.  ``None`` is returned when the declared metadata is
+    absent, the query is not specified, or a query node is missing.
     """
     declared_nodes = dag_spec.get("declared_nodes")
-    declared_edges = dag_spec.get("declared_directed_edges")
     exposure = dag_spec.get("exposure")
     outcome = dag_spec.get("outcome")
-    if declared_nodes is None or declared_edges is None:
+    if declared_nodes is None:
         return None
     if exposure is None or outcome is None:
         return None
     if exposure not in declared_nodes or outcome not in declared_nodes:
         return None
-    intermediates = _directed_path_intermediates(
-        declared_nodes, declared_edges, exposure, outcome
-    )
-    return frozenset(declared_nodes) - intermediates
+    return frozenset(declared_nodes) - {exposure, outcome}
 
 
 def identified_compatible(
@@ -257,6 +255,10 @@ class CausalProfileBuilder:
                 if profile_b.identification_nodes is not None
                 else None
             ),
+            "identification_method_ego": profile_a.identification_method,
+            "identification_method_alter": profile_b.identification_method,
+            "identification_formula_ego": profile_a.identification_formula,
+            "identification_formula_alter": profile_b.identification_formula,
             "identified_compatible": identified_compatible(profile_a, profile_b),
         }
 
@@ -290,15 +292,12 @@ class CausalProfileBuilder:
             raise
         robust_mas = normalize_mas(mas)
 
-        identified: bool | None = None
-        formula: str | None = None
-        method: str | None = None
-        if self.identification_wrapper is not None:
-            try:
-                identified, formula = self._identify(dag_spec)
-                method = "general_id"
-            except IdentificationError:
-                raise
+        identified = native_complete_conditioning_identified(
+            self._identification_dag_spec(dag_spec),
+            identification_nodes or frozenset(),
+        )
+        method = "complete_conditioning_dsep"
+        formula = self._complete_conditioning_formula(dag_spec, identification_nodes)
 
         return _ProfilePayload(
             mas=mas,
@@ -349,39 +348,52 @@ class CausalProfileBuilder:
         else:
             identified = None
 
-        # Robust partial rule: a node is an intermediate only when it is a
-        # directed-path intermediate in every represented completion, i.e. the
-        # intersection of completion K sets. The relevant set is the union of
-        # completion-level relevant sets (equivalent to declared nodes minus
-        # the intersection of completion intermediates because declared node
-        # presence is fixed across completions). Requires complete coverage, a
-        # nonempty descendant set, and every descendant's relevant set to be
-        # available.
+        # Z is determined from this partial model's node presence, before any
+        # completion edge state is inspected.  CompletionIndex preserves node
+        # presence across valid edge completions, so this remains stable even
+        # when a completion changes which nodes lie on directed paths.  As with
+        # the other profile fields, incomplete or empty coverage keeps Z
+        # unavailable.
         identification_nodes: frozenset[str] | None = None
+        partial_dag_spec: dict | None = None
+        try:
+            partial_dag_spec = self._make_dag_spec(model_id, exposure, outcome)
+        except Exception:
+            partial_dag_spec = None
+        partial_nodes = (
+            identification_nodes_from_dag_spec(partial_dag_spec)
+            if partial_dag_spec is not None
+            and not partial_dag_spec.get("query_nodes_missing", False)
+            else None
+        )
         if (
             diagnostics.completion_coverage_complete
             and descendant_profiles
+            and partial_nodes is not None
             and all(
                 profile.identification_nodes is not None
                 for profile in descendant_profiles
             )
         ):
-            identification_nodes = frozenset()
-            for profile in descendant_profiles:
-                identification_nodes |= profile.identification_nodes
+            identification_nodes = partial_nodes
+
+        method = "complete_conditioning_dsep"
+        formula = self._complete_conditioning_formula(
+            partial_dag_spec, identification_nodes
+        )
 
         return _ProfilePayload(
             mas=_serialize_mas(robust_mas),
             robust_mas=robust_mas,
             identified=identified,
-            identification_formula=None,
+            identification_formula=formula,
             is_resolved=False,
             completion_ids=diagnostics.completion_ids,
             completion_count=diagnostics.completion_count,
             expected_completion_count=diagnostics.expected_completion_count,
             completion_coverage_complete=diagnostics.completion_coverage_complete,
             completion_source="multiverse_lookup",
-            identification_method="general_id" if self.identification_wrapper else None,
+            identification_method=method,
             identification_nodes=identification_nodes,
             completion_diagnostics=diagnostics,
         )
@@ -419,22 +431,39 @@ class CausalProfileBuilder:
             )
         return self.dag_spec_builder(model_id, exposure=exposure, outcome=outcome)
 
-    def _identify(self, dag_spec: dict) -> tuple[bool, str | None]:
-        method = self.identification_wrapper.identify_total_effect
-        parameters = inspect.signature(method).parameters
-        if len(parameters) == 1 and "dag_spec" in parameters:
-            result = method(dag_spec)
-        else:
-            result = method(
-                nodes=dag_spec["nodes"],
-                directed_edges=dag_spec.get("edges", []),
-                bidirected_edges=dag_spec.get("bidirected_edges", []),
-                exposure=dag_spec["exposure"],
-                outcome=dag_spec["outcome"],
-            )
-        if isinstance(result, tuple):
-            return result
-        return bool(result), None
+    @staticmethod
+    def _identification_dag_spec(dag_spec: dict) -> dict:
+        """Select the resolved declared graph for the native d-sep predicate."""
+        result = dict(dag_spec)
+        if dag_spec.get("declared_nodes") is not None:
+            result["nodes"] = list(dag_spec["declared_nodes"])
+        if dag_spec.get("declared_directed_edges") is not None:
+            result["edges"] = list(dag_spec["declared_directed_edges"])
+        if dag_spec.get("declared_bidirected_edges") is not None:
+            result["bidirected_edges"] = list(dag_spec["declared_bidirected_edges"])
+        if dag_spec.get("declared_observed_nodes") is not None:
+            result["observed_nodes"] = list(dag_spec["declared_observed_nodes"])
+        return result
+
+    @staticmethod
+    def _complete_conditioning_formula(
+        dag_spec: dict | None, conditioning_set: frozenset[str] | None
+    ) -> str | None:
+        if dag_spec is None:
+            return None
+        exposure = dag_spec.get("exposure")
+        outcome = dag_spec.get("outcome")
+        if exposure is None or outcome is None or conditioning_set is None:
+            return None
+        z_text = (
+            "∅"
+            if not conditioning_set
+            else "{" + ", ".join(sorted(conditioning_set)) + "}"
+        )
+        return (
+            f"d-sep({exposure}, {outcome} | {z_text}) after removing "
+            f"the mandatory direct edge {exposure} -> {outcome}"
+        )
 
 
 # Service is an equivalent name for callers that prefer orchestration terminology.

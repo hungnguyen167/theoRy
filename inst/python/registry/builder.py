@@ -45,6 +45,32 @@ class ComponentRegistryBuilder:
         if not nodes:
             raise RegistryError("At least one node is required to build a registry")
 
+        for node in nodes:
+            timing = node.get("timing")
+            if timing is not None:
+                if isinstance(timing, bool) or not isinstance(timing, int):
+                    raise RegistryError(
+                        f"Timing for node {node.get('name')!r} must be an integer"
+                    )
+                if timing < 1:
+                    raise RegistryError(
+                        f"Timing for node {node.get('name')!r} must be at least 1"
+                    )
+
+            timing_options = node.get("timing_options")
+            if timing_options is not None:
+                for value in timing_options:
+                    if isinstance(value, bool) or not isinstance(value, int):
+                        raise RegistryError(
+                            f"Timing options for node {node.get('name')!r} "
+                            "must contain integers"
+                        )
+                    if value < 1:
+                        raise RegistryError(
+                            f"Timing options for node {node.get('name')!r} "
+                            "must contain values at least 1"
+                        )
+
         node_names = {n["name"] for n in nodes}
         if len(node_names) != len(nodes):
             raise RegistryError("Duplicate node names are not allowed")
@@ -344,7 +370,10 @@ class ComponentRegistryBuilder:
 
         data = pd.DataFrame(registry_records)
         data = data.astype(object)
-        for col in ("target", "direction"):
+        # Keep nullable registry fields as JSON-compatible ``None`` values.
+        # Pandas otherwise materializes mixed ``None``/string columns as
+        # floating-point NaN, which leaks into simulation artifacts.
+        for col in ("target", "direction", "fixed_status"):
             data[col] = data[col].where(pd.notna(data[col]), None)
 
         return ComponentRegistry(data)

@@ -29,9 +29,10 @@ classoption: landscape
 > `build_dyad_matrix()`, `compute_delta_u()`, and `run_simulation()`.
 >
 > The modern API exposes exactly `similarity_rate`, `mas_compatible`, and
-> `identified_compatible`. Its causal metrics use explicit total-effect queries,
-> Dagitty adjustment sets, and general identification from R `causaleffect`
-> through Python/rpy2.
+> `identified_compatible`. Its causal metrics use explicit exposure/outcome
+> queries and Dagitty adjustment sets; `identified_compatible` uses the native
+> fixed-direct complete-conditioning predicate rather than general ID through
+> R `causaleffect`.
 
 To install the package from Github, please use either the remotes (preferable) or devtools
 

@@ -395,10 +395,10 @@ def _build_paper_template(exposure: str, outcome: str, template_size: str) -> di
             "S7",
             outcome,
         ]
-        timing = {node: i for i, node in enumerate(nodes)}
+        timing = {node: i + 1 for i, node in enumerate(nodes)}
     else:
         nodes = ["A", exposure, "B", "C", "D", outcome]
-        timing = {"A": 0, exposure: 1, "B": 2, "C": 3, "D": 4, outcome: 5}
+        timing = {"A": 1, exposure: 2, "B": 3, "C": 4, "D": 5, outcome: 6}
 
     universe = build_symbolic_universe(
         nodes=nodes,

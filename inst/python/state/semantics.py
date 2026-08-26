@@ -73,24 +73,6 @@ def edge_endpoint_components(
     }
 
 
-def is_node_component(registry: ComponentRegistry, comp_id: str) -> bool:
-    """Check if a component ID is a node component."""
-    df = registry.data
-    row = df[df["comp_id"] == comp_id]
-    if row.empty:
-        return False
-    return row.iloc[0]["type"] == "node"
-
-
-def is_edge_component(registry: ComponentRegistry, comp_id: str) -> bool:
-    """Check if a component ID is an edge component."""
-    df = registry.data
-    row = df[df["comp_id"] == comp_id]
-    if row.empty:
-        return False
-    return row.iloc[0]["type"] == "edge"
-
-
 # ---------------------------------------------------------------------------
 # Normalization
 # ---------------------------------------------------------------------------
@@ -264,23 +246,6 @@ def edge_applicable(
             "causal",
             "present",
         )
-
-
-def effective_edge_status(
-    state,
-    model_id: str,
-    edge_comp_id: str,
-    registry: ComponentRegistry,
-) -> str | None:
-    """Return the effective edge status, or ``None`` if inapplicable."""
-    if not edge_applicable(state, model_id, edge_comp_id, registry):
-        return None
-    raw = state.get_status(model_id, edge_comp_id)
-    if raw in VALID_EDGE_STATUSES:
-        return raw
-    if raw == "unknown":
-        return EDGE_UNKNOWN
-    return EDGE_UNKNOWN
 
 
 # ---------------------------------------------------------------------------

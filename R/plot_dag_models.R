@@ -1,5 +1,3 @@
-`%||%` <- function(x, y) if (is.null(x)) y else x
-
 #' Plot DAG models from a component registry and model states
 #'
 #' Creates one DAG plot per model, showing causal edges as solid arrows,

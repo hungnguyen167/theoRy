@@ -55,7 +55,7 @@ If \code{NULL}, all supplied models are used.}
 
 \item{compatibility_metric}{One metric that drives the simulation:
 \code{"similarity_rate"}, \code{"mas_compatible"}, or
-\code{"identified_compatible"}. The concrete Illusion of Precision
+\code{"identified_compatible"}. The concrete Consensus Illusion
 scenario requires \code{"mas_compatible"} or
 \code{"identified_compatible"} and defaults to the former. Other
 concrete scenarios default to \code{"similarity_rate"}.}
@@ -63,19 +63,19 @@ concrete scenarios default to \code{"similarity_rate"}.}
 \item{crux_mode}{Crux semantics used by the lynchpin/crux scenarios:
 \code{"marginal"} (default) ranks uncertain components by evaluating both
 causal and non-causal resolutions; \code{"global"} resolves every
-applicable unknown edge instance to a single status. Illusion and Ghost
-scenarios only accept the default \code{"marginal"} value.}
+applicable unknown edge instance to a single status. Consensus Illusion and
+Ghost scenarios only accept the default \code{"marginal"} value.}
 
 \item{global_status}{Required status (\code{"causal"} or
 \code{"non-causal"}) for \code{crux_mode = "global"}. Must be
 \code{NULL} in marginal mode.}
 
 \item{exposure}{Optional exposure node. Required for causal metrics except
-in a generated Illusion of Precision simulation, where the backend infers
+in a generated Consensus Illusion simulation, where the backend infers
 \code{"X1"}.}
 
 \item{outcome}{Optional outcome node. Required for causal metrics except in
-a generated Illusion of Precision simulation, where the backend infers
+a generated Consensus Illusion simulation, where the backend infers
 \code{"Y"}.}
 
 \item{n_zones}{Number of incompatible zones in the multiverse.  When

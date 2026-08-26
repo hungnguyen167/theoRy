@@ -17,31 +17,83 @@ analysis. R communicates with that backend over HTTP on localhost by default.
 
 ## Installation
 
-theoRy is not yet on CRAN. Install the R package from GitHub:
+theoRy requires R 4.2.2 or later and Python 3.10 or later. The R package ships
+the Python backend source, but R package installers do not install Python
+packages. Install both parts before starting the engine.
+
+### 1. Install the R package
+
+theoRy is not yet on CRAN. Install it from GitHub:
 
 ```r
 install.packages("remotes")
 remotes::install_github("hungnguyen167/theoRy")
 ```
 
-Install the cross-platform Python engine dependencies from a source checkout:
+The required R packages, including Dagitty, are installed through the package
+metadata. Install `causaleffect` as well when using the optional general-ID
+bridge:
 
-```bash
-python -m pip install -e inst/python
+```r
+install.packages("causaleffect")
 ```
 
-Full causal analyses default to the R backend for adjustment-set computation.
-Install the Python-to-R bridge and the Dagitty/CausalEffect R packages when
-using the optional R-backed compatibility paths:
+### 2. Create a Python environment
+
+First locate the backend bundled with the installed R package:
+
+```bash
+Rscript -e 'cat(system.file("python", package = "theoRy"))'
+```
+
+On **Linux or macOS**, create a virtual environment and install the backend
+with its R bridge:
+
+```bash
+ENGINE_DIR="$(Rscript -e 'cat(system.file("python", package = "theoRy"))')"
+python3 -m venv ~/.virtualenvs/theory
+~/.virtualenvs/theory/bin/python -m pip install --upgrade pip
+~/.virtualenvs/theory/bin/python -m pip install "${ENGINE_DIR}[rpy2]"
+```
+
+On **Windows PowerShell**:
+
+```powershell
+$engineDir = Rscript -e "cat(system.file('python', package = 'theoRy'))"
+py -3 -m venv "$HOME\.virtualenvs\theory"
+$python = "$HOME\.virtualenvs\theory\Scripts\python.exe"
+& $python -m pip install --upgrade pip
+& $python -m pip install "${engineDir}[rpy2]"
+```
+
+For development from a source checkout, the equivalent command is:
 
 ```bash
 python -m pip install -e 'inst/python[rpy2]'
 ```
 
+Ensure that `Rscript` is on `PATH` so `rpy2` can locate R. If it cannot, set
+`R_HOME` to the directory reported by `R RHOME` before installing `rpy2`.
+
+### 3. Start the installed backend
+
+Pass the virtual environment's Python executable to the R launcher:
+
 ```r
-install.packages(c("dagitty", "causaleffect"))
+library(theoRy)
+
+theory_python <- if (.Platform$OS.type == "windows") {
+  file.path(Sys.getenv("USERPROFILE"), ".virtualenvs", "theory",
+            "Scripts", "python.exe")
+} else {
+  path.expand("~/.virtualenvs/theory/bin/python")
+}
+
+start_theory_engine(python = theory_python)
+stop_theory_engine()
 ```
 
+Full causal analyses default to the R backend for adjustment-set computation.
 Select `causal_backend = "r"`, `"auto"`, or `"native"` in
 `build_dyad_matrix()`. `"r"` is the default and uses Dagitty for adjustment
 sets. `"auto"` first uses native backdoor adjustment and falls back to R when
@@ -57,10 +109,13 @@ modern API, and stop it when the work is complete:
 ```r
 library(theoRy)
 
-start_theory_engine()
+start_theory_engine(python = theory_python)
 # Modern theoRy calls go here.
 stop_theory_engine()
 ```
+
+You may omit `python = theory_python` when the virtual environment is already
+activated and its `python` command is first on `PATH`.
 
 The default URL is `http://localhost:8000`; override it with
 `options(theoRy.engine_url = "https://engine.example.org")`. The launcher uses
@@ -73,7 +128,7 @@ shutdown endpoint and never kills a process merely because it occupies a port.
 ## Modern Workflow
 
 ```r
-start_theory_engine()
+start_theory_engine(python = theory_python)
 
 registry <- build_component_registry(
   nodes = c("Z", "X", "Y"),
@@ -102,7 +157,7 @@ lynchpins <- compute_delta_u(
 )
 
 simulation <- run_simulation(
-  "illusion_of_precision",
+  "consensus_illusion",
   compatibility_metric = "identified_compatible"
 )
 
@@ -247,7 +302,7 @@ global <- compute_delta_u(dyads, crux_mode = "global", top_k = 10)
 ## Causal Queries
 
 `mas_compatible` and `identified_compatible` generally require both `exposure`
-and `outcome`; `similarity_rate` does not. Generated Precision Illusion
+and `outcome`; `similarity_rate` does not. Generated Consensus Illusion
 simulations are the exception: their fixed design lets the backend infer
 exposure `X1` and outcome `Y`. MAS queries target the total effect
 `P(Y | do(X = x))`; `identified_compatible` targets the fixed direct
@@ -257,7 +312,7 @@ model makes that model's profile unavailable rather than non-identified.
 
 The native backend supports tested backdoor-adjustment queries, including
 declared bidirected latent-confounding relations. The optional R
-`causaleffect` dependency remains available for legacy/general-ID callers, but
+`causaleffect` dependency remains available for general-ID callers, but
 it is not used to determine `identified_compatible`.
 
 ## Simulations
@@ -270,7 +325,7 @@ compatibility_metric = "similarity_rate" # or "mas_compatible" or "identified_co
 ```
 
 ```r
-illusion <- run_simulation_illusion(
+consensus <- run_simulation_consensus(
   compatibility_metric = "mas_compatible"
 )
 
@@ -285,10 +340,10 @@ ghost <- run_simulation_ghost(
 )
 ```
 
-Precision Illusion requires `mas_compatible` or `identified_compatible` and
+Consensus Illusion requires `mas_compatible` or `identified_compatible` and
 defaults to `mas_compatible`; `similarity_rate` is its structural comparison
 baseline rather than a valid selected metric. Its main results are
-`mean_similarity_rate`, `compatibility_rate`, `precision_illusion_gap`,
+`mean_similarity_rate`, `compatibility_rate`, `consensus_illusion_gap`,
 resolved and partial model counts, design, and diagnostics.
 
 All simulations are directed-only. `include_bidirectional = TRUE` is rejected
@@ -314,35 +369,68 @@ identification fields describe adjustment identification, not general ID, so
 requests for either causal compatibility metric are rejected rather than
 relabeled incorrectly.
 
-## Breaking Change
 
-The former strict/full modern dyad metric and its model helper fields were
-removed, not aliased. `identified_compatible` has fixed-direct
-complete-conditioning semantics, and the old composite scoring controls were replaced by the single
-`compatibility_metric` selector. Restart the engine after upgrading: in-memory
-sessions created by the previous backend schema are incompatible with current
-requests and responses.
 
-As of `0.2.0`, causal queries require exactly one registry edge
-`exposure -> outcome` with `fixed_status = "causal"`, and that edge must be
-causal and applicable in every queried model. `identified_compatible` removes
-only this mandatory direct edge from each resolved graph, then tests
-d-separation given every other declared present node, including mediators,
-confounders, and colliders. For partial models, the node-presence set is taken
-before edge completion; identification is true only with complete nonempty
-completion coverage and all valid descendants true, while any false descendant
-makes it false. Incomplete or empty coverage is unavailable. Bidirected paths
-remain in the d-separation graph, and the legacy general-ID wrapper is not used
-for this metric. Basic structural mode does not require the causal query
-contract.
+## Reproducibility
 
-## Deprecated Legacy API
+Clone the repository, install R 4.2.2 or later with the `dagitty` and
+`causaleffect` packages, and make sure `Rscript` is on `PATH`:
 
-`run_theoRy()`, `build_causal_node()`, `build_formula_matrix()`,
-`build_set_matrix()`, `add_compatible()`, and `find_add_models()` are the
-deprecated, pure-R workflow. The `full_model_compatible` column produced by
-legacy `add_compatible()` is a distinct historical concept. It is not one of
-the three modern metrics and has not been redefined as general identification.
+```bash
+git clone https://github.com/hungnguyen167/theoRy.git
+cd theoRy
+Rscript -e 'install.packages(c("dagitty", "causaleffect"))'
+```
+
+The simulation environment is locked for Python 3.13. Create it with the
+commands for your platform. The lock file includes hashes for all resolved
+Python packages.
+
+### Linux
+
+```bash
+python3.13 -m venv .venv
+.venv/bin/python -m pip install --upgrade pip
+.venv/bin/python -m pip install --require-hashes \
+  -r simulations/requirements.lock.txt
+.venv/bin/python simulations/scripts/run_simulations.py
+.venv/bin/python simulations/scripts/verify_outputs.py
+```
+
+If a Conda-provided C++ runtime prevents `rpy2` from loading R on a
+Debian/Ubuntu x86-64 system, run the driver with the system runtime preloaded:
+
+```bash
+LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libstdc++.so.6 \
+  .venv/bin/python simulations/scripts/run_simulations.py
+```
+
+### macOS
+
+```bash
+python3.13 -m venv .venv
+.venv/bin/python -m pip install --upgrade pip
+.venv/bin/python -m pip install --require-hashes \
+  -r simulations/requirements.lock.txt
+.venv/bin/python simulations/scripts/run_simulations.py
+.venv/bin/python simulations/scripts/verify_outputs.py
+```
+
+### Windows PowerShell
+
+```powershell
+py -3.13 -m venv .venv
+& ".\.venv\Scripts\python.exe" -m pip install --upgrade pip
+& ".\.venv\Scripts\python.exe" -m pip install --require-hashes `
+  -r simulations/requirements.lock.txt
+& ".\.venv\Scripts\python.exe" simulations/scripts/run_simulations.py
+& ".\.venv\Scripts\python.exe" simulations/scripts/verify_outputs.py
+```
+
+This workflow produces three result sets (Consensus Illusion, Crux of
+Certainty, and Ghost Discovery) under `simulations/results/`, and only Figure 2
+and Figure 3 under `simulations/figures/`. A successful run ends with
+`All verifier checks passed.`
 
 ## Funding
 

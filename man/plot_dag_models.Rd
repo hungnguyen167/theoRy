@@ -8,15 +8,20 @@ plot_dag_models(
   registry,
   states,
   model_ids = NULL,
+  plot_all = FALSE,
   show_mas = FALSE,
   save_path = NULL,
+  width = 2400,
+  height = 1200,
+  res = 360,
+  scale = 1,
   ...
 )
 }
 \arguments{
 \item{registry}{A data frame returned by \code{\link{build_component_registry}}
 with columns \code{comp_id}, \code{type}, \code{source}, \code{target},
-\code{direction}. The \code{node_timing} attribute (named integer vector)
+\code{direction}. The \code{node_timing} or \code{timing_options} attribute
 is used to position nodes; when absent, timing is inferred from node names
 matching \code{X\\d+} or defaults to a flat layout.}
 
@@ -24,7 +29,10 @@ matching \code{X\\d+} or defaults to a flat layout.}
 with columns \code{model_id}, \code{comp_id}, \code{status}.}
 
 \item{model_ids}{Optional character vector of model IDs to plot. When
-\code{NULL}, the first 6 unique model IDs are selected (with a message).}
+\code{NULL}, defaults to the first 6 unique model IDs (unless \code{plot_all = TRUE}).}
+
+\item{plot_all}{Logical. When \code{TRUE}, plots all models in \code{states}
+when \code{model_ids} is \code{NULL}. Defaults to \code{FALSE}.}
 
 \item{show_mas}{Logical. When \code{TRUE}, annotate each plot with the
 minimal adjustment set for the exposure-outcome effect. Requires
@@ -32,8 +40,17 @@ minimal adjustment set for the exposure-outcome effect. Requires
 Defaults to \code{FALSE}.}
 
 \item{save_path}{Optional directory path. When supplied, each plot is
-saved as a PNG file named \code{model_{model_id}.png} using
-\code{ragg::agg_png()} at 2400x1200 pixels, resolution 360.}
+saved as a PNG file named \code{model_{model_id}.png}.}
+
+\item{width}{Integer pixel width for saved PNG images. Defaults to \code{2400}.}
+
+\item{height}{Integer pixel height for saved PNG images. Defaults to \code{1200}.}
+
+\item{res}{Integer resolution (PPI) for saved PNG images. Defaults to \code{360}.}
+
+\item{scale}{Numeric multiplier to adjust visual element sizes (node circles,
+font sizes, arrow lengths). Useful when creating smaller plots so text and
+arrows stay well-proportioned. Defaults to \code{1.0}.}
 
 \item{...}{Additional arguments (currently unused).}
 }
@@ -42,20 +59,7 @@ A named list of \code{ggplot} objects, one per model. Names are
   the model IDs.
 }
 \description{
-Creates one DAG plot per model, showing causal edges as solid arrows and
-unknown-status edges as dashed gray arrows. Non-causal edges are omitted.
-Node positions are determined by timing values from the registry
-\code{node_timing} attribute.
-}
-\examples{
-\dontrun{
-start_theory_engine()
-reg <- build_component_registry(c("X", "Y", "Z"),
-  timing = c(1, 2, 3), exposure = "X", outcome = "Y")
-states <- expand_model_states(reg, mode = "exhaustive",
-  edge_statuses = c("causal", "unknown"))
-plots <- plot_dag_models(reg, states, model_ids = c("M0001", "M0002"))
-for (p in plots) print(p)
-}
-
+Creates one DAG plot per model, showing causal edges as solid arrows,
+unknown-status edges as dashed gray arrows, and bidirectional residual
+covariances (<->) as curved dotted two-headed arrows.
 }

@@ -1,0 +1,21 @@
+# Direct inputs for the reproducible simulation workflow.
+# Backend runtime dependencies.
+torch==2.11.0
+fastapi==0.136.1
+uvicorn==0.46.0
+pyarrow==24.0.0
+scipy==1.17.1
+pandas==3.0.1
+pydantic==2.11.7
+umap-learn==0.5.12
+scikit-learn==1.8.0
+dd==0.6.0
+networkx==3.6.1
+
+# Optional R-backed causal integration.
+rpy2==3.6.7
+
+# Simulation plotting and image verification.
+matplotlib==3.10.8
+numpy==2.4.3
+Pillow==12.1.1

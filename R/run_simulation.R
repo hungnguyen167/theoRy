@@ -1,6 +1,3 @@
-`%||%` <- function(x, y) if (is.null(x)) y else x
-
-
 #' Run a proof-of-concept simulation scenario
 #'
 #' Generates a synthetic multiverse and runs one of three built-in scenarios,
@@ -8,7 +5,7 @@
 #' \code{\link{build_component_registry}} and \code{\link{expand_model_states}}.
 #'
 #' \enumerate{
-#'   \item \strong{Illusion of Precision} — demonstrates how high structural
+#'   \item \strong{Consensus Illusion} — demonstrates how high structural
 #'     similarity can mask low causal compatibility across resolved and partial
 #'     models.
 #'   \item \strong{Lynchpin of Certainty} — demonstrates a phase transition:
@@ -19,17 +16,18 @@
 #' }
 #'
 #' For finer control over each scenario's parameters, use the scenario-specific
-#' wrappers \code{\link{run_simulation_illusion}},
+#' wrappers \code{\link{run_simulation_consensus}},
 #' \code{\link{run_simulation_lynchpin}}, or
 #' \code{\link{run_simulation_ghost}}.
 #'
-#' @param scenario Scenario name: \code{"illusion_of_precision"},
+#' @param scenario Scenario name: \code{"consensus_illusion"},
 #'   \code{"lynchpin_of_certainty"}, or \code{"ghost_discovery"}.
 #'   Partial matching is supported.
 #' @param n_models Number of synthetic models to generate. Must be at least 10.
-#'   Ignored in seeded mode and by the fixed 192-model generated Illusion design.
+#'   Ignored in seeded mode and by the fixed 192-model generated Consensus Illusion
+#'   design.
 #' @param n_components Number of registry components (nodes + edges). Must be
-#'   at least 5. Ignored in seeded mode and by the fixed generated Illusion
+#'   at least 5. Ignored in seeded mode and by the fixed generated Consensus Illusion
 #'   registries.
 #' @param include_bidirectional Logical. Must be \code{FALSE}; simulations
 #'   currently support directed components only. Bidirected components remain
@@ -54,23 +52,23 @@
 #'   \code{"concrete"}.
 #' @param compatibility_metric One metric that drives the simulation:
 #'   \code{"similarity_rate"}, \code{"mas_compatible"}, or
-#'   \code{"identified_compatible"}. The concrete Illusion of Precision
+#'   \code{"identified_compatible"}. The concrete Consensus Illusion
 #'   scenario requires \code{"mas_compatible"} or
 #'   \code{"identified_compatible"} and defaults to the former. Other
 #'   concrete scenarios default to \code{"similarity_rate"}.
 #' @param crux_mode Crux semantics used by the lynchpin/crux scenarios:
 #'   \code{"marginal"} (default) ranks uncertain components by evaluating both
 #'   causal and non-causal resolutions; \code{"global"} resolves every
-#'   applicable unknown edge instance to a single status. Illusion and Ghost
-#'   scenarios only accept the default \code{"marginal"} value.
+#'   applicable unknown edge instance to a single status. Consensus Illusion and
+#'   Ghost scenarios only accept the default \code{"marginal"} value.
 #' @param global_status Required status (\code{"causal"} or
 #'   \code{"non-causal"}) for \code{crux_mode = "global"}. Must be
 #'   \code{NULL} in marginal mode.
 #' @param exposure Optional exposure node. Required for causal metrics except
-#'   in a generated Illusion of Precision simulation, where the backend infers
+#'   in a generated Consensus Illusion simulation, where the backend infers
 #'   \code{"X1"}.
 #' @param outcome Optional outcome node. Required for causal metrics except in
-#'   a generated Illusion of Precision simulation, where the backend infers
+#'   a generated Consensus Illusion simulation, where the backend infers
 #'   \code{"Y"}.
 #' @param include_plot_data Logical. When \code{TRUE}, request bounded
 #'   diagnostic artifacts used by showcase simulation plots. Only supported
@@ -80,7 +78,7 @@
 #' @param pair_sample_n Positive integer or \code{NULL}. Maximum number of
 #'   dyad rows included in pairwise plot diagnostics.
 #' @param ... Additional scenario-specific parameters passed to the backend.
-#'   See \code{\link{run_simulation_illusion}},
+#'   See \code{\link{run_simulation_consensus}},
 #'   \code{\link{run_simulation_lynchpin}}, and
 #'   \code{\link{run_simulation_ghost}} for available options.
 #' @param url Base URL of the theoRy Python backend API.  Defaults to
@@ -90,9 +88,9 @@
 #' \describe{
 #'   \item{\code{scenario}}{Scenario name.}
 #'   \item{\code{results}}{Scenario-specific metrics (list). Concrete
-#'     Illusion results contain \code{mean_similarity_rate},
+#'     Consensus Illusion results contain \code{mean_similarity_rate},
 #'     \code{compatibility_metric}, \code{compatibility_rate},
-#'     \code{precision_illusion_gap}, \code{resolved_model_count},
+#'     \code{consensus_illusion_gap}, \code{resolved_model_count},
 #'     \code{partial_model_count}, \code{design}, and \code{diagnostics}.}
 #'   \item{\code{artifacts}}{Registry data, state data, model IDs, summary
 #'     stats.}
@@ -103,10 +101,10 @@
 #' \dontrun{
 #' start_theory_engine()
 #'
-#' illusion <- run_simulation("illusion_of_precision")
-#' illusion$results$mean_similarity_rate
-#' illusion$results$compatibility_rate
-#' illusion$results$precision_illusion_gap
+#' consensus <- run_simulation("consensus_illusion")
+#' consensus$results$mean_similarity_rate
+#' consensus$results$compatibility_rate
+#' consensus$results$consensus_illusion_gap
 #'
 #' lynchpin <- run_simulation("lynchpin_of_certainty", n_models = 200)
 #' lynchpin$results$phase_transition_score
@@ -125,7 +123,7 @@
 #' }
 #'
 #' @export
-run_simulation <- function(scenario = c("illusion_of_precision",
+run_simulation <- function(scenario = c("consensus_illusion",
                                          "lynchpin_of_certainty",
                                          "crux_of_certainty",
                                          "ghost_discovery"),
@@ -376,7 +374,7 @@ run_simulation <- function(scenario = c("illusion_of_precision",
 
 .resolve_simulation_metric <- function(scenario, compatibility_metric) {
   if (is.null(compatibility_metric)) {
-    compatibility_metric <- if (identical(scenario, "illusion_of_precision")) {
+    compatibility_metric <- if (identical(scenario, "consensus_illusion")) {
       "mas_compatible"
     } else {
       "similarity_rate"
@@ -386,10 +384,10 @@ run_simulation <- function(scenario = c("illusion_of_precision",
     compatibility_metric,
     c("similarity_rate", "mas_compatible", "identified_compatible")
   )
-  if (identical(scenario, "illusion_of_precision") &&
+  if (identical(scenario, "consensus_illusion") &&
       identical(compatibility_metric, "similarity_rate")) {
     stop(
-      "illusion_of_precision requires compatibility_metric ",
+      "consensus_illusion requires compatibility_metric ",
       "'mas_compatible' or 'identified_compatible'.",
       call. = FALSE
     )
@@ -417,10 +415,10 @@ run_simulation <- function(scenario = c("illusion_of_precision",
   if (xor(is.null(exposure), is.null(outcome))) {
     stop("Both or neither of exposure and outcome must be provided.", call. = FALSE)
   }
-  generated_illusion <- identical(scenario, "illusion_of_precision") &&
+  generated_consensus <- identical(scenario, "consensus_illusion") &&
     !is_seeded
   if (!identical(compatibility_metric, "similarity_rate") &&
-      (is.null(exposure) || is.null(outcome)) && !generated_illusion) {
+      (is.null(exposure) || is.null(outcome)) && !generated_consensus) {
     stop("Causal compatibility metrics require exposure and outcome.", call. = FALSE)
   }
 }
@@ -651,16 +649,16 @@ run_simulation <- function(scenario = c("illusion_of_precision",
     summary = character(0)
   )
 
-  if (identical(data$scenario, "illusion_of_precision")) {
-    result$results <- .parse_illusion_results(data$results)
+  if (identical(data$scenario, "consensus_illusion")) {
+    result$results <- .parse_consensus_results(data$results)
     result$summary <- c(
       sprintf("Mean structural similarity: %.2f",
               result$results$mean_similarity_rate),
       sprintf("%s rate: %.2f",
               .simulation_metric_label(result$results$compatibility_metric),
               result$results$compatibility_rate),
-      sprintf("Precision illusion gap: %.2f",
-              result$results$precision_illusion_gap),
+      sprintf("Consensus illusion gap: %.2f",
+              result$results$consensus_illusion_gap),
       sprintf("Models: %d resolved, %d partial",
               result$results$resolved_model_count,
               result$results$partial_model_count),
@@ -722,9 +720,9 @@ run_simulation <- function(scenario = c("illusion_of_precision",
 }
 
 
-# ── Scenario A: Illusion of Precision ──────────────────────────────────────────
+# ── Scenario A: Consensus Illusion ─────────────────────────────────────────────
 
-#' Run the "Illusion of Precision" simulation
+#' Run the "Consensus Illusion" simulation
 #'
 #' Generates a directed synthetic multiverse where high mean structural
 #' similarity masks a lower rate of causal compatibility. The generated design
@@ -732,9 +730,9 @@ run_simulation <- function(scenario = c("illusion_of_precision",
 #' outcome \code{"Y"}, inferred by the backend when omitted.
 #'
 #' @inheritParams run_simulation
-#' @param n_models Ignored for generated Illusion runs, whose exhaustive design
+#' @param n_models Ignored for generated Consensus Illusion runs, whose exhaustive design
 #'   always contains 128 resolved models and 64 partial theories.
-#' @param n_components Ignored for generated Illusion runs, whose MAS and
+#' @param n_components Ignored for generated Consensus Illusion runs, whose MAS and
 #'   identification registries are fixed by their seed theories.
 #' @param random_state Random seed. \code{NULL} for non-deterministic.
 #' @param enforce_thresholds When \code{NULL} (default), synthetic simulations
@@ -751,19 +749,19 @@ run_simulation <- function(scenario = c("illusion_of_precision",
 #' @return A list with \code{scenario}, \code{results}, \code{artifacts},
 #'   and \code{summary}. \code{results} contains
 #'   \code{mean_similarity_rate}, \code{compatibility_metric},
-#'   \code{compatibility_rate}, \code{precision_illusion_gap},
+#'   \code{compatibility_rate}, \code{consensus_illusion_gap},
 #'   \code{resolved_model_count}, \code{partial_model_count}, \code{design},
 #'   and \code{diagnostics}.
 #'
 #' @examples
 #' \dontrun{
 #' start_theory_engine()
-#' r <- run_simulation_illusion(compatibility_metric = "mas_compatible")
-#' r$results$precision_illusion_gap
+#' r <- run_simulation_consensus(compatibility_metric = "mas_compatible")
+#' r$results$consensus_illusion_gap
 #' }
 #'
 #' @export
-run_simulation_illusion <- function(n_models = 100L,
+run_simulation_consensus <- function(n_models = 100L,
                                      n_components = 50L,
                                      include_bidirectional = FALSE,
                                      registry = NULL,
@@ -788,7 +786,7 @@ run_simulation_illusion <- function(n_models = 100L,
   compatibility_metric <- match.arg(compatibility_metric)
   crux_mode <- match.arg(crux_mode)
   .run_simulation_internal(
-    scenario = "illusion_of_precision",
+    scenario = "consensus_illusion",
     n_models = n_models,
     n_components = n_components,
     include_bidirectional = include_bidirectional,
@@ -1073,7 +1071,7 @@ run_simulation_ghost <- function(n_models = 150L,
 # ── parsing helpers ────────────────────────────────────────────────────────────
 
 
-.parse_illusion_results <- function(r) {
+.parse_consensus_results <- function(r) {
   diagnostics <- list(
     n_dyads = as.integer(r$n_dyads),
     n_comparable_dyads = as.integer(r$n_comparable_dyads),
@@ -1089,7 +1087,7 @@ run_simulation_ghost <- function(n_models = 150L,
     mean_similarity_rate = r$mean_similarity_rate,
     compatibility_metric = r$compatibility_metric,
     compatibility_rate = r$compatibility_rate,
-    precision_illusion_gap = r$precision_illusion_gap,
+    consensus_illusion_gap = r$consensus_illusion_gap,
     resolved_model_count = as.integer(r$resolved_model_count),
     partial_model_count = as.integer(r$partial_model_count),
     design = r$design,

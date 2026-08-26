@@ -48,9 +48,6 @@
 #'   \code{NULL} in marginal mode.
 #' @param device Compute device: \code{"auto"} (default), \code{"cpu"}, or
 #'   \code{"cuda"}.  \code{"cuda"} requires a CUDA-capable GPU with PyTorch.
-#' @param use_tensor_engine Whether to use the tensorized structural engine
-#'   when \code{compatibility_metric = "similarity_rate"} (default
-#'   \code{TRUE}). Improves performance on larger state spaces.
 #' @param url Base URL of the theoRy Python backend API.  Defaults to
 #'   \code{getOption("theoRy.engine_url", "http://localhost:8000")}.
 #'
@@ -216,7 +213,6 @@ compute_delta_u <- function(dyads,
                             crux_mode = c("marginal", "global"),
                             global_status = NULL,
                             device = c("auto", "cpu", "cuda"),
-                            use_tensor_engine = TRUE,
                             url = getOption("theoRy.engine_url",
                                              "http://localhost:8000")) {
   mode <- match.arg(mode)
@@ -333,7 +329,6 @@ compute_delta_u <- function(dyads,
   }
 
   payload$device <- device
-  payload$use_tensor_engine <- use_tensor_engine
 
   req <- httr2::request(url) |>
     httr2::req_url_path("api/v1/delta-u") |>

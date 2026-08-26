@@ -64,10 +64,10 @@ structurally divergent across the model multiverse.
 \examples{
 \dontrun{
 start_theory_engine()
-illusion <- run_simulation("illusion_of_precision", n_models = 100)
-plot_component_status_heatmap(illusion)
+consensus <- run_simulation("consensus_illusion", n_models = 100)
+plot_component_status_heatmap(consensus)
 
-plot_component_status_heatmap(illusion, component_type = "all")
+plot_component_status_heatmap(consensus, component_type = "all")
 }
 
 }

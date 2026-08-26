@@ -1,3 +1,44 @@
 ^theoRy\.Rproj$
 ^\.Rproj\.user$
 ^LICENSE\.md$
+
+# Documentation and generated report trees.
+^docs(/|$)
+^simulations(/|$)
+
+# Agent/tooling directories and metadata.
+^\.github(/|$)
+^\.roo(/|$)
+^_bmad(/|$)
+^_bmad-output(/|$)
+^\.lavish(/|$)
+^AGENTS\.md$
+^\.gitignore$
+^\.pre-commit-config\.yaml$
+
+# Local caches and Python bytecode, including nested copies.
+^\.venv(/|$)
+(^|/)\.pytest_cache(/|$)
+(^|/)\.ruff_cache(/|$)
+(^|/)__pycache__(/|$)
+(^|/).*\.py[cod]$
+
+# Root-level generated artifacts.
+^README\.html$
+^theoRy_.*\.pdf$
+^\.RData$
+^workspace\.RData$
+
+# Python tests and build metadata are not part of the R package payload.
+^inst/python/tests(/|$)
+^inst/python/theory_engine\.egg-info(/|$)
+
+# Generated vignette side-output directories/files.
+^vignettes/fig1a(/|$)
+^vignettes/plots(/|$)
+^vignettes/Tbl1\.csv$
+^vignettes/Table_1_AStA\.R$
+
+# Test runner byproducts; retain normal R test sources in package builds.
+^tests/testthat/testthat-problems\.rds$
+^tests/testthat/_problems(/|$)

@@ -1,6 +1,3 @@
-`%||%` <- function(x, y) if (is.null(x)) y else x
-
-
 #' Plot pre/post lynchpin compatibility shift
 #'
 #' Shows the distributional phase transition caused by resolving the

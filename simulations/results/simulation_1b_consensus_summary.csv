@@ -1,0 +1,5 @@
+design_label,design,neighborhood,max_context_departures,completion_blocks,block_count,models,ordered_dyads,n_models,n_dyads,mean_similarity_rate,mas_compatibility_rate,identified_compatibility_rate,similarity_minus_mas,similarity_minus_identified
+1B,forced_conditioning_collider,Focused,1,7,7,21,420,21,420,0.79827,1.0,0.1,-0.20173,0.69827
+1B,forced_conditioning_collider,Moderate,2,22,22,66,4290,66,4290,0.725683,1.0,0.107692,-0.274317,0.61799
+1B,forced_conditioning_collider,Broad,3,42,42,126,15750,126,15750,0.691166,1.0,0.109333,-0.308834,0.581833
+1B,forced_conditioning_collider,Full,6,64,64,192,36672,192,36672,0.678245,1.0,0.109948,-0.321755,0.568297

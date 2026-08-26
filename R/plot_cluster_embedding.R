@@ -1,6 +1,3 @@
-`%||%` <- function(x, y) if (is.null(x)) y else x
-
-
 #' Plot a UMAP cluster embedding
 #'
 #' Creates a 2D scatter plot of model embeddings produced by

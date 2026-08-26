@@ -1,15 +1,36 @@
-.Rproj.user
+.Rproj.user/
 .Rhistory
 .RData
+workspace.RData
 .Ruserdata
 _bmad/
 .github/
 .roo/
 _bmad-output/
-docs/internal/*
-tests/
 .lavish/
 AGENTS.md
-inst/python/theory_engine.egg-info/*
-__pycache__/
+
+# Internal design and implementation materials stay local.
+docs/internal/
+
+# Generated documentation and package artifacts.
+docs/reference/
+README.html
+theoRy_*.pdf
+
+# Python build and tool artifacts.
+.venv/
+inst/python/theory_engine.egg-info/
+**/.pytest_cache/
+**/.ruff_cache/
+**/__pycache__/
 *.py[cod]
+
+# Generated vignette side outputs.
+vignettes/Tbl1.csv
+vignettes/fig1a/
+vignettes/plots/
+
+# Test runner byproducts; substantive R and Python tests remain versionable.
+tests/testthat/testthat-problems.rds
+tests/testthat/_problems/

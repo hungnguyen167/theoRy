@@ -57,10 +57,10 @@ class SimulationSuite:
             )
         exposure = kwargs.get("exposure")
         outcome = kwargs.get("outcome")
-        if scenario == "illusion_of_precision":
+        if scenario == "consensus_illusion":
             if compatibility_metric == "similarity_rate":
                 raise SimulationInputError(
-                    "illusion_of_precision requires compatibility_metric "
+                    "consensus_illusion requires compatibility_metric "
                     "'mas_compatible' or 'identified_compatible'"
                 )
             if not self._is_seeded(registry_data, state_data):
@@ -69,7 +69,7 @@ class SimulationSuite:
                     kwargs.update(exposure=exposure, outcome=outcome)
                 elif (exposure, outcome) != ("X1", "Y"):
                     raise SimulationInputError(
-                        "Generated illusion_of_precision designs use exposure='X1' "
+                        "Generated consensus_illusion designs use exposure='X1' "
                         "and outcome='Y'"
                     )
         scorer = CompatibilityScorer(compatibility_metric=compatibility_metric)
@@ -83,8 +83,8 @@ class SimulationSuite:
                 "sample_n is only used when registry_data and state_data are supplied"
             )
 
-        if scenario == "illusion_of_precision":
-            return self._scenario_illusion(
+        if scenario == "consensus_illusion":
+            return self._scenario_consensus(
                 n_models,
                 n_components,
                 registry_data=registry_data,
@@ -130,7 +130,7 @@ class SimulationSuite:
         else:
             raise SimulationError(
                 f"Unknown scenario {scenario!r}. "
-                "Must be one of: illusion_of_precision, "
+                "Must be one of: consensus_illusion, "
                 "crux_of_certainty, ghost_discovery"
             )
 
@@ -369,9 +369,9 @@ class SimulationSuite:
     def _assert_thresholds(self, scenario: str, results: dict) -> None:
         if results.get("compatibility_metric") != "similarity_rate":
             return
-        if scenario == "illusion_of_precision":
+        if scenario == "consensus_illusion":
             raise SimulationError(
-                "illusion_of_precision does not support similarity_rate as its "
+                "consensus_illusion does not support similarity_rate as its "
                 "selected compatibility metric"
             )
         elif scenario in ("lynchpin_of_certainty", "crux_of_certainty"):
@@ -614,9 +614,9 @@ class SimulationSuite:
             identification_wrapper,
         )
 
-    # ── precision illusion designs ──────────────────────────────────────────────
+    # ── consensus illusion designs ───────────────────────────────────────────────
 
-    def _build_precision_illusion_design(self, compatibility_metric):
+    def _build_consensus_illusion_design(self, compatibility_metric):
         if compatibility_metric == "mas_compatible":
             nodes = [
                 {"name": "X1", "timing": 2, "description": "Exposure"},
@@ -702,7 +702,7 @@ class SimulationSuite:
         node_timing = {node["name"]: node["timing"] for node in nodes}
         return registry, fixed_edges, variable_edges, edge_ids, node_timing, design
 
-    def _generate_precision_illusion_states(
+    def _generate_consensus_illusion_states(
         self, registry, fixed_edges, variable_edges, edge_ids, node_timing
     ):
         fixed_ids = {edge_ids[edge] for edge in fixed_edges}
@@ -743,7 +743,7 @@ class SimulationSuite:
             append_model(f"P{number + 1:04d}", (False, *remaining), True)
         return records
 
-    def _precision_illusion_result(
+    def _consensus_illusion_result(
         self,
         registry,
         state_records,
@@ -836,7 +836,7 @@ class SimulationSuite:
         result = {
             **diagnostics,
             "mean_similarity_rate": mean_similarity,
-            "precision_illusion_gap": round(mean_similarity - selected, 6),
+            "consensus_illusion_gap": round(mean_similarity - selected, 6),
             "resolved_model_count": resolved_count,
             "partial_model_count": len(model_ids) - resolved_count,
             "design": design,
@@ -871,12 +871,12 @@ class SimulationSuite:
             },
         }
         if include_plot_data:
-            artifacts["plot_data"] = self._build_precision_model_metrics(
+            artifacts["plot_data"] = self._build_consensus_model_metrics(
                 dyads, model_ids, compatibility_metric, plot_sample_n
             )
         return result, artifacts
 
-    def _build_precision_model_metrics(
+    def _build_consensus_model_metrics(
         self, dyads, model_ids, compatibility_metric, plot_sample_n
     ):
         selected_ids = sorted(model_ids)
@@ -898,7 +898,7 @@ class SimulationSuite:
                     "model_id": model_id,
                     "mean_similarity_rate": round(similarity, 6),
                     "compatibility_rate": round(selected, 6),
-                    "precision_illusion_gap": round(similarity - selected, 6),
+                    "consensus_illusion_gap": round(similarity - selected, 6),
                     "compatibility_metric": compatibility_metric,
                 }
             )
@@ -912,9 +912,9 @@ class SimulationSuite:
             },
         }
 
-    # ── scenario A: illusion of precision ──────────────────────────────────────
+    # ── scenario A: consensus illusion ──────────────────────────────────────────
 
-    def _scenario_illusion(
+    def _scenario_consensus(
         self,
         n_models,
         n_components,
@@ -937,7 +937,7 @@ class SimulationSuite:
                 "include_bidirectional must be false"
             )
         if self._is_seeded(registry_data, state_data):
-            return self._seeded_illusion(
+            return self._seeded_consensus(
                 registry_data,
                 state_data,
                 sample_n,
@@ -951,13 +951,13 @@ class SimulationSuite:
             )
 
         registry, fixed_edges, variable_edges, edge_ids, node_timing, design = (
-            self._build_precision_illusion_design(compatibility_metric)
+            self._build_consensus_illusion_design(compatibility_metric)
         )
-        state_records = self._generate_precision_illusion_states(
+        state_records = self._generate_consensus_illusion_states(
             registry, fixed_edges, variable_edges, edge_ids, node_timing
         )
         model_ids = sorted({row["model_id"] for row in state_records})
-        base_result, artifacts = self._precision_illusion_result(
+        base_result, artifacts = self._consensus_illusion_result(
             registry,
             state_records,
             model_ids,
@@ -968,20 +968,20 @@ class SimulationSuite:
             include_plot_data=include_plot_data,
             plot_sample_n=plot_sample_n,
         )
-        if enforce_thresholds and base_result["precision_illusion_gap"] <= 0:
+        if enforce_thresholds and base_result["consensus_illusion_gap"] <= 0:
             raise SimulationError(
-                "illusion_of_precision failed acceptance threshold: mean "
+                "consensus_illusion failed acceptance threshold: mean "
                 "similarity_rate must exceed selected compatibility"
             )
         return {
-            "scenario": "illusion_of_precision",
+            "scenario": "consensus_illusion",
             "n_models": len(model_ids),
             "n_components": len(registry.data),
             "results": base_result,
             "artifacts": artifacts,
         }
 
-    def _seeded_illusion(
+    def _seeded_consensus(
         self,
         registry_data,
         state_data,
@@ -997,7 +997,7 @@ class SimulationSuite:
         registry, _, _, model_ids, filtered_records = self._prepare_seeded_inputs(
             registry_data, state_data, sample_n
         )
-        base_result, artifacts = self._precision_illusion_result(
+        base_result, artifacts = self._consensus_illusion_result(
             registry,
             filtered_records,
             model_ids,
@@ -1009,13 +1009,13 @@ class SimulationSuite:
             plot_sample_n=plot_sample_n,
             seeded=True,
         )
-        if enforce_thresholds and base_result["precision_illusion_gap"] <= 0:
+        if enforce_thresholds and base_result["consensus_illusion_gap"] <= 0:
             raise SimulationError(
-                "illusion_of_precision failed acceptance threshold: mean "
+                "consensus_illusion failed acceptance threshold: mean "
                 "similarity_rate must exceed selected compatibility"
             )
         return self._build_seeded_result_wrapper(
-            "illusion_of_precision", model_ids, registry, base_result, artifacts
+            "consensus_illusion", model_ids, registry, base_result, artifacts
         )
 
     @staticmethod

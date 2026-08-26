@@ -1,6 +1,3 @@
-`%||%` <- function(x, y) if (is.null(x)) y else x
-
-
 #' Plot a lynchpin component ranking bar chart
 #'
 #' Creates a horizontal bar chart of Delta-U scores showing which theoretical

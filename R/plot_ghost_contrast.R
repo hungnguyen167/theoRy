@@ -1,6 +1,3 @@
-`%||%` <- function(x, y) if (is.null(x)) y else x
-
-
 #' Plot ghost cluster contrast (internal vs prior compatibility)
 #'
 #' Creates a bubble chart showing where each detected cluster falls in the

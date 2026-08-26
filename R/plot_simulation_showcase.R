@@ -1,6 +1,3 @@
-`%||%` <- function(x, y) if (is.null(x)) y else x
-
-
 #' Plot simulation showcase figures
 #'
 #' Scenario-aware wrapper that produces additional explanatory figures
@@ -27,9 +24,9 @@
 #' plots <- plot_simulation_showcase(ghost)
 #' for (p in plots) print(p)
 #'
-#' illusion <- run_simulation("illusion_of_precision",
+#' consensus <- run_simulation("consensus_illusion",
 #'   n_models = 100, include_plot_data = TRUE)
-#' plots <- plot_simulation_showcase(illusion)
+#' plots <- plot_simulation_showcase(consensus)
 #' }
 #'
 #' @export
@@ -41,22 +38,22 @@ plot_simulation_showcase <- function(result, ..., strict = FALSE) {
 
   scenario <- result$scenario
 
-  if (identical(scenario, "illusion_of_precision")) {
-    .showcase_illusion(result, ..., strict = strict)
+  if (identical(scenario, "consensus_illusion")) {
+    .showcase_consensus(result, ..., strict = strict)
   } else if (scenario %in% c("lynchpin_of_certainty", "crux_of_certainty")) {
     .showcase_lynchpin(result, ..., strict = strict)
   } else if (identical(scenario, "ghost_discovery")) {
     .showcase_ghost(result, ..., strict = strict)
   } else {
     stop("Unrecognized simulation result: scenario = '",
-         scenario, "'. Expected one of: illusion_of_precision, ",
+         scenario, "'. Expected one of: consensus_illusion, ",
          "lynchpin_of_certainty, crux_of_certainty, ghost_discovery.",
          call. = FALSE)
   }
 }
 
 
-.showcase_illusion <- function(result, ..., strict = FALSE) {
+.showcase_consensus <- function(result, ..., strict = FALSE) {
   plots <- list()
 
   plots$component_status_heatmap <- tryCatch(

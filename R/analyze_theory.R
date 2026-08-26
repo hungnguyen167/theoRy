@@ -1,6 +1,3 @@
-`%||%` <- function(x, y) if (is.null(x)) y else x
-
-
 #' Run the full theoRy analysis pipeline in one call
 #'
 #' Chains the five core theoRy pipeline steps - component registry,

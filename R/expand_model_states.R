@@ -156,7 +156,6 @@ expand_model_states <- function(registry,
                                                    "http://localhost:8000")) {
   mode <- match.arg(mode)
   node_policy <- match.arg(node_policy)
-  `%||%` <- function(x, y) if (is.null(x)) y else x
 
   if (xor(is.null(exposure), is.null(outcome))) {
     stop("Both or neither of exposure and outcome must be provided.",

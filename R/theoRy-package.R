@@ -13,6 +13,16 @@
 #' @importFrom ggdag dagify geom_dag_point geom_dag_edges geom_dag_text theme_dag
 #' @importFrom ragg agg_png
 #' @importFrom tibble as_tibble add_row tibble
+#' @importFrom grDevices dev.off
+#' @importFrom stats as.formula setNames
 ## usethis namespace: end
 NULL
 
+utils::globalVariables(c(
+  "alter_id", "best_resolution", "cluster_id", "comp_id",
+  "compatibility", "compatibility_rate", "consensus_illusion_gap", "delta",
+  "delta_u", "ego_id", "internal_compatibility", "label",
+  "mean_similarity_rate", "metric", "model_count", "model_id", "pos",
+  "prior_compatibility", "score", "stage", "status", "step", "value",
+  "x", "xend", "y", "yend"
+))

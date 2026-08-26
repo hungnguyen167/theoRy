@@ -4,10 +4,6 @@ import torch
 
 from registry.schema import ComponentRegistry
 from state.tensor import StateTensor
-from state.semantics import (
-    edge_endpoint_components,
-    node_component_map,
-)
 
 
 def resolve_device(device: str = "auto") -> torch.device:
@@ -67,18 +63,15 @@ def _edge_applicable_mask(
     state: StateTensor,
     device: str | torch.device = "cpu",
 ) -> torch.Tensor:
-    if hasattr(state, "edge_applicable_mask") and state.edge_applicable_mask is not None:
+    if (
+        hasattr(state, "edge_applicable_mask")
+        and state.edge_applicable_mask is not None
+    ):
         return state.edge_applicable_mask.to(device)
 
     M = len(state.model_ids)
     C = len(state.component_ids)
     applicable = torch.zeros((M, C), dtype=torch.bool, device=device)
-
-    node_map = node_component_map(
-        type('R', (), {'data': state._registry.data if hasattr(state, '_registry') else None})()
-        if hasattr(state, '_registry')
-        else None
-    ) if hasattr(state, '_registry') else {}
 
     for mid in state.model_ids:
         i = state.model_index[mid]
@@ -92,75 +85,17 @@ def _edge_applicable_mask(
     return applicable
 
 
-def _temporal_valid_mask(
-    state: StateTensor,
-    registry: ComponentRegistry,
-    device: str | torch.device = "cpu",
-) -> torch.Tensor:
-    M = len(state.model_ids)
+def _edge_component_mask(state: StateTensor) -> torch.Tensor:
+    """Build a boolean mask for edge component indices."""
     C = len(state.component_ids)
-    valid = torch.ones((M, C), dtype=torch.bool, device=device)
-
-    df = registry.data
-    edge_df = df[df["type"] == "edge"]
-
-    if edge_df.empty:
-        return valid
-
-    node_to_comp = {
-        row["source"]: row["comp_id"]
-        for _, row in df[df["type"] == "node"].iterrows()
-    }
-
-    for _, row in edge_df.iterrows():
-        cid = row["comp_id"]
-        if cid not in state.component_index:
-            continue
-        j = state.component_index[cid]
-
-        source_cid = node_to_comp.get(row["source"])
-        target_cid = node_to_comp.get(row["target"])
-        if source_cid is None or target_cid is None:
-            continue
-
-        for mid in state.model_ids:
-            i = state.model_index[mid]
-            if not state.edge_applicable(mid, cid):
-                continue
-            status = state.get_status(mid, cid)
-            if status != "causal":
-                continue
-
-            source_t = state.get_timing(mid, source_cid)
-            target_t = state.get_timing(mid, target_cid)
-
-            if (
-                source_t is not None
-                and target_t is not None
-                and source_t >= target_t
-            ):
-                valid[i, j] = False
-
-    return valid
-
-
-def _build_component_type_masks(state: StateTensor):
-    """Build boolean masks for node and edge component indices."""
-    C = len(state.component_ids)
-    node_mask = torch.zeros(C, dtype=torch.bool)
     edge_mask = torch.zeros(C, dtype=torch.bool)
-
-    for cid in state._node_comp_ids:
-        if cid in state.component_index:
-            j = state.component_index[cid]
-            node_mask[j] = True
 
     for cid in state._edge_comp_ids:
         if cid in state.component_index:
             j = state.component_index[cid]
             edge_mask[j] = True
 
-    return node_mask, edge_mask
+    return edge_mask
 
 
 def structural_similarity_matrix(
@@ -168,7 +103,6 @@ def structural_similarity_matrix(
     registry: ComponentRegistry,
     model_ids: list[str] | None = None,
     device: str | torch.device = "cpu",
-    exclude_temporally_invalid: bool = True,
 ) -> tuple[torch.Tensor, list[str]]:
     if model_ids is None:
         model_ids = state.model_ids
@@ -185,16 +119,8 @@ def structural_similarity_matrix(
     causal = (t[:, :, 0] == 1)[indices]
     non_causal = (t[:, :, 1] == 1)[indices]
 
-    if exclude_temporally_invalid:
-        valid = _temporal_valid_mask(state, registry, device=device)[indices]
-    else:
-        valid = torch.ones_like(causal, dtype=torch.bool, device=device)
-
-    node_mask, edge_mask = _build_component_type_masks(state)
-    node_mask_d = node_mask.to(device)
+    edge_mask = _edge_component_mask(state)
     edge_mask_d = edge_mask.to(device)
-
-    M = np_mask.shape[0]
 
     # --- Node contribution ---
     # shared nodes: present in both
@@ -219,14 +145,18 @@ def structural_similarity_matrix(
 
     # Conflicting resolved claims (causal vs non-causal)
     conflicting = (
-        ((causal.unsqueeze(1) & non_causal.unsqueeze(0)) |
-         (non_causal.unsqueeze(1) & causal.unsqueeze(0)))
+        (
+            (causal.unsqueeze(1) & non_causal.unsqueeze(0))
+            | (non_causal.unsqueeze(1) & causal.unsqueeze(0))
+        )
         & pair_applicable
     ).sum(dim=2)
 
     # Union edges: resolved in either model (OR), plus conflicting gets counted twice,
     # plus one-sided applicable edges (each adds one union claim)
-    resolved_or = (resolved_any.unsqueeze(1) | resolved_any.unsqueeze(0)) & pair_applicable
+    resolved_or = (
+        resolved_any.unsqueeze(1) | resolved_any.unsqueeze(0)
+    ) & pair_applicable
     union_edges = resolved_or.sum(dim=2) + conflicting + one_sided_applicable.sum(dim=2)
 
     shared = node_shared + shared_edges
@@ -248,8 +178,10 @@ def structural_dyad_scores(
     device: str | torch.device = "cpu",
 ) -> tuple[torch.Tensor, list[str]]:
     matrix, ordered_ids = structural_similarity_matrix(
-        state, registry, model_ids=model_ids, device=device,
-        exclude_temporally_invalid=True,
+        state,
+        registry,
+        model_ids=model_ids,
+        device=device,
     )
 
     M = matrix.shape[0]

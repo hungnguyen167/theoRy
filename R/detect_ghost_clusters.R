@@ -134,7 +134,6 @@ detect_ghost_clusters <- function(dyads,
                                     score_field = "similarity_rate",
                                     url = getOption("theoRy.engine_url",
                                                      "http://localhost:8000")) {
-  `%||%` <- function(x, y) if (is.null(x)) y else x
 
   if (missing(dyads) || !is.data.frame(dyads)) {
     stop("dyads must be a data frame returned by build_dyad_matrix().",

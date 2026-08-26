@@ -1,0 +1,5 @@
+neighborhood,models,1A_mean_similarity,1A_mas_compatibility,1A_identified_compatibility,1B_mean_similarity,1B_mas_compatibility,1B_identified_compatibility
+Focused,21,0.85076,0.028571,1.0,0.79827,1.0,0.1
+Moderate,66,0.794591,0.016783,1.0,0.725683,1.0,0.107692
+Broad,126,0.767506,0.01219,1.0,0.691166,1.0,0.109333
+Full,192,0.757366,0.010471,1.0,0.678245,1.0,0.109948

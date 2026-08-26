@@ -70,7 +70,6 @@ class DeltaUEngine:
         causal_wrapper=None,
         compatibility_metric: str = "similarity_rate",
         device: str = "auto",
-        use_tensor_engine: bool = True,
         exposure: str | None = None,
         outcome: str | None = None,
         identification_wrapper=None,
@@ -83,7 +82,6 @@ class DeltaUEngine:
         self._causal_wrapper = causal_wrapper
         self._compatibility_metric = compatibility_metric
         self._device = device
-        self._use_tensor_engine = use_tensor_engine
         self._exposure = exposure
         self._outcome = outcome
         self._identification_wrapper = identification_wrapper
@@ -91,7 +89,6 @@ class DeltaUEngine:
         if crux_mode not in ("marginal", "global"):
             raise DeltaUError("crux_mode must be 'marginal' or 'global'")
         self._crux_mode = crux_mode
-        self.used_tensor_engine = False
 
         self._scorer = CompatibilityScorer(
             compatibility_metric=compatibility_metric,

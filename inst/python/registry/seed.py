@@ -294,7 +294,12 @@ def generate_seed_data(output_dir: str | Path = "inst/extdata/") -> dict[str, Pa
         {"model_id": "M0004", "comp_id": "C0008", "status": "unknown", "timing": None},
         {"model_id": "M0005", "comp_id": "C0001", "status": "unknown", "timing": None},
         {"model_id": "M0005", "comp_id": "C0002", "status": "causal", "timing": 2},
-        {"model_id": "M0005", "comp_id": "C0004", "status": "non-causal", "timing": None},
+        {
+            "model_id": "M0005",
+            "comp_id": "C0004",
+            "status": "non-causal",
+            "timing": None,
+        },
         {"model_id": "M0005", "comp_id": "C0015", "status": "causal", "timing": 5},
         {"model_id": "M0005", "comp_id": "C0016", "status": "causal", "timing": 6},
         {"model_id": "M0006", "comp_id": "C0001", "status": "unknown", "timing": None},
@@ -306,7 +311,12 @@ def generate_seed_data(output_dir: str | Path = "inst/extdata/") -> dict[str, Pa
         {"model_id": "M0007", "comp_id": "C0001", "status": "causal", "timing": 1},
         {"model_id": "M0007", "comp_id": "C0002", "status": "causal", "timing": 2},
         {"model_id": "M0007", "comp_id": "C0004", "status": "causal", "timing": 3},
-        {"model_id": "M0007", "comp_id": "C0006", "status": "non-causal", "timing": None},
+        {
+            "model_id": "M0007",
+            "comp_id": "C0006",
+            "status": "non-causal",
+            "timing": None,
+        },
         {"model_id": "M0007", "comp_id": "C0010", "status": "causal", "timing": 4},
     ]
 

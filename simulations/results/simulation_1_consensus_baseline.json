@@ -1,0 +1,20 @@
+{
+  "status": "historical_provenance_only",
+  "use_for_acceptance": false,
+  "captured_at": "pre-0.2.0 rerun",
+  "definition": "Historical identified_compatible values were computed before equal conditioning-node-set equality became part of the metric.",
+  "historical_primary_rates": {
+    "1A mas_compatibility_rate": [
+      0.028571,
+      0.016783,
+      0.01219,
+      0.010471
+    ],
+    "1B identified_compatibility_rate": [
+      0.1,
+      0.107692,
+      0.109333,
+      0.109948
+    ]
+  }
+}

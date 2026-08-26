@@ -1,14 +1,23 @@
+# Core runtime dependencies (mirrors [project].dependencies in pyproject.toml).
 torch>=2.0
 fastapi>=0.104
 uvicorn>=0.24
-rpy2>=3.5
 pyarrow>=14
 scipy>=1.11
 pandas>=2.1
 pydantic>=2.5
+umap-learn>=0.5
+scikit-learn>=1.3
+dd>=0.6
+networkx>=3.1
+
+# Optional R-backed causal integration.
+rpy2>=3.5
+
+# Development/test tooling. The pyproject.toml dev extra is the canonical
+# install path for pytest and httpx; these entries preserve this legacy file's
+# all-in-one installation behavior.
 pytest>=7.4
 httpx>=0.25
 ruff>=0.1
 black>=23.12
-umap-learn>=0.5
-scikit-learn>=1.3

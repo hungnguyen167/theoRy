@@ -1,0 +1,9 @@
+n_models,resolved_models,partial_models,metric,rank,component_id,claim,delta_u,delta_u_causal,delta_u_non_causal,best_resolution,models_changed_causal,models_changed_non_causal,mapping_coverage_causal,mapping_coverage_non_causal,baseline,post_resolution,phase_transition,crux_component,n_dyads,crux_mode
+81,16,65,similarity_rate,1,C0006,X2 -> X1,0.005435,0.005435,0.005435,causal,27,27,1.0,1.0,0.771516,0.776951,0.005435,C0006,6480,marginal
+81,16,65,similarity_rate,2,C0008,X2 -> X3,0.005435,0.005435,0.005435,causal,27,27,1.0,1.0,0.771516,0.776951,0.005435,C0006,6480,marginal
+81,16,65,similarity_rate,3,C0010,X1 -> X4,0.005435,0.005435,0.005435,causal,27,27,1.0,1.0,0.771516,0.776951,0.005435,C0006,6480,marginal
+81,16,65,similarity_rate,4,C0013,X4 -> X3,0.005435,0.005435,0.005435,causal,27,27,1.0,1.0,0.771516,0.776951,0.005435,C0006,6480,marginal
+81,16,65,mas_compatible,1,C0006,X2 -> X1,0.333333,0.333333,0.333333,causal,27,27,1.0,1.0,0.216667,0.55,0.333333,C0006,6480,marginal
+81,16,65,mas_compatible,2,C0008,X2 -> X3,0.0,0.0,0.0,none,27,27,1.0,1.0,0.216667,0.55,0.333333,C0006,6480,marginal
+81,16,65,mas_compatible,3,C0010,X1 -> X4,0.0,0.0,0.0,none,27,27,1.0,1.0,0.216667,0.55,0.333333,C0006,6480,marginal
+81,16,65,mas_compatible,4,C0013,X4 -> X3,0.0,0.0,0.0,none,27,27,1.0,1.0,0.216667,0.55,0.333333,C0006,6480,marginal

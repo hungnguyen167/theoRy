@@ -1,6 +1,3 @@
-`%||%` <- function(x, y) if (is.null(x)) y else x
-
-
 #' Plot a compatibility timeline (phase transition)
 #'
 #' Creates a line-and-point chart showing global compatibility at each

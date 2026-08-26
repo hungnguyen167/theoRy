@@ -1,21 +1,18 @@
-`%||%` <- function(x, y) if (is.null(x)) y else x
-
-
 #' Plot model-level structural similarity vs causal compatibility
 #'
 #' Scatter plot showing each model's mean structural similarity to the field
 #' versus its selected causal compatibility rate. Models far below the
-#' equality line have the largest precision illusion gap.
+#' equality line have the largest consensus illusion gap.
 #'
 #' @param result A simulation result from
-#'   \code{run_simulation("illusion_of_precision")} created with
+#'   \code{run_simulation("consensus_illusion")} created with
 #'   \code{include_plot_data = TRUE}.  Uses
 #'   \code{result$artifacts$plot_data$model_metrics}, whose columns are
 #'   \code{model_id}, \code{mean_similarity_rate},
-#'   \code{compatibility_rate}, \code{precision_illusion_gap}, and
+#'   \code{compatibility_rate}, \code{consensus_illusion_gap}, and
 #'   \code{compatibility_metric}.
 #' @param label_outliers Logical.  When \code{TRUE} (default), label models
-#'   with the largest precision illusion gap.
+#'   with the largest consensus illusion gap.
 #' @param gap_threshold Optional numeric threshold in \code{(0, 1)}. When
 #'   supplied, a line marks where mean structural similarity exceeds selected
 #'   compatibility by that amount.
@@ -26,9 +23,9 @@
 #' @examples
 #' \dontrun{
 #' start_theory_engine()
-#' illusion <- run_simulation("illusion_of_precision",
+#' consensus <- run_simulation("consensus_illusion",
 #'   n_models = 100, include_plot_data = TRUE)
-#' plot_consensus_contrast(illusion)
+#' plot_consensus_contrast(consensus)
 #' }
 #'
 #' @export
@@ -40,7 +37,7 @@ plot_consensus_contrast <- function(result,
 
   required <- c(
     "model_id", "mean_similarity_rate", "compatibility_rate",
-    "precision_illusion_gap", "compatibility_metric"
+    "consensus_illusion_gap", "compatibility_metric"
   )
   missing <- setdiff(required, names(metrics))
   if (length(missing) > 0) {
@@ -51,8 +48,8 @@ plot_consensus_contrast <- function(result,
   metrics$model_id <- as.character(metrics$model_id)
   metrics$mean_similarity_rate <- as.numeric(metrics$mean_similarity_rate)
   metrics$compatibility_rate <- as.numeric(metrics$compatibility_rate)
-  metrics$precision_illusion_gap <- as.numeric(
-    metrics$precision_illusion_gap
+  metrics$consensus_illusion_gap <- as.numeric(
+    metrics$consensus_illusion_gap
   )
   metric_names <- unique(as.character(metrics$compatibility_metric))
   metric_names <- metric_names[!is.na(metric_names) & nzchar(metric_names)]
@@ -63,11 +60,11 @@ plot_consensus_contrast <- function(result,
 
   p <- ggplot2::ggplot(metrics,
     ggplot2::aes(x = mean_similarity_rate, y = compatibility_rate,
-                 color = precision_illusion_gap), ...) +
+                 color = consensus_illusion_gap), ...) +
     ggplot2::geom_point(size = 2.5, alpha = 0.8) +
     ggplot2::scale_color_gradient2(
       low = "#4393c3", mid = "grey85", high = "#d6604d",
-      midpoint = 0, name = "Precision Illusion Gap"
+      midpoint = 0, name = "Consensus Illusion Gap"
     ) +
     ggplot2::geom_abline(linetype = "dashed", color = "grey50", linewidth = 0.6) +
     ggplot2::coord_equal(xlim = c(0, 1), ylim = c(0, 1)) +
@@ -75,7 +72,7 @@ plot_consensus_contrast <- function(result,
     ggplot2::labs(
       x = "Mean Structural Similarity",
       y = paste(.simulation_metric_label(metric_names), "Rate"),
-      color = "Precision Illusion Gap"
+      color = "Consensus Illusion Gap"
     )
 
   if (!is.null(gap_threshold) && is.numeric(gap_threshold) &&
@@ -93,17 +90,17 @@ plot_consensus_contrast <- function(result,
   }
 
   if (isTRUE(label_outliers)) {
-    finite <- is.finite(metrics$precision_illusion_gap)
+    finite <- is.finite(metrics$consensus_illusion_gap)
     if (any(finite)) {
       cutoff <- stats::quantile(
-        metrics$precision_illusion_gap[finite], 0.9,
+        metrics$consensus_illusion_gap[finite], 0.9,
         na.rm = TRUE, names = FALSE
       )
       outliers <- metrics[
-        finite & metrics$precision_illusion_gap >= cutoff, , drop = FALSE
+        finite & metrics$consensus_illusion_gap >= cutoff, , drop = FALSE
       ]
       outliers <- outliers[
-        order(outliers$precision_illusion_gap, decreasing = TRUE), ,
+        order(outliers$consensus_illusion_gap, decreasing = TRUE), ,
         drop = FALSE
       ]
       outliers <- utils::head(outliers, 15L)
@@ -138,6 +135,6 @@ plot_consensus_contrast <- function(result,
   }
 
   stop("No model_metrics found. ",
-       "Rerun run_simulation('illusion_of_precision', ..., ",
+       "Rerun run_simulation('consensus_illusion', ..., ",
        "include_plot_data = TRUE).", call. = FALSE)
 }

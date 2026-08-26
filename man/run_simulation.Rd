@@ -5,7 +5,7 @@
 \title{Run a proof-of-concept simulation scenario}
 \usage{
 run_simulation(
-  scenario = c("illusion_of_precision", "lynchpin_of_certainty", "crux_of_certainty",
+  scenario = c("consensus_illusion", "lynchpin_of_certainty", "crux_of_certainty",
     "ghost_discovery"),
   n_models = 100L,
   n_components = 50L,
@@ -28,15 +28,16 @@ run_simulation(
 )
 }
 \arguments{
-\item{scenario}{Scenario name: \code{"illusion_of_precision"},
+\item{scenario}{Scenario name: \code{"consensus_illusion"},
 \code{"lynchpin_of_certainty"}, or \code{"ghost_discovery"}.
 Partial matching is supported.}
 
 \item{n_models}{Number of synthetic models to generate. Must be at least 10.
-Ignored in seeded mode and by the fixed 192-model generated Illusion design.}
+Ignored in seeded mode and by the fixed 192-model generated Consensus Illusion
+design.}
 
 \item{n_components}{Number of registry components (nodes + edges). Must be
-at least 5. Ignored in seeded mode and by the fixed generated Illusion
+at least 5. Ignored in seeded mode and by the fixed generated Consensus Illusion
 registries.}
 
 \item{include_bidirectional}{Logical. Must be \code{FALSE}; simulations
@@ -68,7 +69,7 @@ non-deterministic results.  Defaults to \code{42L}.}
 
 \item{compatibility_metric}{One metric that drives the simulation:
 \code{"similarity_rate"}, \code{"mas_compatible"}, or
-\code{"identified_compatible"}. The concrete Illusion of Precision
+\code{"identified_compatible"}. The concrete Consensus Illusion
 scenario requires \code{"mas_compatible"} or
 \code{"identified_compatible"} and defaults to the former. Other
 concrete scenarios default to \code{"similarity_rate"}.}
@@ -76,19 +77,19 @@ concrete scenarios default to \code{"similarity_rate"}.}
 \item{crux_mode}{Crux semantics used by the lynchpin/crux scenarios:
 \code{"marginal"} (default) ranks uncertain components by evaluating both
 causal and non-causal resolutions; \code{"global"} resolves every
-applicable unknown edge instance to a single status. Illusion and Ghost
-scenarios only accept the default \code{"marginal"} value.}
+applicable unknown edge instance to a single status. Consensus Illusion and
+Ghost scenarios only accept the default \code{"marginal"} value.}
 
 \item{global_status}{Required status (\code{"causal"} or
 \code{"non-causal"}) for \code{crux_mode = "global"}. Must be
 \code{NULL} in marginal mode.}
 
 \item{exposure}{Optional exposure node. Required for causal metrics except
-in a generated Illusion of Precision simulation, where the backend infers
+in a generated Consensus Illusion simulation, where the backend infers
 \code{"X1"}.}
 
 \item{outcome}{Optional outcome node. Required for causal metrics except in
-a generated Illusion of Precision simulation, where the backend infers
+a generated Consensus Illusion simulation, where the backend infers
 \code{"Y"}.}
 
 \item{include_plot_data}{Logical. When \code{TRUE}, request bounded
@@ -102,7 +103,7 @@ models included in model/matrix-style plot diagnostics.}
 dyad rows included in pairwise plot diagnostics.}
 
 \item{...}{Additional scenario-specific parameters passed to the backend.
-See \code{\link{run_simulation_illusion}},
+See \code{\link{run_simulation_consensus}},
 \code{\link{run_simulation_lynchpin}}, and
 \code{\link{run_simulation_ghost}} for available options.}
 
@@ -114,9 +115,9 @@ A list with components:
 \describe{
   \item{\code{scenario}}{Scenario name.}
   \item{\code{results}}{Scenario-specific metrics (list). Concrete
-    Illusion results contain \code{mean_similarity_rate},
+    Consensus Illusion results contain \code{mean_similarity_rate},
     \code{compatibility_metric}, \code{compatibility_rate},
-    \code{precision_illusion_gap}, \code{resolved_model_count},
+    \code{consensus_illusion_gap}, \code{resolved_model_count},
     \code{partial_model_count}, \code{design}, and \code{diagnostics}.}
   \item{\code{artifacts}}{Registry data, state data, model IDs, summary
     stats.}
@@ -130,7 +131,7 @@ or optionally runs a seeded simulation on a user-provided multiverse from
 }
 \details{
 \enumerate{
-  \item \strong{Illusion of Precision} — demonstrates how high structural
+  \item \strong{Consensus Illusion} — demonstrates how high structural
     similarity can mask low causal compatibility across resolved and partial
     models.
   \item \strong{Lynchpin of Certainty} — demonstrates a phase transition:
@@ -141,7 +142,7 @@ or optionally runs a seeded simulation on a user-provided multiverse from
 }
 
 For finer control over each scenario's parameters, use the scenario-specific
-wrappers \code{\link{run_simulation_illusion}},
+wrappers \code{\link{run_simulation_consensus}},
 \code{\link{run_simulation_lynchpin}}, or
 \code{\link{run_simulation_ghost}}.
 }
@@ -149,10 +150,10 @@ wrappers \code{\link{run_simulation_illusion}},
 \dontrun{
 start_theory_engine()
 
-illusion <- run_simulation("illusion_of_precision")
-illusion$results$mean_similarity_rate
-illusion$results$compatibility_rate
-illusion$results$precision_illusion_gap
+consensus <- run_simulation("consensus_illusion")
+consensus$results$mean_similarity_rate
+consensus$results$compatibility_rate
+consensus$results$consensus_illusion_gap
 
 lynchpin <- run_simulation("lynchpin_of_certainty", n_models = 200)
 lynchpin$results$phase_transition_score

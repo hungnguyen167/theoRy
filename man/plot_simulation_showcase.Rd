@@ -36,9 +36,9 @@ ghost <- run_simulation("ghost_discovery", n_models = 150)
 plots <- plot_simulation_showcase(ghost)
 for (p in plots) print(p)
 
-illusion <- run_simulation("illusion_of_precision",
+consensus <- run_simulation("consensus_illusion",
   n_models = 100, include_plot_data = TRUE)
-plots <- plot_simulation_showcase(illusion)
+plots <- plot_simulation_showcase(consensus)
 }
 
 }

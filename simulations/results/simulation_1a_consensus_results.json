@@ -1,0 +1,2913 @@
+{
+  "scenario": "consensus_illusion",
+  "design_label": "1A",
+  "compatibility_metric": "mas_compatible",
+  "construction": {
+    "design": "mas_adjustment_sets",
+    "metric": "mas_compatible",
+    "seed_model_id": "R0001",
+    "seed_edge_status": {
+      "C0018": "causal",
+      "C0024": "causal",
+      "C0025": "causal",
+      "C0010": "causal",
+      "C0019": "causal",
+      "C0020": "causal",
+      "C0021": "causal",
+      "C0022": "causal",
+      "C0023": "causal",
+      "C0017": "non-causal",
+      "C0011": "non-causal",
+      "C0013": "non-causal",
+      "C0015": "non-causal",
+      "C0016": "non-causal",
+      "C0012": "non-causal",
+      "C0014": "non-causal"
+    },
+    "fixed_edges": [
+      [
+        "X1",
+        "X7"
+      ],
+      [
+        "X7",
+        "X8"
+      ],
+      [
+        "X8",
+        "Y"
+      ],
+      [
+        "X1",
+        "Y"
+      ],
+      [
+        "X2",
+        "Y"
+      ],
+      [
+        "X3",
+        "Y"
+      ],
+      [
+        "X4",
+        "Y"
+      ],
+      [
+        "X5",
+        "Y"
+      ],
+      [
+        "X6",
+        "Y"
+      ]
+    ],
+    "focal_edge": [
+      "X6",
+      "X1"
+    ],
+    "context_edges": [
+      [
+        "X2",
+        "X1"
+      ],
+      [
+        "X3",
+        "X1"
+      ],
+      [
+        "X4",
+        "X1"
+      ],
+      [
+        "X5",
+        "X1"
+      ],
+      [
+        "X2",
+        "X7"
+      ],
+      [
+        "X3",
+        "X7"
+      ]
+    ],
+    "node_timing": {
+      "X1": 2,
+      "X2": 1,
+      "X3": 1,
+      "X4": 1,
+      "X5": 1,
+      "X6": 1,
+      "X7": 3,
+      "X8": 4,
+      "Y": 5
+    },
+    "directed_only_registry": true,
+    "resolved_model_count": 128,
+    "partial_theory_count": 64,
+    "augmented_multiverse_count": 192,
+    "completion_block_count": 64
+  },
+  "completion_blocks": [
+    [
+      "R0001",
+      "R0002",
+      "P0001"
+    ],
+    [
+      "R0003",
+      "R0004",
+      "P0002"
+    ],
+    [
+      "R0005",
+      "R0006",
+      "P0003"
+    ],
+    [
+      "R0007",
+      "R0008",
+      "P0004"
+    ],
+    [
+      "R0009",
+      "R0010",
+      "P0005"
+    ],
+    [
+      "R0011",
+      "R0012",
+      "P0006"
+    ],
+    [
+      "R0013",
+      "R0014",
+      "P0007"
+    ],
+    [
+      "R0015",
+      "R0016",
+      "P0008"
+    ],
+    [
+      "R0017",
+      "R0018",
+      "P0009"
+    ],
+    [
+      "R0019",
+      "R0020",
+      "P0010"
+    ],
+    [
+      "R0021",
+      "R0022",
+      "P0011"
+    ],
+    [
+      "R0023",
+      "R0024",
+      "P0012"
+    ],
+    [
+      "R0025",
+      "R0026",
+      "P0013"
+    ],
+    [
+      "R0027",
+      "R0028",
+      "P0014"
+    ],
+    [
+      "R0029",
+      "R0030",
+      "P0015"
+    ],
+    [
+      "R0031",
+      "R0032",
+      "P0016"
+    ],
+    [
+      "R0033",
+      "R0034",
+      "P0017"
+    ],
+    [
+      "R0035",
+      "R0036",
+      "P0018"
+    ],
+    [
+      "R0037",
+      "R0038",
+      "P0019"
+    ],
+    [
+      "R0039",
+      "R0040",
+      "P0020"
+    ],
+    [
+      "R0041",
+      "R0042",
+      "P0021"
+    ],
+    [
+      "R0043",
+      "R0044",
+      "P0022"
+    ],
+    [
+      "R0045",
+      "R0046",
+      "P0023"
+    ],
+    [
+      "R0047",
+      "R0048",
+      "P0024"
+    ],
+    [
+      "R0049",
+      "R0050",
+      "P0025"
+    ],
+    [
+      "R0051",
+      "R0052",
+      "P0026"
+    ],
+    [
+      "R0053",
+      "R0054",
+      "P0027"
+    ],
+    [
+      "R0055",
+      "R0056",
+      "P0028"
+    ],
+    [
+      "R0057",
+      "R0058",
+      "P0029"
+    ],
+    [
+      "R0059",
+      "R0060",
+      "P0030"
+    ],
+    [
+      "R0061",
+      "R0062",
+      "P0031"
+    ],
+    [
+      "R0063",
+      "R0064",
+      "P0032"
+    ],
+    [
+      "R0065",
+      "R0066",
+      "P0033"
+    ],
+    [
+      "R0067",
+      "R0068",
+      "P0034"
+    ],
+    [
+      "R0069",
+      "R0070",
+      "P0035"
+    ],
+    [
+      "R0071",
+      "R0072",
+      "P0036"
+    ],
+    [
+      "R0073",
+      "R0074",
+      "P0037"
+    ],
+    [
+      "R0075",
+      "R0076",
+      "P0038"
+    ],
+    [
+      "R0077",
+      "R0078",
+      "P0039"
+    ],
+    [
+      "R0079",
+      "R0080",
+      "P0040"
+    ],
+    [
+      "R0081",
+      "R0082",
+      "P0041"
+    ],
+    [
+      "R0083",
+      "R0084",
+      "P0042"
+    ],
+    [
+      "R0085",
+      "R0086",
+      "P0043"
+    ],
+    [
+      "R0087",
+      "R0088",
+      "P0044"
+    ],
+    [
+      "R0089",
+      "R0090",
+      "P0045"
+    ],
+    [
+      "R0091",
+      "R0092",
+      "P0046"
+    ],
+    [
+      "R0093",
+      "R0094",
+      "P0047"
+    ],
+    [
+      "R0095",
+      "R0096",
+      "P0048"
+    ],
+    [
+      "R0097",
+      "R0098",
+      "P0049"
+    ],
+    [
+      "R0099",
+      "R0100",
+      "P0050"
+    ],
+    [
+      "R0101",
+      "R0102",
+      "P0051"
+    ],
+    [
+      "R0103",
+      "R0104",
+      "P0052"
+    ],
+    [
+      "R0105",
+      "R0106",
+      "P0053"
+    ],
+    [
+      "R0107",
+      "R0108",
+      "P0054"
+    ],
+    [
+      "R0109",
+      "R0110",
+      "P0055"
+    ],
+    [
+      "R0111",
+      "R0112",
+      "P0056"
+    ],
+    [
+      "R0113",
+      "R0114",
+      "P0057"
+    ],
+    [
+      "R0115",
+      "R0116",
+      "P0058"
+    ],
+    [
+      "R0117",
+      "R0118",
+      "P0059"
+    ],
+    [
+      "R0119",
+      "R0120",
+      "P0060"
+    ],
+    [
+      "R0121",
+      "R0122",
+      "P0061"
+    ],
+    [
+      "R0123",
+      "R0124",
+      "P0062"
+    ],
+    [
+      "R0125",
+      "R0126",
+      "P0063"
+    ],
+    [
+      "R0127",
+      "R0128",
+      "P0064"
+    ]
+  ],
+  "completion_block_distances": [
+    {
+      "model_ids": [
+        "R0001",
+        "R0002",
+        "P0001"
+      ],
+      "distance": 0
+    },
+    {
+      "model_ids": [
+        "R0003",
+        "R0004",
+        "P0002"
+      ],
+      "distance": 1
+    },
+    {
+      "model_ids": [
+        "R0005",
+        "R0006",
+        "P0003"
+      ],
+      "distance": 1
+    },
+    {
+      "model_ids": [
+        "R0007",
+        "R0008",
+        "P0004"
+      ],
+      "distance": 2
+    },
+    {
+      "model_ids": [
+        "R0009",
+        "R0010",
+        "P0005"
+      ],
+      "distance": 1
+    },
+    {
+      "model_ids": [
+        "R0011",
+        "R0012",
+        "P0006"
+      ],
+      "distance": 2
+    },
+    {
+      "model_ids": [
+        "R0013",
+        "R0014",
+        "P0007"
+      ],
+      "distance": 2
+    },
+    {
+      "model_ids": [
+        "R0015",
+        "R0016",
+        "P0008"
+      ],
+      "distance": 3
+    },
+    {
+      "model_ids": [
+        "R0017",
+        "R0018",
+        "P0009"
+      ],
+      "distance": 1
+    },
+    {
+      "model_ids": [
+        "R0019",
+        "R0020",
+        "P0010"
+      ],
+      "distance": 2
+    },
+    {
+      "model_ids": [
+        "R0021",
+        "R0022",
+        "P0011"
+      ],
+      "distance": 2
+    },
+    {
+      "model_ids": [
+        "R0023",
+        "R0024",
+        "P0012"
+      ],
+      "distance": 3
+    },
+    {
+      "model_ids": [
+        "R0025",
+        "R0026",
+        "P0013"
+      ],
+      "distance": 2
+    },
+    {
+      "model_ids": [
+        "R0027",
+        "R0028",
+        "P0014"
+      ],
+      "distance": 3
+    },
+    {
+      "model_ids": [
+        "R0029",
+        "R0030",
+        "P0015"
+      ],
+      "distance": 3
+    },
+    {
+      "model_ids": [
+        "R0031",
+        "R0032",
+        "P0016"
+      ],
+      "distance": 4
+    },
+    {
+      "model_ids": [
+        "R0033",
+        "R0034",
+        "P0017"
+      ],
+      "distance": 1
+    },
+    {
+      "model_ids": [
+        "R0035",
+        "R0036",
+        "P0018"
+      ],
+      "distance": 2
+    },
+    {
+      "model_ids": [
+        "R0037",
+        "R0038",
+        "P0019"
+      ],
+      "distance": 2
+    },
+    {
+      "model_ids": [
+        "R0039",
+        "R0040",
+        "P0020"
+      ],
+      "distance": 3
+    },
+    {
+      "model_ids": [
+        "R0041",
+        "R0042",
+        "P0021"
+      ],
+      "distance": 2
+    },
+    {
+      "model_ids": [
+        "R0043",
+        "R0044",
+        "P0022"
+      ],
+      "distance": 3
+    },
+    {
+      "model_ids": [
+        "R0045",
+        "R0046",
+        "P0023"
+      ],
+      "distance": 3
+    },
+    {
+      "model_ids": [
+        "R0047",
+        "R0048",
+        "P0024"
+      ],
+      "distance": 4
+    },
+    {
+      "model_ids": [
+        "R0049",
+        "R0050",
+        "P0025"
+      ],
+      "distance": 2
+    },
+    {
+      "model_ids": [
+        "R0051",
+        "R0052",
+        "P0026"
+      ],
+      "distance": 3
+    },
+    {
+      "model_ids": [
+        "R0053",
+        "R0054",
+        "P0027"
+      ],
+      "distance": 3
+    },
+    {
+      "model_ids": [
+        "R0055",
+        "R0056",
+        "P0028"
+      ],
+      "distance": 4
+    },
+    {
+      "model_ids": [
+        "R0057",
+        "R0058",
+        "P0029"
+      ],
+      "distance": 3
+    },
+    {
+      "model_ids": [
+        "R0059",
+        "R0060",
+        "P0030"
+      ],
+      "distance": 4
+    },
+    {
+      "model_ids": [
+        "R0061",
+        "R0062",
+        "P0031"
+      ],
+      "distance": 4
+    },
+    {
+      "model_ids": [
+        "R0063",
+        "R0064",
+        "P0032"
+      ],
+      "distance": 5
+    },
+    {
+      "model_ids": [
+        "R0065",
+        "R0066",
+        "P0033"
+      ],
+      "distance": 1
+    },
+    {
+      "model_ids": [
+        "R0067",
+        "R0068",
+        "P0034"
+      ],
+      "distance": 2
+    },
+    {
+      "model_ids": [
+        "R0069",
+        "R0070",
+        "P0035"
+      ],
+      "distance": 2
+    },
+    {
+      "model_ids": [
+        "R0071",
+        "R0072",
+        "P0036"
+      ],
+      "distance": 3
+    },
+    {
+      "model_ids": [
+        "R0073",
+        "R0074",
+        "P0037"
+      ],
+      "distance": 2
+    },
+    {
+      "model_ids": [
+        "R0075",
+        "R0076",
+        "P0038"
+      ],
+      "distance": 3
+    },
+    {
+      "model_ids": [
+        "R0077",
+        "R0078",
+        "P0039"
+      ],
+      "distance": 3
+    },
+    {
+      "model_ids": [
+        "R0079",
+        "R0080",
+        "P0040"
+      ],
+      "distance": 4
+    },
+    {
+      "model_ids": [
+        "R0081",
+        "R0082",
+        "P0041"
+      ],
+      "distance": 2
+    },
+    {
+      "model_ids": [
+        "R0083",
+        "R0084",
+        "P0042"
+      ],
+      "distance": 3
+    },
+    {
+      "model_ids": [
+        "R0085",
+        "R0086",
+        "P0043"
+      ],
+      "distance": 3
+    },
+    {
+      "model_ids": [
+        "R0087",
+        "R0088",
+        "P0044"
+      ],
+      "distance": 4
+    },
+    {
+      "model_ids": [
+        "R0089",
+        "R0090",
+        "P0045"
+      ],
+      "distance": 3
+    },
+    {
+      "model_ids": [
+        "R0091",
+        "R0092",
+        "P0046"
+      ],
+      "distance": 4
+    },
+    {
+      "model_ids": [
+        "R0093",
+        "R0094",
+        "P0047"
+      ],
+      "distance": 4
+    },
+    {
+      "model_ids": [
+        "R0095",
+        "R0096",
+        "P0048"
+      ],
+      "distance": 5
+    },
+    {
+      "model_ids": [
+        "R0097",
+        "R0098",
+        "P0049"
+      ],
+      "distance": 2
+    },
+    {
+      "model_ids": [
+        "R0099",
+        "R0100",
+        "P0050"
+      ],
+      "distance": 3
+    },
+    {
+      "model_ids": [
+        "R0101",
+        "R0102",
+        "P0051"
+      ],
+      "distance": 3
+    },
+    {
+      "model_ids": [
+        "R0103",
+        "R0104",
+        "P0052"
+      ],
+      "distance": 4
+    },
+    {
+      "model_ids": [
+        "R0105",
+        "R0106",
+        "P0053"
+      ],
+      "distance": 3
+    },
+    {
+      "model_ids": [
+        "R0107",
+        "R0108",
+        "P0054"
+      ],
+      "distance": 4
+    },
+    {
+      "model_ids": [
+        "R0109",
+        "R0110",
+        "P0055"
+      ],
+      "distance": 4
+    },
+    {
+      "model_ids": [
+        "R0111",
+        "R0112",
+        "P0056"
+      ],
+      "distance": 5
+    },
+    {
+      "model_ids": [
+        "R0113",
+        "R0114",
+        "P0057"
+      ],
+      "distance": 3
+    },
+    {
+      "model_ids": [
+        "R0115",
+        "R0116",
+        "P0058"
+      ],
+      "distance": 4
+    },
+    {
+      "model_ids": [
+        "R0117",
+        "R0118",
+        "P0059"
+      ],
+      "distance": 4
+    },
+    {
+      "model_ids": [
+        "R0119",
+        "R0120",
+        "P0060"
+      ],
+      "distance": 5
+    },
+    {
+      "model_ids": [
+        "R0121",
+        "R0122",
+        "P0061"
+      ],
+      "distance": 4
+    },
+    {
+      "model_ids": [
+        "R0123",
+        "R0124",
+        "P0062"
+      ],
+      "distance": 5
+    },
+    {
+      "model_ids": [
+        "R0125",
+        "R0126",
+        "P0063"
+      ],
+      "distance": 5
+    },
+    {
+      "model_ids": [
+        "R0127",
+        "R0128",
+        "P0064"
+      ],
+      "distance": 6
+    }
+  ],
+  "neighborhood_results": [
+    {
+      "design_label": "1A",
+      "design": "mas_adjustment_sets",
+      "neighborhood": "Focused",
+      "max_context_departures": 1,
+      "completion_blocks": 7,
+      "block_count": 7,
+      "models": 21,
+      "ordered_dyads": 420,
+      "n_models": 21,
+      "n_dyads": 420,
+      "mean_similarity_rate": 0.85076,
+      "mas_compatibility_rate": 0.028571,
+      "identified_compatibility_rate": 1.0,
+      "similarity_minus_mas": 0.822189,
+      "similarity_minus_identified": -0.14924
+    },
+    {
+      "design_label": "1A",
+      "design": "mas_adjustment_sets",
+      "neighborhood": "Moderate",
+      "max_context_departures": 2,
+      "completion_blocks": 22,
+      "block_count": 22,
+      "models": 66,
+      "ordered_dyads": 4290,
+      "n_models": 66,
+      "n_dyads": 4290,
+      "mean_similarity_rate": 0.794591,
+      "mas_compatibility_rate": 0.016783,
+      "identified_compatibility_rate": 1.0,
+      "similarity_minus_mas": 0.777808,
+      "similarity_minus_identified": -0.205409
+    },
+    {
+      "design_label": "1A",
+      "design": "mas_adjustment_sets",
+      "neighborhood": "Broad",
+      "max_context_departures": 3,
+      "completion_blocks": 42,
+      "block_count": 42,
+      "models": 126,
+      "ordered_dyads": 15750,
+      "n_models": 126,
+      "n_dyads": 15750,
+      "mean_similarity_rate": 0.767506,
+      "mas_compatibility_rate": 0.01219,
+      "identified_compatibility_rate": 1.0,
+      "similarity_minus_mas": 0.755315,
+      "similarity_minus_identified": -0.232494
+    },
+    {
+      "design_label": "1A",
+      "design": "mas_adjustment_sets",
+      "neighborhood": "Full",
+      "max_context_departures": 6,
+      "completion_blocks": 64,
+      "block_count": 64,
+      "models": 192,
+      "ordered_dyads": 36672,
+      "n_models": 192,
+      "n_dyads": 36672,
+      "mean_similarity_rate": 0.757366,
+      "mas_compatibility_rate": 0.010471,
+      "identified_compatibility_rate": 1.0,
+      "similarity_minus_mas": 0.746895,
+      "similarity_minus_identified": -0.242634
+    }
+  ],
+  "displayed_sample_model_ids": [
+    "P0002",
+    "P0003",
+    "P0006",
+    "P0007",
+    "P0009",
+    "P0014",
+    "P0015",
+    "P0016",
+    "P0018",
+    "P0028",
+    "P0035",
+    "P0038",
+    "P0044",
+    "P0048",
+    "P0052",
+    "P0057",
+    "P0059",
+    "P0062",
+    "P0063",
+    "P0064",
+    "R0003",
+    "R0004",
+    "R0005",
+    "R0006",
+    "R0011",
+    "R0012",
+    "R0013",
+    "R0014",
+    "R0017",
+    "R0018",
+    "R0027",
+    "R0028",
+    "R0029",
+    "R0030",
+    "R0031",
+    "R0032",
+    "R0035",
+    "R0036",
+    "R0055",
+    "R0056",
+    "R0069",
+    "R0070",
+    "R0075",
+    "R0076",
+    "R0087",
+    "R0088",
+    "R0095",
+    "R0096",
+    "R0103",
+    "R0104",
+    "R0113",
+    "R0114",
+    "R0117",
+    "R0118",
+    "R0123",
+    "R0124",
+    "R0125",
+    "R0126",
+    "R0127",
+    "R0128"
+  ],
+  "census": {
+    "n_models": 192,
+    "n_dyads": 36672,
+    "mean_similarity_rate": 0.757366,
+    "mas_compatibility_rate": 0.010471,
+    "identified_compatibility_rate": 1.0,
+    "similarity_minus_mas": 0.746895,
+    "similarity_minus_identified": -0.242634
+  },
+  "displayed_sample": {
+    "n_models": 60,
+    "n_dyads": 3540,
+    "mean_similarity_rate": 0.760238,
+    "mas_compatibility_rate": 0.011299,
+    "identified_compatibility_rate": 1.0,
+    "similarity_minus_mas": 0.748938,
+    "similarity_minus_identified": -0.239762
+  },
+  "baseline_comparison": {
+    "provenance_artifact": "results/simulation_1_consensus_baseline.json",
+    "used_for_acceptance": false,
+    "reason": "Historical baseline is retained as explicit provenance only."
+  },
+  "sampling_design": {
+    "sample_blocks": 20,
+    "models_per_block": 3,
+    "models_per_sample": 60,
+    "repeated_samples": 100,
+    "without_replacement": true,
+    "completion_closed": true
+  },
+  "sampling_reliability": [
+    {
+      "design_label": "1A",
+      "metric": "mas_compatible",
+      "replicate": 1,
+      "sample_seed": 1001,
+      "n_models": 60,
+      "n_dyads": 3540,
+      "mean_similarity_rate": 0.756917,
+      "mas_compatibility_rate": 0.00904,
+      "identified_compatibility_rate": 1.0,
+      "similarity_minus_mas": 0.747878,
+      "similarity_minus_identified": -0.243083,
+      "similarity_error": -0.000449,
+      "mas_error": -0.001431,
+      "identified_error": 0.0,
+      "similarity_minus_mas_error": 0.000983,
+      "similarity_minus_identified_error": -0.000449
+    },
+    {
+      "design_label": "1A",
+      "metric": "mas_compatible",
+      "replicate": 2,
+      "sample_seed": 1002,
+      "n_models": 60,
+      "n_dyads": 3540,
+      "mean_similarity_rate": 0.761478,
+      "mas_compatibility_rate": 0.00904,
+      "identified_compatibility_rate": 1.0,
+      "similarity_minus_mas": 0.752439,
+      "similarity_minus_identified": -0.238522,
+      "similarity_error": 0.004112,
+      "mas_error": -0.001431,
+      "identified_error": 0.0,
+      "similarity_minus_mas_error": 0.005544,
+      "similarity_minus_identified_error": 0.004112
+    },
+    {
+      "design_label": "1A",
+      "metric": "mas_compatible",
+      "replicate": 3,
+      "sample_seed": 1003,
+      "n_models": 60,
+      "n_dyads": 3540,
+      "mean_similarity_rate": 0.756831,
+      "mas_compatibility_rate": 0.00904,
+      "identified_compatibility_rate": 1.0,
+      "similarity_minus_mas": 0.747792,
+      "similarity_minus_identified": -0.243169,
+      "similarity_error": -0.000535,
+      "mas_error": -0.001431,
+      "identified_error": 0.0,
+      "similarity_minus_mas_error": 0.000897,
+      "similarity_minus_identified_error": -0.000535
+    },
+    {
+      "design_label": "1A",
+      "metric": "mas_compatible",
+      "replicate": 4,
+      "sample_seed": 1004,
+      "n_models": 60,
+      "n_dyads": 3540,
+      "mean_similarity_rate": 0.768052,
+      "mas_compatibility_rate": 0.00791,
+      "identified_compatibility_rate": 1.0,
+      "similarity_minus_mas": 0.760143,
+      "similarity_minus_identified": -0.231948,
+      "similarity_error": 0.010686,
+      "mas_error": -0.002561,
+      "identified_error": 0.0,
+      "similarity_minus_mas_error": 0.013248,
+      "similarity_minus_identified_error": 0.010686
+    },
+    {
+      "design_label": "1A",
+      "metric": "mas_compatible",
+      "replicate": 5,
+      "sample_seed": 1005,
+      "n_models": 60,
+      "n_dyads": 3540,
+      "mean_similarity_rate": 0.758701,
+      "mas_compatibility_rate": 0.010169,
+      "identified_compatibility_rate": 1.0,
+      "similarity_minus_mas": 0.748532,
+      "similarity_minus_identified": -0.241299,
+      "similarity_error": 0.001335,
+      "mas_error": -0.000302,
+      "identified_error": 0.0,
+      "similarity_minus_mas_error": 0.001637,
+      "similarity_minus_identified_error": 0.001335
+    },
+    {
+      "design_label": "1A",
+      "metric": "mas_compatible",
+      "replicate": 6,
+      "sample_seed": 1006,
+      "n_models": 60,
+      "n_dyads": 3540,
+      "mean_similarity_rate": 0.76294,
+      "mas_compatibility_rate": 0.010169,
+      "identified_compatibility_rate": 1.0,
+      "similarity_minus_mas": 0.75277,
+      "similarity_minus_identified": -0.23706,
+      "similarity_error": 0.005574,
+      "mas_error": -0.000302,
+      "identified_error": 0.0,
+      "similarity_minus_mas_error": 0.005875,
+      "similarity_minus_identified_error": 0.005574
+    },
+    {
+      "design_label": "1A",
+      "metric": "mas_compatible",
+      "replicate": 7,
+      "sample_seed": 1007,
+      "n_models": 60,
+      "n_dyads": 3540,
+      "mean_similarity_rate": 0.759935,
+      "mas_compatibility_rate": 0.012429,
+      "identified_compatibility_rate": 1.0,
+      "similarity_minus_mas": 0.747506,
+      "similarity_minus_identified": -0.240065,
+      "similarity_error": 0.002569,
+      "mas_error": 0.001958,
+      "identified_error": 0.0,
+      "similarity_minus_mas_error": 0.000611,
+      "similarity_minus_identified_error": 0.002569
+    },
+    {
+      "design_label": "1A",
+      "metric": "mas_compatible",
+      "replicate": 8,
+      "sample_seed": 1008,
+      "n_models": 60,
+      "n_dyads": 3540,
+      "mean_similarity_rate": 0.759547,
+      "mas_compatibility_rate": 0.00678,
+      "identified_compatibility_rate": 1.0,
+      "similarity_minus_mas": 0.752768,
+      "similarity_minus_identified": -0.240453,
+      "similarity_error": 0.002181,
+      "mas_error": -0.003691,
+      "identified_error": 0.0,
+      "similarity_minus_mas_error": 0.005873,
+      "similarity_minus_identified_error": 0.002181
+    },
+    {
+      "design_label": "1A",
+      "metric": "mas_compatible",
+      "replicate": 9,
+      "sample_seed": 1009,
+      "n_models": 60,
+      "n_dyads": 3540,
+      "mean_similarity_rate": 0.762802,
+      "mas_compatibility_rate": 0.011299,
+      "identified_compatibility_rate": 1.0,
+      "similarity_minus_mas": 0.751503,
+      "similarity_minus_identified": -0.237198,
+      "similarity_error": 0.005436,
+      "mas_error": 0.000828,
+      "identified_error": 0.0,
+      "similarity_minus_mas_error": 0.004608,
+      "similarity_minus_identified_error": 0.005436
+    },
+    {
+      "design_label": "1A",
+      "metric": "mas_compatible",
+      "replicate": 10,
+      "sample_seed": 1010,
+      "n_models": 60,
+      "n_dyads": 3540,
+      "mean_similarity_rate": 0.757503,
+      "mas_compatibility_rate": 0.00904,
+      "identified_compatibility_rate": 1.0,
+      "similarity_minus_mas": 0.748463,
+      "similarity_minus_identified": -0.242497,
+      "similarity_error": 0.000137,
+      "mas_error": -0.001431,
+      "identified_error": 0.0,
+      "similarity_minus_mas_error": 0.001568,
+      "similarity_minus_identified_error": 0.000137
+    },
+    {
+      "design_label": "1A",
+      "metric": "mas_compatible",
+      "replicate": 11,
+      "sample_seed": 1011,
+      "n_models": 60,
+      "n_dyads": 3540,
+      "mean_similarity_rate": 0.766042,
+      "mas_compatibility_rate": 0.012429,
+      "identified_compatibility_rate": 1.0,
+      "similarity_minus_mas": 0.753613,
+      "similarity_minus_identified": -0.233958,
+      "similarity_error": 0.008676,
+      "mas_error": 0.001958,
+      "identified_error": 0.0,
+      "similarity_minus_mas_error": 0.006718,
+      "similarity_minus_identified_error": 0.008676
+    },
+    {
+      "design_label": "1A",
+      "metric": "mas_compatible",
+      "replicate": 12,
+      "sample_seed": 1012,
+      "n_models": 60,
+      "n_dyads": 3540,
+      "mean_similarity_rate": 0.760018,
+      "mas_compatibility_rate": 0.014689,
+      "identified_compatibility_rate": 1.0,
+      "similarity_minus_mas": 0.745328,
+      "similarity_minus_identified": -0.239982,
+      "similarity_error": 0.002652,
+      "mas_error": 0.004218,
+      "identified_error": 0.0,
+      "similarity_minus_mas_error": -0.001567,
+      "similarity_minus_identified_error": 0.002652
+    },
+    {
+      "design_label": "1A",
+      "metric": "mas_compatible",
+      "replicate": 13,
+      "sample_seed": 1013,
+      "n_models": 60,
+      "n_dyads": 3540,
+      "mean_similarity_rate": 0.761598,
+      "mas_compatibility_rate": 0.010169,
+      "identified_compatibility_rate": 1.0,
+      "similarity_minus_mas": 0.751428,
+      "similarity_minus_identified": -0.238402,
+      "similarity_error": 0.004232,
+      "mas_error": -0.000302,
+      "identified_error": 0.0,
+      "similarity_minus_mas_error": 0.004533,
+      "similarity_minus_identified_error": 0.004232
+    },
+    {
+      "design_label": "1A",
+      "metric": "mas_compatible",
+      "replicate": 14,
+      "sample_seed": 1014,
+      "n_models": 60,
+      "n_dyads": 3540,
+      "mean_similarity_rate": 0.760334,
+      "mas_compatibility_rate": 0.014689,
+      "identified_compatibility_rate": 1.0,
+      "similarity_minus_mas": 0.745644,
+      "similarity_minus_identified": -0.239666,
+      "similarity_error": 0.002968,
+      "mas_error": 0.004218,
+      "identified_error": 0.0,
+      "similarity_minus_mas_error": -0.001251,
+      "similarity_minus_identified_error": 0.002968
+    },
+    {
+      "design_label": "1A",
+      "metric": "mas_compatible",
+      "replicate": 15,
+      "sample_seed": 1015,
+      "n_models": 60,
+      "n_dyads": 3540,
+      "mean_similarity_rate": 0.765087,
+      "mas_compatibility_rate": 0.011299,
+      "identified_compatibility_rate": 1.0,
+      "similarity_minus_mas": 0.753788,
+      "similarity_minus_identified": -0.234913,
+      "similarity_error": 0.007721,
+      "mas_error": 0.000828,
+      "identified_error": 0.0,
+      "similarity_minus_mas_error": 0.006893,
+      "similarity_minus_identified_error": 0.007721
+    },
+    {
+      "design_label": "1A",
+      "metric": "mas_compatible",
+      "replicate": 16,
+      "sample_seed": 1016,
+      "n_models": 60,
+      "n_dyads": 3540,
+      "mean_similarity_rate": 0.760638,
+      "mas_compatibility_rate": 0.00678,
+      "identified_compatibility_rate": 1.0,
+      "similarity_minus_mas": 0.753859,
+      "similarity_minus_identified": -0.239362,
+      "similarity_error": 0.003272,
+      "mas_error": -0.003691,
+      "identified_error": 0.0,
+      "similarity_minus_mas_error": 0.006964,
+      "similarity_minus_identified_error": 0.003272
+    },
+    {
+      "design_label": "1A",
+      "metric": "mas_compatible",
+      "replicate": 17,
+      "sample_seed": 1017,
+      "n_models": 60,
+      "n_dyads": 3540,
+      "mean_similarity_rate": 0.76435,
+      "mas_compatibility_rate": 0.00678,
+      "identified_compatibility_rate": 1.0,
+      "similarity_minus_mas": 0.757571,
+      "similarity_minus_identified": -0.23565,
+      "similarity_error": 0.006984,
+      "mas_error": -0.003691,
+      "identified_error": 0.0,
+      "similarity_minus_mas_error": 0.010676,
+      "similarity_minus_identified_error": 0.006984
+    },
+    {
+      "design_label": "1A",
+      "metric": "mas_compatible",
+      "replicate": 18,
+      "sample_seed": 1018,
+      "n_models": 60,
+      "n_dyads": 3540,
+      "mean_similarity_rate": 0.762188,
+      "mas_compatibility_rate": 0.00678,
+      "identified_compatibility_rate": 1.0,
+      "similarity_minus_mas": 0.755408,
+      "similarity_minus_identified": -0.237812,
+      "similarity_error": 0.004822,
+      "mas_error": -0.003691,
+      "identified_error": 0.0,
+      "similarity_minus_mas_error": 0.008513,
+      "similarity_minus_identified_error": 0.004822
+    },
+    {
+      "design_label": "1A",
+      "metric": "mas_compatible",
+      "replicate": 19,
+      "sample_seed": 1019,
+      "n_models": 60,
+      "n_dyads": 3540,
+      "mean_similarity_rate": 0.758684,
+      "mas_compatibility_rate": 0.00791,
+      "identified_compatibility_rate": 1.0,
+      "similarity_minus_mas": 0.750774,
+      "similarity_minus_identified": -0.241316,
+      "similarity_error": 0.001318,
+      "mas_error": -0.002561,
+      "identified_error": 0.0,
+      "similarity_minus_mas_error": 0.003879,
+      "similarity_minus_identified_error": 0.001318
+    },
+    {
+      "design_label": "1A",
+      "metric": "mas_compatible",
+      "replicate": 20,
+      "sample_seed": 1020,
+      "n_models": 60,
+      "n_dyads": 3540,
+      "mean_similarity_rate": 0.765379,
+      "mas_compatibility_rate": 0.011299,
+      "identified_compatibility_rate": 1.0,
+      "similarity_minus_mas": 0.754079,
+      "similarity_minus_identified": -0.234621,
+      "similarity_error": 0.008013,
+      "mas_error": 0.000828,
+      "identified_error": 0.0,
+      "similarity_minus_mas_error": 0.007184,
+      "similarity_minus_identified_error": 0.008013
+    },
+    {
+      "design_label": "1A",
+      "metric": "mas_compatible",
+      "replicate": 21,
+      "sample_seed": 1021,
+      "n_models": 60,
+      "n_dyads": 3540,
+      "mean_similarity_rate": 0.761979,
+      "mas_compatibility_rate": 0.014689,
+      "identified_compatibility_rate": 1.0,
+      "similarity_minus_mas": 0.74729,
+      "similarity_minus_identified": -0.238021,
+      "similarity_error": 0.004613,
+      "mas_error": 0.004218,
+      "identified_error": 0.0,
+      "similarity_minus_mas_error": 0.000395,
+      "similarity_minus_identified_error": 0.004613
+    },
+    {
+      "design_label": "1A",
+      "metric": "mas_compatible",
+      "replicate": 22,
+      "sample_seed": 1022,
+      "n_models": 60,
+      "n_dyads": 3540,
+      "mean_similarity_rate": 0.764303,
+      "mas_compatibility_rate": 0.00904,
+      "identified_compatibility_rate": 1.0,
+      "similarity_minus_mas": 0.755263,
+      "similarity_minus_identified": -0.235697,
+      "similarity_error": 0.006937,
+      "mas_error": -0.001431,
+      "identified_error": 0.0,
+      "similarity_minus_mas_error": 0.008368,
+      "similarity_minus_identified_error": 0.006937
+    },
+    {
+      "design_label": "1A",
+      "metric": "mas_compatible",
+      "replicate": 23,
+      "sample_seed": 1023,
+      "n_models": 60,
+      "n_dyads": 3540,
+      "mean_similarity_rate": 0.76281,
+      "mas_compatibility_rate": 0.00565,
+      "identified_compatibility_rate": 1.0,
+      "similarity_minus_mas": 0.757161,
+      "similarity_minus_identified": -0.23719,
+      "similarity_error": 0.005444,
+      "mas_error": -0.004821,
+      "identified_error": 0.0,
+      "similarity_minus_mas_error": 0.010266,
+      "similarity_minus_identified_error": 0.005444
+    },
+    {
+      "design_label": "1A",
+      "metric": "mas_compatible",
+      "replicate": 24,
+      "sample_seed": 1024,
+      "n_models": 60,
+      "n_dyads": 3540,
+      "mean_similarity_rate": 0.763478,
+      "mas_compatibility_rate": 0.00904,
+      "identified_compatibility_rate": 1.0,
+      "similarity_minus_mas": 0.754439,
+      "similarity_minus_identified": -0.236522,
+      "similarity_error": 0.006112,
+      "mas_error": -0.001431,
+      "identified_error": 0.0,
+      "similarity_minus_mas_error": 0.007544,
+      "similarity_minus_identified_error": 0.006112
+    },
+    {
+      "design_label": "1A",
+      "metric": "mas_compatible",
+      "replicate": 25,
+      "sample_seed": 1025,
+      "n_models": 60,
+      "n_dyads": 3540,
+      "mean_similarity_rate": 0.762893,
+      "mas_compatibility_rate": 0.013559,
+      "identified_compatibility_rate": 1.0,
+      "similarity_minus_mas": 0.749334,
+      "similarity_minus_identified": -0.237107,
+      "similarity_error": 0.005527,
+      "mas_error": 0.003088,
+      "identified_error": 0.0,
+      "similarity_minus_mas_error": 0.002439,
+      "similarity_minus_identified_error": 0.005527
+    },
+    {
+      "design_label": "1A",
+      "metric": "mas_compatible",
+      "replicate": 26,
+      "sample_seed": 1026,
+      "n_models": 60,
+      "n_dyads": 3540,
+      "mean_similarity_rate": 0.762204,
+      "mas_compatibility_rate": 0.010169,
+      "identified_compatibility_rate": 1.0,
+      "similarity_minus_mas": 0.752034,
+      "similarity_minus_identified": -0.237796,
+      "similarity_error": 0.004838,
+      "mas_error": -0.000302,
+      "identified_error": 0.0,
+      "similarity_minus_mas_error": 0.005139,
+      "similarity_minus_identified_error": 0.004838
+    },
+    {
+      "design_label": "1A",
+      "metric": "mas_compatible",
+      "replicate": 27,
+      "sample_seed": 1027,
+      "n_models": 60,
+      "n_dyads": 3540,
+      "mean_similarity_rate": 0.762433,
+      "mas_compatibility_rate": 0.00678,
+      "identified_compatibility_rate": 1.0,
+      "similarity_minus_mas": 0.755653,
+      "similarity_minus_identified": -0.237567,
+      "similarity_error": 0.005067,
+      "mas_error": -0.003691,
+      "identified_error": 0.0,
+      "similarity_minus_mas_error": 0.008758,
+      "similarity_minus_identified_error": 0.005067
+    },
+    {
+      "design_label": "1A",
+      "metric": "mas_compatible",
+      "replicate": 28,
+      "sample_seed": 1028,
+      "n_models": 60,
+      "n_dyads": 3540,
+      "mean_similarity_rate": 0.76051,
+      "mas_compatibility_rate": 0.010169,
+      "identified_compatibility_rate": 1.0,
+      "similarity_minus_mas": 0.750341,
+      "similarity_minus_identified": -0.23949,
+      "similarity_error": 0.003144,
+      "mas_error": -0.000302,
+      "identified_error": 0.0,
+      "similarity_minus_mas_error": 0.003446,
+      "similarity_minus_identified_error": 0.003144
+    },
+    {
+      "design_label": "1A",
+      "metric": "mas_compatible",
+      "replicate": 29,
+      "sample_seed": 1029,
+      "n_models": 60,
+      "n_dyads": 3540,
+      "mean_similarity_rate": 0.763724,
+      "mas_compatibility_rate": 0.011299,
+      "identified_compatibility_rate": 1.0,
+      "similarity_minus_mas": 0.752425,
+      "similarity_minus_identified": -0.236276,
+      "similarity_error": 0.006358,
+      "mas_error": 0.000828,
+      "identified_error": 0.0,
+      "similarity_minus_mas_error": 0.00553,
+      "similarity_minus_identified_error": 0.006358
+    },
+    {
+      "design_label": "1A",
+      "metric": "mas_compatible",
+      "replicate": 30,
+      "sample_seed": 1030,
+      "n_models": 60,
+      "n_dyads": 3540,
+      "mean_similarity_rate": 0.761801,
+      "mas_compatibility_rate": 0.012429,
+      "identified_compatibility_rate": 1.0,
+      "similarity_minus_mas": 0.749372,
+      "similarity_minus_identified": -0.238199,
+      "similarity_error": 0.004435,
+      "mas_error": 0.001958,
+      "identified_error": 0.0,
+      "similarity_minus_mas_error": 0.002477,
+      "similarity_minus_identified_error": 0.004435
+    },
+    {
+      "design_label": "1A",
+      "metric": "mas_compatible",
+      "replicate": 31,
+      "sample_seed": 1031,
+      "n_models": 60,
+      "n_dyads": 3540,
+      "mean_similarity_rate": 0.76494,
+      "mas_compatibility_rate": 0.00791,
+      "identified_compatibility_rate": 1.0,
+      "similarity_minus_mas": 0.75703,
+      "similarity_minus_identified": -0.23506,
+      "similarity_error": 0.007574,
+      "mas_error": -0.002561,
+      "identified_error": 0.0,
+      "similarity_minus_mas_error": 0.010135,
+      "similarity_minus_identified_error": 0.007574
+    },
+    {
+      "design_label": "1A",
+      "metric": "mas_compatible",
+      "replicate": 32,
+      "sample_seed": 1032,
+      "n_models": 60,
+      "n_dyads": 3540,
+      "mean_similarity_rate": 0.76671,
+      "mas_compatibility_rate": 0.013559,
+      "identified_compatibility_rate": 1.0,
+      "similarity_minus_mas": 0.753151,
+      "similarity_minus_identified": -0.23329,
+      "similarity_error": 0.009344,
+      "mas_error": 0.003088,
+      "identified_error": 0.0,
+      "similarity_minus_mas_error": 0.006256,
+      "similarity_minus_identified_error": 0.009344
+    },
+    {
+      "design_label": "1A",
+      "metric": "mas_compatible",
+      "replicate": 33,
+      "sample_seed": 1033,
+      "n_models": 60,
+      "n_dyads": 3540,
+      "mean_similarity_rate": 0.760065,
+      "mas_compatibility_rate": 0.011299,
+      "identified_compatibility_rate": 1.0,
+      "similarity_minus_mas": 0.748765,
+      "similarity_minus_identified": -0.239935,
+      "similarity_error": 0.002699,
+      "mas_error": 0.000828,
+      "identified_error": 0.0,
+      "similarity_minus_mas_error": 0.00187,
+      "similarity_minus_identified_error": 0.002699
+    },
+    {
+      "design_label": "1A",
+      "metric": "mas_compatible",
+      "replicate": 34,
+      "sample_seed": 1034,
+      "n_models": 60,
+      "n_dyads": 3540,
+      "mean_similarity_rate": 0.758036,
+      "mas_compatibility_rate": 0.00904,
+      "identified_compatibility_rate": 1.0,
+      "similarity_minus_mas": 0.748997,
+      "similarity_minus_identified": -0.241964,
+      "similarity_error": 0.00067,
+      "mas_error": -0.001431,
+      "identified_error": 0.0,
+      "similarity_minus_mas_error": 0.002102,
+      "similarity_minus_identified_error": 0.00067
+    },
+    {
+      "design_label": "1A",
+      "metric": "mas_compatible",
+      "replicate": 35,
+      "sample_seed": 1035,
+      "n_models": 60,
+      "n_dyads": 3540,
+      "mean_similarity_rate": 0.76657,
+      "mas_compatibility_rate": 0.012429,
+      "identified_compatibility_rate": 1.0,
+      "similarity_minus_mas": 0.75414,
+      "similarity_minus_identified": -0.23343,
+      "similarity_error": 0.009204,
+      "mas_error": 0.001958,
+      "identified_error": 0.0,
+      "similarity_minus_mas_error": 0.007245,
+      "similarity_minus_identified_error": 0.009204
+    },
+    {
+      "design_label": "1A",
+      "metric": "mas_compatible",
+      "replicate": 36,
+      "sample_seed": 1036,
+      "n_models": 60,
+      "n_dyads": 3540,
+      "mean_similarity_rate": 0.765269,
+      "mas_compatibility_rate": 0.012429,
+      "identified_compatibility_rate": 1.0,
+      "similarity_minus_mas": 0.75284,
+      "similarity_minus_identified": -0.234731,
+      "similarity_error": 0.007903,
+      "mas_error": 0.001958,
+      "identified_error": 0.0,
+      "similarity_minus_mas_error": 0.005945,
+      "similarity_minus_identified_error": 0.007903
+    },
+    {
+      "design_label": "1A",
+      "metric": "mas_compatible",
+      "replicate": 37,
+      "sample_seed": 1037,
+      "n_models": 60,
+      "n_dyads": 3540,
+      "mean_similarity_rate": 0.766876,
+      "mas_compatibility_rate": 0.013559,
+      "identified_compatibility_rate": 1.0,
+      "similarity_minus_mas": 0.753317,
+      "similarity_minus_identified": -0.233124,
+      "similarity_error": 0.00951,
+      "mas_error": 0.003088,
+      "identified_error": 0.0,
+      "similarity_minus_mas_error": 0.006422,
+      "similarity_minus_identified_error": 0.00951
+    },
+    {
+      "design_label": "1A",
+      "metric": "mas_compatible",
+      "replicate": 38,
+      "sample_seed": 1038,
+      "n_models": 60,
+      "n_dyads": 3540,
+      "mean_similarity_rate": 0.764528,
+      "mas_compatibility_rate": 0.010169,
+      "identified_compatibility_rate": 1.0,
+      "similarity_minus_mas": 0.754358,
+      "similarity_minus_identified": -0.235472,
+      "similarity_error": 0.007162,
+      "mas_error": -0.000302,
+      "identified_error": 0.0,
+      "similarity_minus_mas_error": 0.007463,
+      "similarity_minus_identified_error": 0.007162
+    },
+    {
+      "design_label": "1A",
+      "metric": "mas_compatible",
+      "replicate": 39,
+      "sample_seed": 1039,
+      "n_models": 60,
+      "n_dyads": 3540,
+      "mean_similarity_rate": 0.760468,
+      "mas_compatibility_rate": 0.00904,
+      "identified_compatibility_rate": 1.0,
+      "similarity_minus_mas": 0.751429,
+      "similarity_minus_identified": -0.239532,
+      "similarity_error": 0.003102,
+      "mas_error": -0.001431,
+      "identified_error": 0.0,
+      "similarity_minus_mas_error": 0.004534,
+      "similarity_minus_identified_error": 0.003102
+    },
+    {
+      "design_label": "1A",
+      "metric": "mas_compatible",
+      "replicate": 40,
+      "sample_seed": 1040,
+      "n_models": 60,
+      "n_dyads": 3540,
+      "mean_similarity_rate": 0.762251,
+      "mas_compatibility_rate": 0.00904,
+      "identified_compatibility_rate": 1.0,
+      "similarity_minus_mas": 0.753212,
+      "similarity_minus_identified": -0.237749,
+      "similarity_error": 0.004885,
+      "mas_error": -0.001431,
+      "identified_error": 0.0,
+      "similarity_minus_mas_error": 0.006317,
+      "similarity_minus_identified_error": 0.004885
+    },
+    {
+      "design_label": "1A",
+      "metric": "mas_compatible",
+      "replicate": 41,
+      "sample_seed": 1041,
+      "n_models": 60,
+      "n_dyads": 3540,
+      "mean_similarity_rate": 0.767416,
+      "mas_compatibility_rate": 0.013559,
+      "identified_compatibility_rate": 1.0,
+      "similarity_minus_mas": 0.753856,
+      "similarity_minus_identified": -0.232584,
+      "similarity_error": 0.01005,
+      "mas_error": 0.003088,
+      "identified_error": 0.0,
+      "similarity_minus_mas_error": 0.006961,
+      "similarity_minus_identified_error": 0.01005
+    },
+    {
+      "design_label": "1A",
+      "metric": "mas_compatible",
+      "replicate": 42,
+      "sample_seed": 1042,
+      "n_models": 60,
+      "n_dyads": 3540,
+      "mean_similarity_rate": 0.767096,
+      "mas_compatibility_rate": 0.010169,
+      "identified_compatibility_rate": 1.0,
+      "similarity_minus_mas": 0.756927,
+      "similarity_minus_identified": -0.232904,
+      "similarity_error": 0.00973,
+      "mas_error": -0.000302,
+      "identified_error": 0.0,
+      "similarity_minus_mas_error": 0.010032,
+      "similarity_minus_identified_error": 0.00973
+    },
+    {
+      "design_label": "1A",
+      "metric": "mas_compatible",
+      "replicate": 43,
+      "sample_seed": 1043,
+      "n_models": 60,
+      "n_dyads": 3540,
+      "mean_similarity_rate": 0.761449,
+      "mas_compatibility_rate": 0.015819,
+      "identified_compatibility_rate": 1.0,
+      "similarity_minus_mas": 0.74563,
+      "similarity_minus_identified": -0.238551,
+      "similarity_error": 0.004083,
+      "mas_error": 0.005348,
+      "identified_error": 0.0,
+      "similarity_minus_mas_error": -0.001265,
+      "similarity_minus_identified_error": 0.004083
+    },
+    {
+      "design_label": "1A",
+      "metric": "mas_compatible",
+      "replicate": 44,
+      "sample_seed": 1044,
+      "n_models": 60,
+      "n_dyads": 3540,
+      "mean_similarity_rate": 0.756551,
+      "mas_compatibility_rate": 0.010169,
+      "identified_compatibility_rate": 1.0,
+      "similarity_minus_mas": 0.746382,
+      "similarity_minus_identified": -0.243449,
+      "similarity_error": -0.000815,
+      "mas_error": -0.000302,
+      "identified_error": 0.0,
+      "similarity_minus_mas_error": -0.000513,
+      "similarity_minus_identified_error": -0.000815
+    },
+    {
+      "design_label": "1A",
+      "metric": "mas_compatible",
+      "replicate": 45,
+      "sample_seed": 1045,
+      "n_models": 60,
+      "n_dyads": 3540,
+      "mean_similarity_rate": 0.758425,
+      "mas_compatibility_rate": 0.00904,
+      "identified_compatibility_rate": 1.0,
+      "similarity_minus_mas": 0.749386,
+      "similarity_minus_identified": -0.241575,
+      "similarity_error": 0.001059,
+      "mas_error": -0.001431,
+      "identified_error": 0.0,
+      "similarity_minus_mas_error": 0.002491,
+      "similarity_minus_identified_error": 0.001059
+    },
+    {
+      "design_label": "1A",
+      "metric": "mas_compatible",
+      "replicate": 46,
+      "sample_seed": 1046,
+      "n_models": 60,
+      "n_dyads": 3540,
+      "mean_similarity_rate": 0.756921,
+      "mas_compatibility_rate": 0.00452,
+      "identified_compatibility_rate": 1.0,
+      "similarity_minus_mas": 0.752401,
+      "similarity_minus_identified": -0.243079,
+      "similarity_error": -0.000445,
+      "mas_error": -0.005951,
+      "identified_error": 0.0,
+      "similarity_minus_mas_error": 0.005506,
+      "similarity_minus_identified_error": -0.000445
+    },
+    {
+      "design_label": "1A",
+      "metric": "mas_compatible",
+      "replicate": 47,
+      "sample_seed": 1047,
+      "n_models": 60,
+      "n_dyads": 3540,
+      "mean_similarity_rate": 0.762254,
+      "mas_compatibility_rate": 0.011299,
+      "identified_compatibility_rate": 1.0,
+      "similarity_minus_mas": 0.750955,
+      "similarity_minus_identified": -0.237746,
+      "similarity_error": 0.004888,
+      "mas_error": 0.000828,
+      "identified_error": 0.0,
+      "similarity_minus_mas_error": 0.00406,
+      "similarity_minus_identified_error": 0.004888
+    },
+    {
+      "design_label": "1A",
+      "metric": "mas_compatible",
+      "replicate": 48,
+      "sample_seed": 1048,
+      "n_models": 60,
+      "n_dyads": 3540,
+      "mean_similarity_rate": 0.762656,
+      "mas_compatibility_rate": 0.010169,
+      "identified_compatibility_rate": 1.0,
+      "similarity_minus_mas": 0.752486,
+      "similarity_minus_identified": -0.237344,
+      "similarity_error": 0.00529,
+      "mas_error": -0.000302,
+      "identified_error": 0.0,
+      "similarity_minus_mas_error": 0.005591,
+      "similarity_minus_identified_error": 0.00529
+    },
+    {
+      "design_label": "1A",
+      "metric": "mas_compatible",
+      "replicate": 49,
+      "sample_seed": 1049,
+      "n_models": 60,
+      "n_dyads": 3540,
+      "mean_similarity_rate": 0.765068,
+      "mas_compatibility_rate": 0.011299,
+      "identified_compatibility_rate": 1.0,
+      "similarity_minus_mas": 0.753769,
+      "similarity_minus_identified": -0.234932,
+      "similarity_error": 0.007702,
+      "mas_error": 0.000828,
+      "identified_error": 0.0,
+      "similarity_minus_mas_error": 0.006874,
+      "similarity_minus_identified_error": 0.007702
+    },
+    {
+      "design_label": "1A",
+      "metric": "mas_compatible",
+      "replicate": 50,
+      "sample_seed": 1050,
+      "n_models": 60,
+      "n_dyads": 3540,
+      "mean_similarity_rate": 0.759818,
+      "mas_compatibility_rate": 0.011299,
+      "identified_compatibility_rate": 1.0,
+      "similarity_minus_mas": 0.748519,
+      "similarity_minus_identified": -0.240182,
+      "similarity_error": 0.002452,
+      "mas_error": 0.000828,
+      "identified_error": 0.0,
+      "similarity_minus_mas_error": 0.001624,
+      "similarity_minus_identified_error": 0.002452
+    },
+    {
+      "design_label": "1A",
+      "metric": "mas_compatible",
+      "replicate": 51,
+      "sample_seed": 1051,
+      "n_models": 60,
+      "n_dyads": 3540,
+      "mean_similarity_rate": 0.761045,
+      "mas_compatibility_rate": 0.00904,
+      "identified_compatibility_rate": 1.0,
+      "similarity_minus_mas": 0.752006,
+      "similarity_minus_identified": -0.238955,
+      "similarity_error": 0.003679,
+      "mas_error": -0.001431,
+      "identified_error": 0.0,
+      "similarity_minus_mas_error": 0.005111,
+      "similarity_minus_identified_error": 0.003679
+    },
+    {
+      "design_label": "1A",
+      "metric": "mas_compatible",
+      "replicate": 52,
+      "sample_seed": 1052,
+      "n_models": 60,
+      "n_dyads": 3540,
+      "mean_similarity_rate": 0.759932,
+      "mas_compatibility_rate": 0.012429,
+      "identified_compatibility_rate": 1.0,
+      "similarity_minus_mas": 0.747502,
+      "similarity_minus_identified": -0.240068,
+      "similarity_error": 0.002566,
+      "mas_error": 0.001958,
+      "identified_error": 0.0,
+      "similarity_minus_mas_error": 0.000607,
+      "similarity_minus_identified_error": 0.002566
+    },
+    {
+      "design_label": "1A",
+      "metric": "mas_compatible",
+      "replicate": 53,
+      "sample_seed": 1053,
+      "n_models": 60,
+      "n_dyads": 3540,
+      "mean_similarity_rate": 0.764476,
+      "mas_compatibility_rate": 0.00791,
+      "identified_compatibility_rate": 1.0,
+      "similarity_minus_mas": 0.756566,
+      "similarity_minus_identified": -0.235524,
+      "similarity_error": 0.00711,
+      "mas_error": -0.002561,
+      "identified_error": 0.0,
+      "similarity_minus_mas_error": 0.009671,
+      "similarity_minus_identified_error": 0.00711
+    },
+    {
+      "design_label": "1A",
+      "metric": "mas_compatible",
+      "replicate": 54,
+      "sample_seed": 1054,
+      "n_models": 60,
+      "n_dyads": 3540,
+      "mean_similarity_rate": 0.757927,
+      "mas_compatibility_rate": 0.00791,
+      "identified_compatibility_rate": 1.0,
+      "similarity_minus_mas": 0.750017,
+      "similarity_minus_identified": -0.242073,
+      "similarity_error": 0.000561,
+      "mas_error": -0.002561,
+      "identified_error": 0.0,
+      "similarity_minus_mas_error": 0.003122,
+      "similarity_minus_identified_error": 0.000561
+    },
+    {
+      "design_label": "1A",
+      "metric": "mas_compatible",
+      "replicate": 55,
+      "sample_seed": 1055,
+      "n_models": 60,
+      "n_dyads": 3540,
+      "mean_similarity_rate": 0.764226,
+      "mas_compatibility_rate": 0.010169,
+      "identified_compatibility_rate": 1.0,
+      "similarity_minus_mas": 0.754056,
+      "similarity_minus_identified": -0.235774,
+      "similarity_error": 0.00686,
+      "mas_error": -0.000302,
+      "identified_error": 0.0,
+      "similarity_minus_mas_error": 0.007161,
+      "similarity_minus_identified_error": 0.00686
+    },
+    {
+      "design_label": "1A",
+      "metric": "mas_compatible",
+      "replicate": 56,
+      "sample_seed": 1056,
+      "n_models": 60,
+      "n_dyads": 3540,
+      "mean_similarity_rate": 0.766996,
+      "mas_compatibility_rate": 0.011299,
+      "identified_compatibility_rate": 1.0,
+      "similarity_minus_mas": 0.755697,
+      "similarity_minus_identified": -0.233004,
+      "similarity_error": 0.00963,
+      "mas_error": 0.000828,
+      "identified_error": 0.0,
+      "similarity_minus_mas_error": 0.008802,
+      "similarity_minus_identified_error": 0.00963
+    },
+    {
+      "design_label": "1A",
+      "metric": "mas_compatible",
+      "replicate": 57,
+      "sample_seed": 1057,
+      "n_models": 60,
+      "n_dyads": 3540,
+      "mean_similarity_rate": 0.760329,
+      "mas_compatibility_rate": 0.011299,
+      "identified_compatibility_rate": 1.0,
+      "similarity_minus_mas": 0.74903,
+      "similarity_minus_identified": -0.239671,
+      "similarity_error": 0.002963,
+      "mas_error": 0.000828,
+      "identified_error": 0.0,
+      "similarity_minus_mas_error": 0.002135,
+      "similarity_minus_identified_error": 0.002963
+    },
+    {
+      "design_label": "1A",
+      "metric": "mas_compatible",
+      "replicate": 58,
+      "sample_seed": 1058,
+      "n_models": 60,
+      "n_dyads": 3540,
+      "mean_similarity_rate": 0.760961,
+      "mas_compatibility_rate": 0.00791,
+      "identified_compatibility_rate": 1.0,
+      "similarity_minus_mas": 0.753051,
+      "similarity_minus_identified": -0.239039,
+      "similarity_error": 0.003595,
+      "mas_error": -0.002561,
+      "identified_error": 0.0,
+      "similarity_minus_mas_error": 0.006156,
+      "similarity_minus_identified_error": 0.003595
+    },
+    {
+      "design_label": "1A",
+      "metric": "mas_compatible",
+      "replicate": 59,
+      "sample_seed": 1059,
+      "n_models": 60,
+      "n_dyads": 3540,
+      "mean_similarity_rate": 0.761235,
+      "mas_compatibility_rate": 0.00791,
+      "identified_compatibility_rate": 1.0,
+      "similarity_minus_mas": 0.753325,
+      "similarity_minus_identified": -0.238765,
+      "similarity_error": 0.003869,
+      "mas_error": -0.002561,
+      "identified_error": 0.0,
+      "similarity_minus_mas_error": 0.00643,
+      "similarity_minus_identified_error": 0.003869
+    },
+    {
+      "design_label": "1A",
+      "metric": "mas_compatible",
+      "replicate": 60,
+      "sample_seed": 1060,
+      "n_models": 60,
+      "n_dyads": 3540,
+      "mean_similarity_rate": 0.759087,
+      "mas_compatibility_rate": 0.010169,
+      "identified_compatibility_rate": 1.0,
+      "similarity_minus_mas": 0.748917,
+      "similarity_minus_identified": -0.240913,
+      "similarity_error": 0.001721,
+      "mas_error": -0.000302,
+      "identified_error": 0.0,
+      "similarity_minus_mas_error": 0.002022,
+      "similarity_minus_identified_error": 0.001721
+    },
+    {
+      "design_label": "1A",
+      "metric": "mas_compatible",
+      "replicate": 61,
+      "sample_seed": 1061,
+      "n_models": 60,
+      "n_dyads": 3540,
+      "mean_similarity_rate": 0.762878,
+      "mas_compatibility_rate": 0.00678,
+      "identified_compatibility_rate": 1.0,
+      "similarity_minus_mas": 0.756099,
+      "similarity_minus_identified": -0.237122,
+      "similarity_error": 0.005512,
+      "mas_error": -0.003691,
+      "identified_error": 0.0,
+      "similarity_minus_mas_error": 0.009204,
+      "similarity_minus_identified_error": 0.005512
+    },
+    {
+      "design_label": "1A",
+      "metric": "mas_compatible",
+      "replicate": 62,
+      "sample_seed": 1062,
+      "n_models": 60,
+      "n_dyads": 3540,
+      "mean_similarity_rate": 0.757511,
+      "mas_compatibility_rate": 0.00904,
+      "identified_compatibility_rate": 1.0,
+      "similarity_minus_mas": 0.748471,
+      "similarity_minus_identified": -0.242489,
+      "similarity_error": 0.000145,
+      "mas_error": -0.001431,
+      "identified_error": 0.0,
+      "similarity_minus_mas_error": 0.001576,
+      "similarity_minus_identified_error": 0.000145
+    },
+    {
+      "design_label": "1A",
+      "metric": "mas_compatible",
+      "replicate": 63,
+      "sample_seed": 1063,
+      "n_models": 60,
+      "n_dyads": 3540,
+      "mean_similarity_rate": 0.766316,
+      "mas_compatibility_rate": 0.013559,
+      "identified_compatibility_rate": 1.0,
+      "similarity_minus_mas": 0.752757,
+      "similarity_minus_identified": -0.233684,
+      "similarity_error": 0.00895,
+      "mas_error": 0.003088,
+      "identified_error": 0.0,
+      "similarity_minus_mas_error": 0.005862,
+      "similarity_minus_identified_error": 0.00895
+    },
+    {
+      "design_label": "1A",
+      "metric": "mas_compatible",
+      "replicate": 64,
+      "sample_seed": 1064,
+      "n_models": 60,
+      "n_dyads": 3540,
+      "mean_similarity_rate": 0.76211,
+      "mas_compatibility_rate": 0.010169,
+      "identified_compatibility_rate": 1.0,
+      "similarity_minus_mas": 0.751941,
+      "similarity_minus_identified": -0.23789,
+      "similarity_error": 0.004744,
+      "mas_error": -0.000302,
+      "identified_error": 0.0,
+      "similarity_minus_mas_error": 0.005046,
+      "similarity_minus_identified_error": 0.004744
+    },
+    {
+      "design_label": "1A",
+      "metric": "mas_compatible",
+      "replicate": 65,
+      "sample_seed": 1065,
+      "n_models": 60,
+      "n_dyads": 3540,
+      "mean_similarity_rate": 0.761616,
+      "mas_compatibility_rate": 0.010169,
+      "identified_compatibility_rate": 1.0,
+      "similarity_minus_mas": 0.751446,
+      "similarity_minus_identified": -0.238384,
+      "similarity_error": 0.00425,
+      "mas_error": -0.000302,
+      "identified_error": 0.0,
+      "similarity_minus_mas_error": 0.004551,
+      "similarity_minus_identified_error": 0.00425
+    },
+    {
+      "design_label": "1A",
+      "metric": "mas_compatible",
+      "replicate": 66,
+      "sample_seed": 1066,
+      "n_models": 60,
+      "n_dyads": 3540,
+      "mean_similarity_rate": 0.768407,
+      "mas_compatibility_rate": 0.011299,
+      "identified_compatibility_rate": 1.0,
+      "similarity_minus_mas": 0.757107,
+      "similarity_minus_identified": -0.231593,
+      "similarity_error": 0.011041,
+      "mas_error": 0.000828,
+      "identified_error": 0.0,
+      "similarity_minus_mas_error": 0.010212,
+      "similarity_minus_identified_error": 0.011041
+    },
+    {
+      "design_label": "1A",
+      "metric": "mas_compatible",
+      "replicate": 67,
+      "sample_seed": 1067,
+      "n_models": 60,
+      "n_dyads": 3540,
+      "mean_similarity_rate": 0.759874,
+      "mas_compatibility_rate": 0.00791,
+      "identified_compatibility_rate": 1.0,
+      "similarity_minus_mas": 0.751964,
+      "similarity_minus_identified": -0.240126,
+      "similarity_error": 0.002508,
+      "mas_error": -0.002561,
+      "identified_error": 0.0,
+      "similarity_minus_mas_error": 0.005069,
+      "similarity_minus_identified_error": 0.002508
+    },
+    {
+      "design_label": "1A",
+      "metric": "mas_compatible",
+      "replicate": 68,
+      "sample_seed": 1068,
+      "n_models": 60,
+      "n_dyads": 3540,
+      "mean_similarity_rate": 0.756326,
+      "mas_compatibility_rate": 0.010169,
+      "identified_compatibility_rate": 1.0,
+      "similarity_minus_mas": 0.746156,
+      "similarity_minus_identified": -0.243674,
+      "similarity_error": -0.00104,
+      "mas_error": -0.000302,
+      "identified_error": 0.0,
+      "similarity_minus_mas_error": -0.000739,
+      "similarity_minus_identified_error": -0.00104
+    },
+    {
+      "design_label": "1A",
+      "metric": "mas_compatible",
+      "replicate": 69,
+      "sample_seed": 1069,
+      "n_models": 60,
+      "n_dyads": 3540,
+      "mean_similarity_rate": 0.759291,
+      "mas_compatibility_rate": 0.00791,
+      "identified_compatibility_rate": 1.0,
+      "similarity_minus_mas": 0.751381,
+      "similarity_minus_identified": -0.240709,
+      "similarity_error": 0.001925,
+      "mas_error": -0.002561,
+      "identified_error": 0.0,
+      "similarity_minus_mas_error": 0.004486,
+      "similarity_minus_identified_error": 0.001925
+    },
+    {
+      "design_label": "1A",
+      "metric": "mas_compatible",
+      "replicate": 70,
+      "sample_seed": 1070,
+      "n_models": 60,
+      "n_dyads": 3540,
+      "mean_similarity_rate": 0.765529,
+      "mas_compatibility_rate": 0.014689,
+      "identified_compatibility_rate": 1.0,
+      "similarity_minus_mas": 0.750839,
+      "similarity_minus_identified": -0.234471,
+      "similarity_error": 0.008163,
+      "mas_error": 0.004218,
+      "identified_error": 0.0,
+      "similarity_minus_mas_error": 0.003944,
+      "similarity_minus_identified_error": 0.008163
+    },
+    {
+      "design_label": "1A",
+      "metric": "mas_compatible",
+      "replicate": 71,
+      "sample_seed": 1071,
+      "n_models": 60,
+      "n_dyads": 3540,
+      "mean_similarity_rate": 0.758649,
+      "mas_compatibility_rate": 0.00791,
+      "identified_compatibility_rate": 1.0,
+      "similarity_minus_mas": 0.75074,
+      "similarity_minus_identified": -0.241351,
+      "similarity_error": 0.001283,
+      "mas_error": -0.002561,
+      "identified_error": 0.0,
+      "similarity_minus_mas_error": 0.003845,
+      "similarity_minus_identified_error": 0.001283
+    },
+    {
+      "design_label": "1A",
+      "metric": "mas_compatible",
+      "replicate": 72,
+      "sample_seed": 1072,
+      "n_models": 60,
+      "n_dyads": 3540,
+      "mean_similarity_rate": 0.760577,
+      "mas_compatibility_rate": 0.00791,
+      "identified_compatibility_rate": 1.0,
+      "similarity_minus_mas": 0.752667,
+      "similarity_minus_identified": -0.239423,
+      "similarity_error": 0.003211,
+      "mas_error": -0.002561,
+      "identified_error": 0.0,
+      "similarity_minus_mas_error": 0.005772,
+      "similarity_minus_identified_error": 0.003211
+    },
+    {
+      "design_label": "1A",
+      "metric": "mas_compatible",
+      "replicate": 73,
+      "sample_seed": 1073,
+      "n_models": 60,
+      "n_dyads": 3540,
+      "mean_similarity_rate": 0.762105,
+      "mas_compatibility_rate": 0.00791,
+      "identified_compatibility_rate": 1.0,
+      "similarity_minus_mas": 0.754196,
+      "similarity_minus_identified": -0.237895,
+      "similarity_error": 0.004739,
+      "mas_error": -0.002561,
+      "identified_error": 0.0,
+      "similarity_minus_mas_error": 0.007301,
+      "similarity_minus_identified_error": 0.004739
+    },
+    {
+      "design_label": "1A",
+      "metric": "mas_compatible",
+      "replicate": 74,
+      "sample_seed": 1074,
+      "n_models": 60,
+      "n_dyads": 3540,
+      "mean_similarity_rate": 0.757393,
+      "mas_compatibility_rate": 0.012429,
+      "identified_compatibility_rate": 1.0,
+      "similarity_minus_mas": 0.744963,
+      "similarity_minus_identified": -0.242607,
+      "similarity_error": 2.7e-05,
+      "mas_error": 0.001958,
+      "identified_error": 0.0,
+      "similarity_minus_mas_error": -0.001932,
+      "similarity_minus_identified_error": 2.7e-05
+    },
+    {
+      "design_label": "1A",
+      "metric": "mas_compatible",
+      "replicate": 75,
+      "sample_seed": 1075,
+      "n_models": 60,
+      "n_dyads": 3540,
+      "mean_similarity_rate": 0.758784,
+      "mas_compatibility_rate": 0.010169,
+      "identified_compatibility_rate": 1.0,
+      "similarity_minus_mas": 0.748615,
+      "similarity_minus_identified": -0.241216,
+      "similarity_error": 0.001418,
+      "mas_error": -0.000302,
+      "identified_error": 0.0,
+      "similarity_minus_mas_error": 0.00172,
+      "similarity_minus_identified_error": 0.001418
+    },
+    {
+      "design_label": "1A",
+      "metric": "mas_compatible",
+      "replicate": 76,
+      "sample_seed": 1076,
+      "n_models": 60,
+      "n_dyads": 3540,
+      "mean_similarity_rate": 0.763272,
+      "mas_compatibility_rate": 0.011299,
+      "identified_compatibility_rate": 1.0,
+      "similarity_minus_mas": 0.751972,
+      "similarity_minus_identified": -0.236728,
+      "similarity_error": 0.005906,
+      "mas_error": 0.000828,
+      "identified_error": 0.0,
+      "similarity_minus_mas_error": 0.005077,
+      "similarity_minus_identified_error": 0.005906
+    },
+    {
+      "design_label": "1A",
+      "metric": "mas_compatible",
+      "replicate": 77,
+      "sample_seed": 1077,
+      "n_models": 60,
+      "n_dyads": 3540,
+      "mean_similarity_rate": 0.763555,
+      "mas_compatibility_rate": 0.010169,
+      "identified_compatibility_rate": 1.0,
+      "similarity_minus_mas": 0.753386,
+      "similarity_minus_identified": -0.236445,
+      "similarity_error": 0.006189,
+      "mas_error": -0.000302,
+      "identified_error": 0.0,
+      "similarity_minus_mas_error": 0.006491,
+      "similarity_minus_identified_error": 0.006189
+    },
+    {
+      "design_label": "1A",
+      "metric": "mas_compatible",
+      "replicate": 78,
+      "sample_seed": 1078,
+      "n_models": 60,
+      "n_dyads": 3540,
+      "mean_similarity_rate": 0.765298,
+      "mas_compatibility_rate": 0.011299,
+      "identified_compatibility_rate": 1.0,
+      "similarity_minus_mas": 0.753998,
+      "similarity_minus_identified": -0.234702,
+      "similarity_error": 0.007932,
+      "mas_error": 0.000828,
+      "identified_error": 0.0,
+      "similarity_minus_mas_error": 0.007103,
+      "similarity_minus_identified_error": 0.007932
+    },
+    {
+      "design_label": "1A",
+      "metric": "mas_compatible",
+      "replicate": 79,
+      "sample_seed": 1079,
+      "n_models": 60,
+      "n_dyads": 3540,
+      "mean_similarity_rate": 0.766875,
+      "mas_compatibility_rate": 0.00904,
+      "identified_compatibility_rate": 1.0,
+      "similarity_minus_mas": 0.757835,
+      "similarity_minus_identified": -0.233125,
+      "similarity_error": 0.009509,
+      "mas_error": -0.001431,
+      "identified_error": 0.0,
+      "similarity_minus_mas_error": 0.01094,
+      "similarity_minus_identified_error": 0.009509
+    },
+    {
+      "design_label": "1A",
+      "metric": "mas_compatible",
+      "replicate": 80,
+      "sample_seed": 1080,
+      "n_models": 60,
+      "n_dyads": 3540,
+      "mean_similarity_rate": 0.757022,
+      "mas_compatibility_rate": 0.010169,
+      "identified_compatibility_rate": 1.0,
+      "similarity_minus_mas": 0.746853,
+      "similarity_minus_identified": -0.242978,
+      "similarity_error": -0.000344,
+      "mas_error": -0.000302,
+      "identified_error": 0.0,
+      "similarity_minus_mas_error": -4.2e-05,
+      "similarity_minus_identified_error": -0.000344
+    },
+    {
+      "design_label": "1A",
+      "metric": "mas_compatible",
+      "replicate": 81,
+      "sample_seed": 1081,
+      "n_models": 60,
+      "n_dyads": 3540,
+      "mean_similarity_rate": 0.759873,
+      "mas_compatibility_rate": 0.011299,
+      "identified_compatibility_rate": 1.0,
+      "similarity_minus_mas": 0.748574,
+      "similarity_minus_identified": -0.240127,
+      "similarity_error": 0.002507,
+      "mas_error": 0.000828,
+      "identified_error": 0.0,
+      "similarity_minus_mas_error": 0.001679,
+      "similarity_minus_identified_error": 0.002507
+    },
+    {
+      "design_label": "1A",
+      "metric": "mas_compatible",
+      "replicate": 82,
+      "sample_seed": 1082,
+      "n_models": 60,
+      "n_dyads": 3540,
+      "mean_similarity_rate": 0.7574,
+      "mas_compatibility_rate": 0.011299,
+      "identified_compatibility_rate": 1.0,
+      "similarity_minus_mas": 0.7461,
+      "similarity_minus_identified": -0.2426,
+      "similarity_error": 3.4e-05,
+      "mas_error": 0.000828,
+      "identified_error": 0.0,
+      "similarity_minus_mas_error": -0.000795,
+      "similarity_minus_identified_error": 3.4e-05
+    },
+    {
+      "design_label": "1A",
+      "metric": "mas_compatible",
+      "replicate": 83,
+      "sample_seed": 1083,
+      "n_models": 60,
+      "n_dyads": 3540,
+      "mean_similarity_rate": 0.764547,
+      "mas_compatibility_rate": 0.011299,
+      "identified_compatibility_rate": 1.0,
+      "similarity_minus_mas": 0.753247,
+      "similarity_minus_identified": -0.235453,
+      "similarity_error": 0.007181,
+      "mas_error": 0.000828,
+      "identified_error": 0.0,
+      "similarity_minus_mas_error": 0.006352,
+      "similarity_minus_identified_error": 0.007181
+    },
+    {
+      "design_label": "1A",
+      "metric": "mas_compatible",
+      "replicate": 84,
+      "sample_seed": 1084,
+      "n_models": 60,
+      "n_dyads": 3540,
+      "mean_similarity_rate": 0.770733,
+      "mas_compatibility_rate": 0.010169,
+      "identified_compatibility_rate": 1.0,
+      "similarity_minus_mas": 0.760563,
+      "similarity_minus_identified": -0.229267,
+      "similarity_error": 0.013367,
+      "mas_error": -0.000302,
+      "identified_error": 0.0,
+      "similarity_minus_mas_error": 0.013668,
+      "similarity_minus_identified_error": 0.013367
+    },
+    {
+      "design_label": "1A",
+      "metric": "mas_compatible",
+      "replicate": 85,
+      "sample_seed": 1085,
+      "n_models": 60,
+      "n_dyads": 3540,
+      "mean_similarity_rate": 0.764624,
+      "mas_compatibility_rate": 0.011299,
+      "identified_compatibility_rate": 1.0,
+      "similarity_minus_mas": 0.753324,
+      "similarity_minus_identified": -0.235376,
+      "similarity_error": 0.007258,
+      "mas_error": 0.000828,
+      "identified_error": 0.0,
+      "similarity_minus_mas_error": 0.006429,
+      "similarity_minus_identified_error": 0.007258
+    },
+    {
+      "design_label": "1A",
+      "metric": "mas_compatible",
+      "replicate": 86,
+      "sample_seed": 1086,
+      "n_models": 60,
+      "n_dyads": 3540,
+      "mean_similarity_rate": 0.758074,
+      "mas_compatibility_rate": 0.012429,
+      "identified_compatibility_rate": 1.0,
+      "similarity_minus_mas": 0.745645,
+      "similarity_minus_identified": -0.241926,
+      "similarity_error": 0.000708,
+      "mas_error": 0.001958,
+      "identified_error": 0.0,
+      "similarity_minus_mas_error": -0.00125,
+      "similarity_minus_identified_error": 0.000708
+    },
+    {
+      "design_label": "1A",
+      "metric": "mas_compatible",
+      "replicate": 87,
+      "sample_seed": 1087,
+      "n_models": 60,
+      "n_dyads": 3540,
+      "mean_similarity_rate": 0.768626,
+      "mas_compatibility_rate": 0.00904,
+      "identified_compatibility_rate": 1.0,
+      "similarity_minus_mas": 0.759586,
+      "similarity_minus_identified": -0.231374,
+      "similarity_error": 0.01126,
+      "mas_error": -0.001431,
+      "identified_error": 0.0,
+      "similarity_minus_mas_error": 0.012691,
+      "similarity_minus_identified_error": 0.01126
+    },
+    {
+      "design_label": "1A",
+      "metric": "mas_compatible",
+      "replicate": 88,
+      "sample_seed": 1088,
+      "n_models": 60,
+      "n_dyads": 3540,
+      "mean_similarity_rate": 0.761425,
+      "mas_compatibility_rate": 0.00791,
+      "identified_compatibility_rate": 1.0,
+      "similarity_minus_mas": 0.753515,
+      "similarity_minus_identified": -0.238575,
+      "similarity_error": 0.004059,
+      "mas_error": -0.002561,
+      "identified_error": 0.0,
+      "similarity_minus_mas_error": 0.00662,
+      "similarity_minus_identified_error": 0.004059
+    },
+    {
+      "design_label": "1A",
+      "metric": "mas_compatible",
+      "replicate": 89,
+      "sample_seed": 1089,
+      "n_models": 60,
+      "n_dyads": 3540,
+      "mean_similarity_rate": 0.761606,
+      "mas_compatibility_rate": 0.010169,
+      "identified_compatibility_rate": 1.0,
+      "similarity_minus_mas": 0.751436,
+      "similarity_minus_identified": -0.238394,
+      "similarity_error": 0.00424,
+      "mas_error": -0.000302,
+      "identified_error": 0.0,
+      "similarity_minus_mas_error": 0.004541,
+      "similarity_minus_identified_error": 0.00424
+    },
+    {
+      "design_label": "1A",
+      "metric": "mas_compatible",
+      "replicate": 90,
+      "sample_seed": 1090,
+      "n_models": 60,
+      "n_dyads": 3540,
+      "mean_similarity_rate": 0.763251,
+      "mas_compatibility_rate": 0.013559,
+      "identified_compatibility_rate": 1.0,
+      "similarity_minus_mas": 0.749692,
+      "similarity_minus_identified": -0.236749,
+      "similarity_error": 0.005885,
+      "mas_error": 0.003088,
+      "identified_error": 0.0,
+      "similarity_minus_mas_error": 0.002797,
+      "similarity_minus_identified_error": 0.005885
+    },
+    {
+      "design_label": "1A",
+      "metric": "mas_compatible",
+      "replicate": 91,
+      "sample_seed": 1091,
+      "n_models": 60,
+      "n_dyads": 3540,
+      "mean_similarity_rate": 0.769641,
+      "mas_compatibility_rate": 0.011299,
+      "identified_compatibility_rate": 1.0,
+      "similarity_minus_mas": 0.758342,
+      "similarity_minus_identified": -0.230359,
+      "similarity_error": 0.012275,
+      "mas_error": 0.000828,
+      "identified_error": 0.0,
+      "similarity_minus_mas_error": 0.011447,
+      "similarity_minus_identified_error": 0.012275
+    },
+    {
+      "design_label": "1A",
+      "metric": "mas_compatible",
+      "replicate": 92,
+      "sample_seed": 1092,
+      "n_models": 60,
+      "n_dyads": 3540,
+      "mean_similarity_rate": 0.759736,
+      "mas_compatibility_rate": 0.012429,
+      "identified_compatibility_rate": 1.0,
+      "similarity_minus_mas": 0.747306,
+      "similarity_minus_identified": -0.240264,
+      "similarity_error": 0.00237,
+      "mas_error": 0.001958,
+      "identified_error": 0.0,
+      "similarity_minus_mas_error": 0.000411,
+      "similarity_minus_identified_error": 0.00237
+    },
+    {
+      "design_label": "1A",
+      "metric": "mas_compatible",
+      "replicate": 93,
+      "sample_seed": 1093,
+      "n_models": 60,
+      "n_dyads": 3540,
+      "mean_similarity_rate": 0.761538,
+      "mas_compatibility_rate": 0.00791,
+      "identified_compatibility_rate": 1.0,
+      "similarity_minus_mas": 0.753629,
+      "similarity_minus_identified": -0.238462,
+      "similarity_error": 0.004172,
+      "mas_error": -0.002561,
+      "identified_error": 0.0,
+      "similarity_minus_mas_error": 0.006734,
+      "similarity_minus_identified_error": 0.004172
+    },
+    {
+      "design_label": "1A",
+      "metric": "mas_compatible",
+      "replicate": 94,
+      "sample_seed": 1094,
+      "n_models": 60,
+      "n_dyads": 3540,
+      "mean_similarity_rate": 0.7566,
+      "mas_compatibility_rate": 0.00678,
+      "identified_compatibility_rate": 1.0,
+      "similarity_minus_mas": 0.74982,
+      "similarity_minus_identified": -0.2434,
+      "similarity_error": -0.000766,
+      "mas_error": -0.003691,
+      "identified_error": 0.0,
+      "similarity_minus_mas_error": 0.002925,
+      "similarity_minus_identified_error": -0.000766
+    },
+    {
+      "design_label": "1A",
+      "metric": "mas_compatible",
+      "replicate": 95,
+      "sample_seed": 1095,
+      "n_models": 60,
+      "n_dyads": 3540,
+      "mean_similarity_rate": 0.759409,
+      "mas_compatibility_rate": 0.012429,
+      "identified_compatibility_rate": 1.0,
+      "similarity_minus_mas": 0.74698,
+      "similarity_minus_identified": -0.240591,
+      "similarity_error": 0.002043,
+      "mas_error": 0.001958,
+      "identified_error": 0.0,
+      "similarity_minus_mas_error": 8.5e-05,
+      "similarity_minus_identified_error": 0.002043
+    },
+    {
+      "design_label": "1A",
+      "metric": "mas_compatible",
+      "replicate": 96,
+      "sample_seed": 1096,
+      "n_models": 60,
+      "n_dyads": 3540,
+      "mean_similarity_rate": 0.756934,
+      "mas_compatibility_rate": 0.00791,
+      "identified_compatibility_rate": 1.0,
+      "similarity_minus_mas": 0.749025,
+      "similarity_minus_identified": -0.243066,
+      "similarity_error": -0.000432,
+      "mas_error": -0.002561,
+      "identified_error": 0.0,
+      "similarity_minus_mas_error": 0.00213,
+      "similarity_minus_identified_error": -0.000432
+    },
+    {
+      "design_label": "1A",
+      "metric": "mas_compatible",
+      "replicate": 97,
+      "sample_seed": 1097,
+      "n_models": 60,
+      "n_dyads": 3540,
+      "mean_similarity_rate": 0.760403,
+      "mas_compatibility_rate": 0.00565,
+      "identified_compatibility_rate": 1.0,
+      "similarity_minus_mas": 0.754753,
+      "similarity_minus_identified": -0.239597,
+      "similarity_error": 0.003037,
+      "mas_error": -0.004821,
+      "identified_error": 0.0,
+      "similarity_minus_mas_error": 0.007858,
+      "similarity_minus_identified_error": 0.003037
+    },
+    {
+      "design_label": "1A",
+      "metric": "mas_compatible",
+      "replicate": 98,
+      "sample_seed": 1098,
+      "n_models": 60,
+      "n_dyads": 3540,
+      "mean_similarity_rate": 0.765205,
+      "mas_compatibility_rate": 0.011299,
+      "identified_compatibility_rate": 1.0,
+      "similarity_minus_mas": 0.753906,
+      "similarity_minus_identified": -0.234795,
+      "similarity_error": 0.007839,
+      "mas_error": 0.000828,
+      "identified_error": 0.0,
+      "similarity_minus_mas_error": 0.007011,
+      "similarity_minus_identified_error": 0.007839
+    },
+    {
+      "design_label": "1A",
+      "metric": "mas_compatible",
+      "replicate": 99,
+      "sample_seed": 1099,
+      "n_models": 60,
+      "n_dyads": 3540,
+      "mean_similarity_rate": 0.768741,
+      "mas_compatibility_rate": 0.012429,
+      "identified_compatibility_rate": 1.0,
+      "similarity_minus_mas": 0.756312,
+      "similarity_minus_identified": -0.231259,
+      "similarity_error": 0.011375,
+      "mas_error": 0.001958,
+      "identified_error": 0.0,
+      "similarity_minus_mas_error": 0.009417,
+      "similarity_minus_identified_error": 0.011375
+    },
+    {
+      "design_label": "1A",
+      "metric": "mas_compatible",
+      "replicate": 100,
+      "sample_seed": 1100,
+      "n_models": 60,
+      "n_dyads": 3540,
+      "mean_similarity_rate": 0.762208,
+      "mas_compatibility_rate": 0.010169,
+      "identified_compatibility_rate": 1.0,
+      "similarity_minus_mas": 0.752039,
+      "similarity_minus_identified": -0.237792,
+      "similarity_error": 0.004842,
+      "mas_error": -0.000302,
+      "identified_error": 0.0,
+      "similarity_minus_mas_error": 0.005144,
+      "similarity_minus_identified_error": 0.004842
+    }
+  ]
+}

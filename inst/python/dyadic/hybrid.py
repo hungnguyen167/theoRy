@@ -25,9 +25,13 @@ class HybridDyadicEngine:
         outcome: str | None = None,
     ) -> list[dict]:
         return self._base_engine.compare_pairs(
-            state, registry, model_ids=model_ids,
-            mode=mode, causal_wrapper=causal_wrapper,
-            exposure=exposure, outcome=outcome,
+            state,
+            registry,
+            model_ids=model_ids,
+            mode=mode,
+            causal_wrapper=causal_wrapper,
+            exposure=exposure,
+            outcome=outcome,
         )
 
     def compare_chunked(
@@ -49,12 +53,8 @@ class HybridDyadicEngine:
         total_pairs = n * (n - 1)
 
         bytes_per_dyad = 2048
-        pairs_per_chunk = max(
-            1, int((chunk_size_mb * 1024 * 1024) // bytes_per_dyad)
-        )
-        total_chunks = max(
-            1, (total_pairs + pairs_per_chunk - 1) // pairs_per_chunk
-        )
+        pairs_per_chunk = max(1, int((chunk_size_mb * 1024 * 1024) // bytes_per_dyad))
+        total_chunks = max(1, (total_pairs + pairs_per_chunk - 1) // pairs_per_chunk)
 
         results: list[dict] = []
         pair_count = 0
@@ -68,13 +68,20 @@ class HybridDyadicEngine:
                     pct = min(100.0, 100.0 * pair_count / total_pairs)
                     logger.info(
                         "Chunk %d/%d complete - %.0f%% done",
-                        chunk_n, total_chunks, pct,
+                        chunk_n,
+                        total_chunks,
+                        pct,
                     )
 
                 result = self._base_engine.compare(
-                    model_ids[i], model_ids[j], state, registry,
-                    mode=mode, causal_wrapper=causal_wrapper,
-                    exposure=exposure, outcome=outcome,
+                    model_ids[i],
+                    model_ids[j],
+                    state,
+                    registry,
+                    mode=mode,
+                    causal_wrapper=causal_wrapper,
+                    exposure=exposure,
+                    outcome=outcome,
                 )
                 results.append(result)
                 pair_count += 1
@@ -82,7 +89,8 @@ class HybridDyadicEngine:
         if total_chunks > 0:
             logger.info(
                 "Chunk %d/%d complete - 100%% done",
-                total_chunks, total_chunks,
+                total_chunks,
+                total_chunks,
             )
 
         return results
@@ -103,17 +111,20 @@ class HybridDyadicEngine:
             model_ids = state.model_ids
 
         if reference_id not in model_ids:
-            raise ValueError(
-                f"Reference model {reference_id} not found"
-            )
+            raise ValueError(f"Reference model {reference_id} not found")
 
         other_ids = [m for m in model_ids if m != reference_id]
         results: list[dict] = []
         for other in other_ids:
             result = self._base_engine.compare(
-                reference_id, other, state, registry,
-                mode=mode, causal_wrapper=causal_wrapper,
-                exposure=exposure, outcome=outcome,
+                reference_id,
+                other,
+                state,
+                registry,
+                mode=mode,
+                causal_wrapper=causal_wrapper,
+                exposure=exposure,
+                outcome=outcome,
             )
             results.append(result)
         return results
@@ -134,7 +145,10 @@ class HybridDyadicEngine:
             raise ValueError("top_k must be positive")
 
         basic_dyads = self._base_engine.compare_pairs(
-            state, registry, model_ids=model_ids, mode="basic",
+            state,
+            registry,
+            model_ids=model_ids,
+            mode="basic",
         )
 
         basic_dyads.sort(key=lambda d: d["similarity_rate"], reverse=True)
@@ -147,10 +161,15 @@ class HybridDyadicEngine:
                 result = d
             else:
                 result = self._base_engine.compare(
-                    d["ego_id"], d["alter_id"], state, registry,
-                    mode="full", causal_wrapper=causal_wrapper,
+                    d["ego_id"],
+                    d["alter_id"],
+                    state,
+                    registry,
+                    mode="full",
+                    causal_wrapper=causal_wrapper,
                     identification_wrapper=identification_wrapper,
-                    exposure=exposure, outcome=outcome,
+                    exposure=exposure,
+                    outcome=outcome,
                 )
             detailed.append(result)
 

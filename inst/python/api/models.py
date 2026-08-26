@@ -45,22 +45,6 @@ class DyadMatrixRequest(BaseModel):
     causal_backend: Literal["auto", "native", "r"] = "r"
 
 
-class DyadMatrixResponse(BaseModel):
-    dyad_matrix: list
-    model_count: int
-
-
-class ApiSuccessResponse(BaseModel):
-    status: Literal["success"] = "success"
-    data: dict
-
-
-class ApiErrorResponse(BaseModel):
-    status: Literal["error"] = "error"
-    code: str
-    message: str
-
-
 # --- Story 1.2A / 1.3A models ------------------------------------------------
 
 
@@ -139,7 +123,6 @@ class DeltaURequest(BaseModel):
     crux_mode: Literal["marginal", "global"] = "marginal"
     global_status: Literal["causal", "non-causal"] | None = None
     device: Literal["auto", "cpu", "cuda"] = "auto"
-    use_tensor_engine: bool = True
     exposure: str | None = None
     outcome: str | None = None
 
@@ -218,7 +201,7 @@ class SimulateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     scenario: Literal[
-        "illusion_of_precision",
+        "consensus_illusion",
         "lynchpin_of_certainty",
         "crux_of_certainty",
         "ghost_discovery",
@@ -309,19 +292,19 @@ class SimulateRequest(BaseModel):
 
         if (self.exposure is None) != (self.outcome is None):
             raise ValueError("Both or neither of exposure and outcome must be provided")
-        generated_illusion = self.scenario == "illusion_of_precision" and not is_seeded
+        generated_consensus = self.scenario == "consensus_illusion" and not is_seeded
         if (
-            self.scenario == "illusion_of_precision"
+            self.scenario == "consensus_illusion"
             and self.compatibility_metric == "similarity_rate"
         ):
             raise ValueError(
-                "illusion_of_precision requires compatibility_metric "
+                "consensus_illusion requires compatibility_metric "
                 "'mas_compatible' or 'identified_compatible'"
             )
         if (
             self.compatibility_metric != "similarity_rate"
             and (self.exposure is None or self.outcome is None)
-            and not generated_illusion
+            and not generated_consensus
         ):
             raise ValueError(
                 f"compatibility_metric '{self.compatibility_metric}' requires "
@@ -447,7 +430,7 @@ class SymbolicDeltaURequest(SymbolicUniverseRequest):
 
 class SymbolicSimulateRequest(BaseModel):
     scenario: Literal[
-        "illusion_of_precision",
+        "consensus_illusion",
         "lynchpin_of_certainty",
         "crux_of_certainty",
         "ghost_discovery",

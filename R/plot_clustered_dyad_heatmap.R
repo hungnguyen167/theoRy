@@ -1,6 +1,3 @@
-`%||%` <- function(x, y) if (is.null(x)) y else x
-
-
 #' Plot a cluster-sorted dyad heatmap
 #'
 #' Creates a dyad similarity heatmap with models ordered by cluster

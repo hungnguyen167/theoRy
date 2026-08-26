@@ -649,7 +649,6 @@ async def delta_u(request: DeltaURequest):
         causal_wrapper=causal_wrapper,
         compatibility_metric=compatibility_metric,
         device=request.device,
-        use_tensor_engine=request.use_tensor_engine,
         exposure=exposure,
         outcome=outcome,
         identification_wrapper=identification_wrapper,
@@ -790,7 +789,6 @@ async def delta_u(request: DeltaURequest):
     if outcome is not None:
         response_data["outcome"] = outcome
     response_data["device"] = request.device
-    response_data["used_tensor_engine"] = delta_engine.used_tensor_engine
 
     return {"status": "success", "data": response_data}
 
@@ -1146,7 +1144,7 @@ async def simulate(request: SimulateRequest):
                 global_status=request.global_status,
             )
 
-        if request.scenario == "illusion_of_precision":
+        if request.scenario == "consensus_illusion":
             result = suite.run_scenario(
                 scenario=request.scenario,
                 **common,
@@ -1512,8 +1510,8 @@ async def symbolic_delta_u(request: SymbolicDeltaURequest):
 @router.post("/symbolic/simulate")
 async def symbolic_simulate(request: SymbolicSimulateRequest):
     engine = SymbolicSimulationEngine()
-    if request.scenario == "illusion_of_precision":
-        result = engine.run_illusion_of_precision(
+    if request.scenario == "consensus_illusion":
+        result = engine.run_consensus_illusion(
             n_shared_edges=request.n_shared_edges,
             n_critical_unknown=request.n_critical_unknown,
             seed=request.seed,

@@ -16,7 +16,7 @@ plot_simulation(result, ...)
 A named list of \code{ggplot} objects. Element names depend on
   the scenario:
   \describe{
-    \item{\code{illusion_of_precision}}{\code{precision_comparison}}
+    \item{\code{consensus_illusion}}{\code{consensus_comparison}}
       (mean structural similarity vs selected causal compatibility)
     \item{\code{lynchpin_of_certainty}}{\code{compatibility_timeline},
       \code{lynchpin_ranking}}
@@ -32,8 +32,8 @@ objects.
 \examples{
 \dontrun{
 start_theory_engine()
-illusion <- run_simulation("illusion_of_precision", n_models = 100)
-plots <- plot_simulation(illusion)
+consensus <- run_simulation("consensus_illusion", n_models = 100)
+plots <- plot_simulation(consensus)
 for (p in plots) print(p)
 
 lynchpin <- run_simulation("lynchpin_of_certainty", n_models = 200)

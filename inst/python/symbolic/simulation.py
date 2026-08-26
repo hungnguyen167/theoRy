@@ -20,7 +20,7 @@ class SymbolicSimulationEngine:
     def __init__(self, backend: SymbolicBackend | None = None):
         self.backend = backend
 
-    def run_illusion_of_precision(
+    def run_consensus_illusion(
         self,
         n_shared_edges: int = 6,
         n_critical_unknown: int = 2,
@@ -94,7 +94,7 @@ class SymbolicSimulationEngine:
             )
 
         return {
-            "scenario": "illusion_of_precision",
+            "scenario": "consensus_illusion",
             "mode": f"symbolic_{baseline.mode}",
             "exact": baseline.exact,
             "universe_summary": {

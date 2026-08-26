@@ -13,15 +13,15 @@ plot_consensus_contrast(
 }
 \arguments{
 \item{result}{A simulation result from
-\code{run_simulation("illusion_of_precision")} created with
+\code{run_simulation("consensus_illusion")} created with
 \code{include_plot_data = TRUE}.  Uses
 \code{result$artifacts$plot_data$model_metrics}, whose columns are
 \code{model_id}, \code{mean_similarity_rate},
-\code{compatibility_rate}, \code{precision_illusion_gap}, and
+\code{compatibility_rate}, \code{consensus_illusion_gap}, and
 \code{compatibility_metric}.}
 
 \item{label_outliers}{Logical.  When \code{TRUE} (default), label models
-with the largest precision illusion gap.}
+with the largest consensus illusion gap.}
 
 \item{gap_threshold}{Optional numeric threshold in \code{(0, 1)}. When
 supplied, a line marks where mean structural similarity exceeds selected
@@ -35,14 +35,14 @@ A \code{ggplot} object.
 \description{
 Scatter plot showing each model's mean structural similarity to the field
 versus its selected causal compatibility rate. Models far below the
-equality line have the largest precision illusion gap.
+equality line have the largest consensus illusion gap.
 }
 \examples{
 \dontrun{
 start_theory_engine()
-illusion <- run_simulation("illusion_of_precision",
+consensus <- run_simulation("consensus_illusion",
   n_models = 100, include_plot_data = TRUE)
-plot_consensus_contrast(illusion)
+plot_consensus_contrast(consensus)
 }
 
 }

@@ -149,7 +149,6 @@ build_dyad_matrix <- function(registry,
 
   mode <- match.arg(mode)
   causal_backend <- match.arg(causal_backend)
-  `%||%` <- function(x, y) if (is.null(x)) y else x
 
   if (xor(is.null(exposure), is.null(outcome))) {
     stop("Both or neither of exposure and outcome must be provided.",

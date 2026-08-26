@@ -1,0 +1,4 @@
+HTTP/1.1 200 OK
+Content-Type: application/json
+
+{"status":"success","data":{"dyad_matrix":[{"dyad":{"ego_id":"M0001","alter_id":"M0002"},"similarity_rate":0.75,"timing_compatible":true,"existence_conflict":false,"conflicting_components":[],"repair_cost":1}],"model_count":2}}

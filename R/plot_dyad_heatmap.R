@@ -1,6 +1,3 @@
-`%||%` <- function(x, y) if (is.null(x)) y else x
-
-
 #' Plot a dyad similarity heatmap
 #'
 #' Creates an M x M heatmap of dyadic comparison scores from a dyad matrix

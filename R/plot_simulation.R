@@ -1,6 +1,3 @@
-`%||%` <- function(x, y) if (is.null(x)) y else x
-
-
 #' Plot simulation results
 #'
 #' Scenario-aware wrapper that dispatches to the appropriate plot functions
@@ -14,7 +11,7 @@
 #' @return A named list of \code{ggplot} objects. Element names depend on
 #'   the scenario:
 #'   \describe{
-#'     \item{\code{illusion_of_precision}}{\code{precision_comparison}}
+#'     \item{\code{consensus_illusion}}{\code{consensus_comparison}}
 #'       (mean structural similarity vs selected causal compatibility)
 #'     \item{\code{lynchpin_of_certainty}}{\code{compatibility_timeline},
 #'       \code{lynchpin_ranking}}
@@ -25,8 +22,8 @@
 #' @examples
 #' \dontrun{
 #' start_theory_engine()
-#' illusion <- run_simulation("illusion_of_precision", n_models = 100)
-#' plots <- plot_simulation(illusion)
+#' consensus <- run_simulation("consensus_illusion", n_models = 100)
+#' plots <- plot_simulation(consensus)
 #' for (p in plots) print(p)
 #'
 #' lynchpin <- run_simulation("lynchpin_of_certainty", n_models = 200)
@@ -45,22 +42,22 @@ plot_simulation <- function(result, ...) {
 
   scenario <- result$scenario
 
-  if (identical(scenario, "illusion_of_precision")) {
-    .plot_simulation_illusion(result)
+  if (identical(scenario, "consensus_illusion")) {
+    .plot_simulation_consensus(result)
   } else if (scenario %in% c("lynchpin_of_certainty", "crux_of_certainty")) {
     .plot_simulation_lynchpin(result)
   } else if (identical(scenario, "ghost_discovery")) {
     .plot_simulation_ghost(result)
   } else {
     stop("Unrecognized simulation result: scenario = '",
-         scenario, "'. Expected one of: illusion_of_precision, ",
+         scenario, "'. Expected one of: consensus_illusion, ",
          "lynchpin_of_certainty, crux_of_certainty, ghost_discovery.",
          call. = FALSE)
   }
 }
 
 
-.plot_simulation_illusion <- function(result) {
+.plot_simulation_consensus <- function(result) {
   plots <- list()
 
   similarity <- result$results$mean_similarity_rate
@@ -76,7 +73,7 @@ plot_simulation <- function(result, ...) {
       value = c(similarity, compatibility),
       stringsAsFactors = FALSE
     )
-    plots$precision_comparison <- ggplot2::ggplot(
+    plots$consensus_comparison <- ggplot2::ggplot(
       df, ggplot2::aes(x = metric, y = value, fill = metric)
     ) +
       ggplot2::geom_col() +
@@ -87,7 +84,7 @@ plot_simulation <- function(result, ...) {
       ggplot2::theme_minimal() +
       ggplot2::labs(
         x = NULL, y = "Rate", fill = "Metric",
-        title = "Precision Illusion"
+        title = "Consensus Illusion"
       ) +
       ggplot2::theme(
         legend.position = "none",

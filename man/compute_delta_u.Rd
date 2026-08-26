@@ -17,7 +17,6 @@ compute_delta_u(
   crux_mode = c("marginal", "global"),
   global_status = NULL,
   device = c("auto", "cpu", "cuda"),
-  use_tensor_engine = TRUE,
   url = getOption("theoRy.engine_url", "http://localhost:8000")
 )
 }
@@ -73,10 +72,6 @@ directions automatically, and is not sent to the backend.  It must be
 
 \item{device}{Compute device: \code{"auto"} (default), \code{"cpu"}, or
 \code{"cuda"}.  \code{"cuda"} requires a CUDA-capable GPU with PyTorch.}
-
-\item{use_tensor_engine}{Whether to use the tensorized structural engine
-when \code{compatibility_metric = "similarity_rate"} (default
-\code{TRUE}). Improves performance on larger state spaces.}
 
 \item{url}{Base URL of the theoRy Python backend API.  Defaults to
 \code{getOption("theoRy.engine_url", "http://localhost:8000")}.}
